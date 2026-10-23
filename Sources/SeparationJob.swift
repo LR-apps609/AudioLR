@@ -115,7 +115,7 @@ final class SeparationJob: ObservableObject {
         engineText = nil
         self.quality = quality
         let models = quality.models
-        let voiceName = quality.voiceModel
+        let wantedVoice = quality.voiceModel
         let downloads = quality.allModels
         phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
@@ -123,13 +123,19 @@ final class SeparationJob: ObservableObject {
         task = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
+                var voiceName = wantedVoice
                 for (k, name) in downloads.enumerated() {
-                    _ = try await ModelStore.shared.mlModel(name) { p in
-                        let total = (Double(k) + p) / Double(downloads.count)
-                        Task { @MainActor in self?.phase = .downloading(total) }
+                    do {
+                        _ = try await ModelStore.shared.mlModel(name) { p in
+                            let total = (Double(k) + p) / Double(downloads.count)
+                            Task { @MainActor in self?.phase = .downloading(total) }
+                        }
+                        if name == wantedVoice { _ = try await ModelStore.shared.config(name) }
+                    } catch where name == wantedVoice {
+                        // Il modello voce non è ancora disponibile: si separa lo stesso, con i soli modelli Demucs
+                        voiceName = nil
                     }
                 }
-                if let v = voiceName { _ = try await ModelStore.shared.config(v) }
                 await self?.set(.reading)
                 let mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
