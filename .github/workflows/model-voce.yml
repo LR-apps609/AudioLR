@@ -34,7 +34,7 @@ jobs:
           curl -fL --retry 3 -o voce.yaml $B/vocals_mel_band_roformer.yaml
       - name: Conversione e prova
         run: |
-          python Tools/convert_roformer.py voce.ckpt voce.yaml VoceRoFormer 176400 2>&1 | tee conv.log || true
+          python Tools/convert_roformer.py voce.ckpt voce.yaml VoceRoFormer 88200 2>VoceRoFormer 176400 2>&11 | tee conv.log || true
           # Le righe importanti (e gli errori) come annotazioni
           grep -E "RoFormer|STFT|Core ML|Fatto|pesi|voce|Error|error|assert" conv.log | tail -n 15 | while IFS= read -r l; do echo "::notice::$l"; done
           test -f VoceRoFormer.json

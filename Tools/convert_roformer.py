@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from roformer.mel_band_roformer import MelBandRoformer
 
 CKPT, CFG, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
-CHUNK = int(sys.argv[4]) if len(sys.argv) > 4 else 176400        # 4 s: l'attenzione nel tempo resta leggera
+CHUNK = int(sys.argv[4]) if len(sys.argv) > 4 else 88200         # 2 s: oltre, la conversione supera la memoria del Mac di GitHub
 
 
 class Loader(yaml.SafeLoader):
@@ -188,6 +188,17 @@ if q16 < 30:
     print(f"Core ML 32 bit / RoFormer: {q32:.1f} dB")
     assert q32 > 40, "conversione non fedele"
     precision, qbest = "32", q32
+# Pesi a 8 bit: metà dello spazio da scaricare (circa 230 MB invece di 450). Si tiene solo se resta fedele.
+try:
+    import coremltools.optimize.coreml as cto
+    cfg8 = cto.OptimizationConfig(global_config=cto.OpLinearQuantizerConfig(mode="linear_symmetric", weight_threshold=2048))
+    mlm8 = cto.linear_quantize_weights(mlm, config=cfg8)
+    q8 = snr(ref, pipeline_np(lambda x: mlm8.predict({"x": x})["mask"], mix.astype(np.float64)))
+    print(f"Core ML pesi a 8 bit / RoFormer: {q8:.1f} dB")
+    if q8 >= 30:
+        mlm, precision, qbest = mlm8, precision + "+w8", q8
+except Exception as e:
+    print("pesi a 8 bit non riusciti:", e)
 mlm.save(OUT + ".mlpackage")
 json.dump({"kind": "melroformer", "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
            "frames": T, "freq_indices": FI.tolist(), "num_bands_per_freq": NB.tolist(), "precision": precision,
