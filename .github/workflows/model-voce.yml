@@ -1,0 +1,42 @@
+# Modello voce Mel-Band RoFormer (Kimberley Jensen) per la «Massima qualità»: conversione in Core ML,
+# prove di fedeltà e pubblicazione tra i file scaricabili (versione «modelli-1»).
+name: Modello voce RoFormer
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/convert_roformer.py, Tools/roformer/**, .github/workflows/model-voce.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          pip install "torch==2.2.2" "coremltools==7.2" "numpy<2" pyyaml einops beartype "librosa==0.10.2.post1" "rotary-embedding-torch==0.6.5"
+      - name: Modello originale
+        run: |
+          B=https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs
+          curl -fL --retry 3 -o voce.ckpt $B/vocals_mel_band_roformer.ckpt
+          curl -fL --retry 3 -o voce.yaml $B/vocals_mel_band_roformer.yaml
+      - name: Conversione e prova
+        run: python Tools/convert_roformer.py voce.ckpt voce.yaml VoceRoFormer 176400
+      - name: Pacchetto
+        run: |
+          ditto -c -k --keepParent VoceRoFormer.mlpackage VoceRoFormer.mlpackage.zip
+          shasum -a 256 VoceRoFormer.mlpackage.zip | tee VoceRoFormer.sha256
+          ls -la VoceRoFormer.*
+          echo "::notice::VoceRoFormer: $(python -c "import json;d=json.load(open('VoceRoFormer.json'));print(d['precision'],'bit,',d['db'],'dB,',d['frames'],'colonne')")"
+      - name: Tra i file scaricabili
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload modelli-1 VoceRoFormer.mlpackage.zip VoceRoFormer.sha256 VoceRoFormer.json --clobber
