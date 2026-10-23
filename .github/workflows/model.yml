@@ -1,0 +1,51 @@
+# Prepara il modello Demucs per AudioLR e lo mette tra i file scaricabili (versione «modelli-1»).
+# Parte a mano (Actions → Modello Demucs → Run workflow) o quando cambia Tools/convert_demucs.py.
+name: Modello Demucs
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/convert_demucs.py, .github/workflows/model.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          pip install "torch==2.2.2" "torchaudio==2.2.2" "coremltools==7.2" "numpy<2"
+          # Demucs senza le parti per l'MP3 e l'addestramento, che qui non servono
+          pip install --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install dora-search einops julius omegaconf pyyaml tqdm
+      - name: Conversione e prova
+        run: python Tools/convert_demucs.py htdemucs HTDemucs
+      - name: Pacchetto
+        run: |
+          ditto -c -k --keepParent HTDemucs.mlpackage HTDemucs.mlpackage.zip
+          ls -la HTDemucs.mlpackage.zip
+          shasum -a 256 HTDemucs.mlpackage.zip | tee HTDemucs.sha256
+          cat HTDemucs.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: modello-HTDemucs
+          path: |
+            HTDemucs.mlpackage.zip
+            HTDemucs.sha256
+            HTDemucs.json
+      - name: Tra i file scaricabili (versione «modelli», non è un aggiornamento dell'app)
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view modelli-1 >/dev/null 2>&1 || \
+            gh release create modelli-1 --prerelease --title "Modelli di IA (non è un aggiornamento)" \
+              --notes "File scaricati da AudioLR al primo uso. Non serve scaricarli a mano."
+          gh release upload modelli-1 HTDemucs.mlpackage.zip HTDemucs.sha256 HTDemucs.json --clobber

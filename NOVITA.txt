@@ -1,0 +1,5 @@
+Novità della 0.1.0 «Primo suono»:
+• Trascina una canzone nella finestra (o tasto destro → Apri con → AudioLR): AudioLR la separa in Voce, Batteria, Basso e Altri strumenti
+• In più, la «Base (senza voce)» pronta per il karaoke
+• Ogni traccia si ascolta con un clic, si trascina in GarageBand o Logic, e si trova in Musica › AudioLR
+• Tutto sul tuo Mac: la canzone non viene caricata su internet. La prima volta scarica il modello di IA (circa 80 MB)

@@ -1,0 +1,166 @@
+# Compila AudioLR su un Mac di GitHub a ogni modifica.
+# Se la compilazione fallisce, gli errori sono nel registro dell'«azione» e nessuna versione viene distribuita.
+# Se riesce, scarichi dagli «Artifacts» (o dalle «Release») lo .zip con l'app già pronta.
+name: Compila AudioLR
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write        # per pubblicare la «Release» con il file .audiolr
+
+jobs:
+  build:
+    # I Mac Apple Silicon di GitHub sono spesso esauriti: si usa il Mac Intel, che compila lo stesso per entrambi
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Xcode più recente disponibile
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Progetto
+        run: xcodegen generate
+
+      - name: Compilazione (Release, Apple Silicon e Intel)
+        run: |
+          status=0
+          xcodebuild -project AudioLR.xcodeproj -scheme AudioLR -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            build > build.log 2>&1 || status=$?
+          grep -E "(error|warning):|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | head -n 200 || true
+          # Errori e avvisi come «annotazioni»: si leggono anche dalla pagina della compilazione e dall'API
+          grep -E "^/.*:[0-9]+:[0-9]+: error:" build.log | sort -u | head -n 10 | while IFS= read -r l; do
+            f=$(echo "$l" | cut -d: -f1); n=$(echo "$l" | cut -d: -f2); m=$(echo "$l" | cut -d: -f5-)
+            echo "::error file=${f#$GITHUB_WORKSPACE/},line=$n::$m"
+          done
+          grep -E "error:" build.log | grep -vE "^/.*:[0-9]+:[0-9]+: error:" | sort -u | head -n 5 | while IFS= read -r l; do
+            echo "::error::$l"
+          done
+          grep -E "^/.*:[0-9]+:[0-9]+: warning:" build.log | sort -u | head -n 20 | while IFS= read -r l; do
+            f=$(echo "$l" | cut -d: -f1); n=$(echo "$l" | cut -d: -f2); m=$(echo "$l" | cut -d: -f5-)
+            echo "::warning file=${f#$GITHUB_WORKSPACE/},line=$n::$m"
+          done
+          exit $status
+
+      - name: Riepilogo avvisi
+        if: always()
+        run: |
+          echo "## Compilazione" >> $GITHUB_STEP_SUMMARY
+          echo "Errori: $(grep -c 'error:' build.log || true) · Avvisi: $(grep -c 'warning:' build.log || true)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "(error|warning):" build.log | sort -u | head -n 80 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Controllo dell'app
+        run: |
+          APP=build/Build/Products/Release/AudioLR.app
+          test -d "$APP"
+          test -f "$APP/Contents/Resources/NOVITA.txt"
+          plutil -p "$APP/Contents/Info.plist" | grep -E "CFBundleShortVersionString|CFBundleVersion"
+          # Deve girare sia sui Mac Apple Silicon sia sugli Intel
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/AudioLR"); echo "Architetture: $ARCHS"
+          echo "$ARCHS" | grep -q arm64 && echo "$ARCHS" | grep -q x86_64
+          codesign --verify --deep "$APP"
+          du -sh "$APP"
+
+      - name: Test automatici (spettrogramma, pezzi, audio)
+        timeout-minutes: 25
+        run: |
+          status=0
+          # Ogni test ha al massimo 3 minuti: uno bloccato fallisce con il suo nome, invece di fermare tutto
+          # perl alarm: se tutto si blocca, dopo 20 minuti si ferma e si vede dove
+          perl -e 'alarm shift; exec @ARGV' 1200 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 \
+            -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            > test.log 2>&1 || status=$?
+          grep -E "Test Case .*(passed|failed)|Executed|\*\* TEST" test.log | tail -n 80 || true
+          if [ $status -ne 0 ] && ! grep -q "Executed [0-9]* tests" test.log; then
+            last=$(grep -E "Test Case .* started" test.log | tail -n 1)
+            echo "::error::Test interrotti (bloccati o app non avviata). Ultimo test partito: ${last:-nessuno}"
+            tail -n 30 test.log | sed 's/^/  /'
+          fi
+          # Un test fallito diventa un errore leggibile dalla pagina della compilazione e dall'API
+          grep -E "^/.*:[0-9]+: error: -\[" test.log | sort -u | head -n 20 | while IFS= read -r l; do
+            f=$(echo "$l" | cut -d: -f1); n=$(echo "$l" | cut -d: -f2); m=$(echo "$l" | cut -d: -f4-)
+            echo "::error file=${f#$GITHUB_WORKSPACE/},line=$n::$m"
+          done
+          # Errori di compilazione dei test (non i messaggi di sistema che contengono la parola «error»)
+          grep -E "^/.*:[0-9]+:[0-9]+: error:" test.log | sort -u | head -n 5 | while IFS= read -r l; do
+            echo "::error::$l"
+          done
+          # Test che si chiudono di colpo o saltati: anche loro con il nome, così si vede quale
+          grep -E "Test Case .* skipped|unexpected exit|[Cc]rashed|Fatal error|signal (SIGABRT|SIGSEGV|SIGILL|SIGTRAP)" test.log | sort -u | head -n 12 | while IFS= read -r l; do
+            echo "::error::$l"
+          done
+          # Il test che stava girando quando si è fermato (partito ma mai finito)
+          awk '/Test Case .* started/ {cur=$0} /Test Case .* (passed|failed|skipped)/ {cur=""} /Restarting after unexpected exit/ {if (cur!="") print "::error::Interrotto (si è chiuso o ha superato il tempo): " cur; cur=""}' test.log | sort -u | head -n 5
+          passed=$(grep -cE "Test Case .* passed" test.log || true)
+          failed=$(grep -cE "Test Case .* failed" test.log || true)
+          echo "::notice::Test superati: $passed · falliti: $failed"
+          echo "## Test automatici" >> $GITHUB_STEP_SUMMARY
+          echo "Superati: $passed · Falliti: $failed" >> $GITHUB_STEP_SUMMARY
+          exit $status
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: registro-test
+          path: test.log
+
+      - name: Pacchetto .audiolr
+        run: |
+          VERSION=$(cat version.txt)
+          mkdir -p dist/AudioLR
+          git archive HEAD | tar -x -C dist/AudioLR
+          rm -rf dist/AudioLR/.github
+          # L'app già compilata: «Costruisci e installa» e gli aggiornamenti la installano direttamente (pochi secondi).
+          mkdir -p dist/AudioLR/Prebuilt
+          ditto build/Build/Products/Release/AudioLR.app dist/AudioLR/Prebuilt/AudioLR.app
+          ditto -c -k --keepParent dist/AudioLR "dist/AudioLR $VERSION.audiolr"
+          # La stessa cosa in .zip, per la prima installazione (prima che il Mac conosca i file .audiolr)
+          cp "dist/AudioLR $VERSION.audiolr" "dist/AudioLR $VERSION.zip"
+          du -h "dist/AudioLR $VERSION.audiolr"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: AudioLR-${{ env.VERSION }}
+          path: dist/*.zip
+
+      - name: Release su GitHub
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          TAG="v$VERSION"
+          FILE="dist/AudioLR $VERSION.audiolr"
+          ZIP="dist/AudioLR $VERSION.zip"
+          # Una versione già pubblicata non si sovrascrive: le modifiche in corso non arrivano a chi aggiorna.
+          # Per ripubblicarla apposta: commit con «[ripubblica]» nel messaggio.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if echo "$COMMIT_MSG" | grep -q "\[ripubblica\]"; then
+              gh release upload "$TAG" "$FILE" "$ZIP" --clobber
+            else
+              echo "La release $TAG esiste già: non la tocco."
+            fi
+          else
+            gh release create "$TAG" "$FILE" "$ZIP" --title "AudioLR $VERSION" --notes-file NOVITA.txt
+          fi
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: registro-compilazione
+          path: build.log
