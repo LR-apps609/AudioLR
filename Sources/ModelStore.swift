@@ -28,6 +28,7 @@ final class ModelStore: @unchecked Sendable {
 
     /// Un modello pronto per ogni nome e scelta di unità di calcolo.
     private var cores: [String: CoreMLSeparationCore] = [:]
+    private var models: [String: MLModel] = [:]
     private let lock = NSLock()
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
@@ -37,6 +38,15 @@ final class ModelStore: @unchecked Sendable {
         let key = "\(name)#\(units.rawValue)"
         let cached = lock.withLock { cores[key] }
         if let c = cached { return c }
+        let c = try CoreMLSeparationCore(model: try await mlModel(name, units: units, progress: progress))
+        lock.withLock { cores[key] = c }
+        return c
+    }
+
+    /// Il modello Core ML così com'è (scaricato e preparato se serve).
+    func mlModel(_ name: String, units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> MLModel {
+        let key = "\(name)#\(units.rawValue)"
+        if let m = lock.withLock({ models[key] }) { return m }
         if !isReady(name) { try await download(name, progress: progress) }
         let cfg = MLModelConfiguration()
         cfg.computeUnits = units
@@ -46,13 +56,30 @@ final class ModelStore: @unchecked Sendable {
             try? FileManager.default.removeItem(at: Self.compiled(name))
             throw SeparationError("il modello di IA non si apre: riprova, verrà scaricato di nuovo")
         }
-        let c = try CoreMLSeparationCore(model: model)
-        lock.withLock { cores[key] = c }
-        return c
+        lock.withLock { models[key] = model }
+        return model
+    }
+
+    /// La descrizione che accompagna alcuni modelli (es. VoceRoFormer.json): scaricata una volta e tenuta accanto.
+    func config(_ name: String) async throws -> Data {
+        let url = Self.folder.appendingPathComponent(name + ".json")
+        if let d = try? Data(contentsOf: url) { return d }
+        try FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
+        let (data, resp) = try await URLSession.shared.data(from: Self.base.appendingPathComponent(name + ".json"))
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw SeparationError("la descrizione del modello non è disponibile") }
+        try data.write(to: url)
+        return data
+    }
+
+    /// Il modello voce RoFormer, pronto (scaricato e preparato se serve).
+    func voice(units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> VoiceRoFormer {
+        let name = "VoceRoFormer"
+        let cfg = try JSONDecoder().decode(RoFormerConfig.self, from: try await config(name))
+        return VoiceRoFormer(model: try await mlModel(name, units: units, progress: progress), config: cfg)
     }
 
     /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).
-    func forget() { lock.withLock { cores.removeAll() } }
+    func forget() { lock.withLock { cores.removeAll(); models.removeAll() } }
 
     private func download(_ name: String, progress: @escaping (Double) -> Void) async throws {
         let fm = FileManager.default
