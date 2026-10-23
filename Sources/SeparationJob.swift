@@ -131,7 +131,7 @@ final class SeparationJob: ObservableObject {
                             Task { @MainActor in self?.phase = .downloading(total) }
                         }
                         if name == wantedVoice { _ = try await ModelStore.shared.config(name) }
-                    } catch where name == wantedVoice {
+                    } catch _ where name == wantedVoice {
                         // Il modello voce non è ancora disponibile: si separa lo stesso, con i soli modelli Demucs
                         voiceName = nil
                     }
