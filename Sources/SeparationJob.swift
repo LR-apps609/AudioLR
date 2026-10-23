@@ -19,13 +19,28 @@ struct Stem: Identifiable, Equatable {
     var share: Double? = nil
     /// Il punto più forte della traccia, in dB (0 = il massimo possibile).
     var peakDB: Double? = nil
+    /// Quanta energia sta a destra (0,5 = centrata): serve a scoprire un canale fuori posto.
+    var balance: Double? = nil
+    /// Di quanto è stato abbassato il volume di tutte le tracce per non distorcere (0 = per niente).
+    var gainDB: Double = 0
     var id: String { key }
 
-    /// Energia e picco di una traccia stereo.
-    static func measure(_ audio: [[Float]]) -> (energy: Double, peakDB: Double) {
-        var e = 0.0, p: Float = 0
-        for ch in audio { for v in ch { e += Double(v) * Double(v); p = max(p, abs(v)) } }
-        return (e, p > 0 ? 20 * log10(Double(p)) : -120)
+    /// Energia, picco e bilanciamento di una traccia stereo.
+    static func measure(_ audio: [[Float]]) -> (energy: Double, peakDB: Double, peak: Float, balance: Double) {
+        var e = [0.0, 0.0], p: Float = 0
+        for (c, ch) in audio.prefix(2).enumerated() { for v in ch { e[c] += Double(v) * Double(v); p = max(p, abs(v)) } }
+        let total = e[0] + e[1]
+        return (total, p > 0 ? 20 * log10(Double(p)) : -120, p, total > 0 ? e[1] / total : 0.5)
+    }
+
+    /// Il più forte che una traccia può essere prima di tagliare: un filo sotto il massimo.
+    static let ceiling: Float = 0.98
+
+    /// Se anche una sola traccia supera il massimo, tutte si abbassano dello stesso tanto:
+    /// niente suono «fritto» e le tracce restano in proporzione (sommate ridanno la canzone).
+    static func safeGain(peaks: [Float]) -> Float {
+        let top = peaks.max() ?? 0
+        return top > ceiling ? ceiling / top : 1
     }
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
@@ -177,9 +192,12 @@ final class SeparationJob: ObservableObject {
                 await self?.loaded(peaks: Peaks.of(mix), duration: seconds)
                 lap("Lettura della canzone")
 
+                // Con il modello voce a parte, il Demucs specializzato nella voce non serve: un passaggio in meno
+                let instrumentModels = voiceName == nil ? models : models.filter { $0 != Quality.voiceSpecialist }
+
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
-                for name in models {
+                for name in instrumentModels {
                     if let d = EngineChoice.stored(name) { decisions[name] = d; continue }
                     await self?.set(.tuning)
                     let d = try await SeparationJob.tune(name, mix: mix)
@@ -233,12 +251,12 @@ final class SeparationJob: ObservableObject {
                 // 4. Gli strumenti: con htdemucs_ft ogni modello dà il suo strumento
                 var out: [[[Float]]] = []
                 var sources: [String] = []
-                for (k, name) in models.enumerated() {
+                for (k, name) in instrumentModels.enumerated() {
                     let span = (Double(k), Double(k + 1))
                     let input = instrumentsInput
                     func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
                         try Separator(core: core).separate(input, progress: { p in
-                            report(voiceShare + (1 - voiceShare) * (span.0 + p) / Double(models.count))
+                            report(voiceShare + (1 - voiceShare) * (span.0 + p) / Double(instrumentModels.count))
                         }, isCancelled: { cancel.isSet })
                     }
                     var core = try await ModelStore.shared.load(name, units: decisions[name]!.units) { _ in }
@@ -259,7 +277,7 @@ final class SeparationJob: ObservableObject {
                     Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
                 }
                 if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
-                lap(models.count > 1 ? "Strumenti (\(models.count) modelli Demucs)" : "Separazione (Demucs)")
+                lap(instrumentModels.count > 1 ? "Strumenti (\(instrumentModels.count) modelli Demucs)" : "Separazione (Demucs)")
                 let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
@@ -430,32 +448,34 @@ final class SeparationJob: ObservableObject {
         }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        var stems: [Stem] = []
-        let measures = out.map(Stem.measure)
-        let total = max(measures.reduce(0) { $0 + $1.energy }, 1e-12)
-        for (i, key) in sources.enumerated() {
-            let info = Stem.info(key)
-            let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
-            try AudioIO.write(out[i], to: url, format: format)
-            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(out[i]),
-                              share: measures[i].energy / total, peakDB: measures[i].peakDB))
-        }
-        // La base per il karaoke: tutto tranne la voce
+        // La base per il karaoke: tutto tranne la voce (o, con la voce a parte, la canzone meno la voce)
+        var base: [[Float]]?
         if instrumental, let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
             let length = out[0][0].count
-            var base = given ?? [[Float]](repeating: [Float](repeating: 0, count: length), count: 2)
+            var b = given ?? [[Float]](repeating: [Float](repeating: 0, count: length), count: 2)
             if given == nil {
                 for (i, _) in sources.enumerated() where i != v {
-                    for c in 0..<2 { for j in 0..<length { base[c][j] += out[i][c][j] } }
+                    for c in 0..<2 { for j in 0..<length { b[c][j] += out[i][c][j] } }
                 }
             }
-            let info = Stem.info("instrumental")
-            let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
-            try AudioIO.write(base, to: url, format: format)
-            let m = Stem.measure(base)
-            stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(base),
-                              share: m.energy / total, peakDB: m.peakDB))
+            base = b
         }
+        let measures = out.map(Stem.measure)
+        let baseMeasure = base.map(Stem.measure)
+        let gain = Stem.safeGain(peaks: measures.map(\.peak) + (baseMeasure.map { [$0.peak] } ?? []))
+        let gainDB = gain < 1 ? 20 * log10(Double(gain)) : 0
+        let total = max(measures.reduce(0) { $0 + $1.energy }, 1e-12)
+
+        var stems: [Stem] = []
+        func add(_ key: String, _ audio: [[Float]], _ m: (energy: Double, peakDB: Double, peak: Float, balance: Double)) throws {
+            let info = Stem.info(key)
+            let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
+            try AudioIO.write(audio, to: url, format: format, gain: gain)
+            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(audio),
+                              share: m.energy / total, peakDB: m.peakDB + gainDB, balance: m.balance, gainDB: gainDB))
+        }
+        for (i, key) in sources.enumerated() { try add(key, out[i], measures[i]) }
+        if let b = base, let m = baseMeasure { try add("instrumental", b, m) }
         stems.sort { Stem.info($0.key).order < Stem.info($1.key).order }
         return (dir, stems)
     }

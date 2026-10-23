@@ -91,7 +91,7 @@ enum AudioIO {
     }
 
     /// Scrive le tracce nel formato scelto (WAV, FLAC, Apple Lossless), a 44,1 kHz.
-    static func write(_ channels: [[Float]], to url: URL, format: OutputFormat) throws {
+    static func write(_ channels: [[Float]], to url: URL, format: OutputFormat, gain: Float = 1) throws {
         let n = channels.first?.count ?? 0
         guard let pcm = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
                                       channels: AVAudioChannelCount(channels.count), interleaved: false),
@@ -101,7 +101,7 @@ enum AudioIO {
         }
         buf.frameLength = AVAudioFrameCount(n)
         for (c, ch) in channels.enumerated() {
-            for i in 0..<n { data[c][i] = min(1, max(-1, ch[i])) }
+            for i in 0..<n { data[c][i] = min(1, max(-1, ch[i] * gain)) }
         }
         try? FileManager.default.removeItem(at: url)
         do {

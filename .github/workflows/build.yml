@@ -6,7 +6,7 @@ name: Compila AudioLR
 on:
   push:
     # Le prove dei modelli e il banco di prova non toccano l'app: niente compilazione
-    paths-ignore: ["Tools/**", "site/**", "README.md", ".github/workflows/model*.yml", ".github/workflows/benchmark.yml", ".github/workflows/fixture.yml"]
+    paths-ignore: ["Tools/**", "site/**", "README.md", ".github/workflows/model*.yml", ".github/workflows/benchmark.yml", ".github/workflows/fixture.yml", ".github/workflows/fonti.yml"]
   pull_request:
   workflow_dispatch:
 

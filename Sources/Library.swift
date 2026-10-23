@@ -219,6 +219,26 @@ struct DetailsView: View {
                 }
                 Text("Quota dell'energia sonora di ogni traccia.").font(.system(size: 10.5)).foregroundStyle(.secondary)
             }
+            let checked = job.stems.filter { $0.balance != nil }
+            if !checked.isEmpty {
+                Divider()
+                Text("CONTROLLO DEL SUONO").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+                ForEach(checked) { s in
+                    HStack(spacing: 6) {
+                        Text(s.name).font(.system(size: 11.5)).frame(width: 110, alignment: .leading)
+                        BalanceBar(value: s.balance ?? 0.5).frame(width: 70, height: 8)
+                        Spacer()
+                        Text(s.peakDB.map { String(format: "picco %.1f dB", $0) } ?? "").font(.system(size: 10.5)).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+                if let g = job.stems.first?.gainDB, g < -0.05 {
+                    Label(String(format: "Volume di tutte le tracce abbassato di %.1f dB per non distorcere", -g), systemImage: "waveform.badge.minus")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                } else {
+                    Label("Nessuna traccia supera il massimo: niente distorsione", systemImage: "checkmark.circle")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                }
+            }
         }
         .padding(18)
         .frame(width: 320)
@@ -230,5 +250,22 @@ struct DetailsView: View {
             Text(k).font(.system(size: 11.5)).foregroundStyle(.secondary)
             Text(v).font(.system(size: 11.5, weight: .medium)).lineLimit(2).textSelection(.enabled)
         }
+    }
+}
+
+/// Sinistra ↔ destra: il pallino al centro vuol dire traccia bilanciata.
+struct BalanceBar: View {
+    let value: Double
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.ink.opacity(0.08))
+                Rectangle().fill(Theme.ink.opacity(0.25)).frame(width: 1).offset(x: g.size.width / 2)
+                Circle().fill(abs(value - 0.5) > 0.15 ? Theme.voiceMute : Theme.brass)
+                    .frame(width: g.size.height, height: g.size.height)
+                    .offset(x: (g.size.width - g.size.height) * value)
+            }
+        }
+        .help(String(format: "Sinistra %.0f%% · destra %.0f%%", (1 - value) * 100, value * 100))
     }
 }

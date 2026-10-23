@@ -234,9 +234,35 @@ final class AppTests: XCTestCase {
         XCTAssertNil(items.first?.duration)
     }
 
+    func testSafeGainKeepsTracksInProportion() {
+        XCTAssertEqual(Stem.safeGain(peaks: [0.5, 0.9]), 1, "sotto il massimo: niente da fare")
+        XCTAssertEqual(Stem.safeGain(peaks: [0.5, 1.4]), Stem.ceiling / 1.4, accuracy: 1e-6)
+    }
+
+    func testSaveNeverClipsAndReportsBalance() throws {
+        let d = try tempDir()
+        // Una base che supera il massimo (1,5) solo a destra: prima veniva tagliata, suono «fritto»
+        let n = 4000
+        let loud: [[Float]] = [[Float](repeating: 0.2, count: n), (0..<n).map { Float(sin(Double($0) * 0.05)) * 1.5 }]
+        let quiet: [[Float]] = [[Float](repeating: 0.1, count: n), [Float](repeating: 0.1, count: n)]
+        let (_, stems) = try SeparationJob.save([quiet, quiet, loud, quiet], sources: ["drums", "bass", "other", "vocals"],
+                                                song: d.appendingPathComponent("Forte.wav"), into: d, format: .wav24, instrumental: false)
+        let other = try XCTUnwrap(stems.first { $0.key == "other" })
+        XCTAssertLessThan(other.gainDB, -3, "volume abbassato di circa 4 dB")
+        XCTAssertGreaterThan(other.balance ?? 0, 0.9, "quasi tutta l'energia a destra")
+        let back = try AudioIO.read(other.url)
+        let peak = back[1].map(abs).max() ?? 0
+        XCTAssertLessThan(peak, 0.99)
+        XCTAssertGreaterThan(peak, 0.95, "abbassato quanto basta, non di più")
+        // Proporzioni tenute: la batteria scende dello stesso tanto
+        let drums = try AudioIO.read(try XCTUnwrap(stems.first { $0.key == "drums" }).url)
+        XCTAssertEqual(drums[0][100], 0.1 * Stem.ceiling / 1.5, accuracy: 1e-3)
+    }
+
     func testStemMeasure() {
         let m = Stem.measure([[0.5, -0.5], [0, 0]])
         XCTAssertEqual(m.energy, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(m.balance, 0, accuracy: 1e-9, "tutto a sinistra")
         XCTAssertEqual(m.peakDB, 20 * log10(0.5), accuracy: 1e-6)
     }
 

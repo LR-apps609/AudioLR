@@ -1,3 +1,10 @@
+Novità della 0.6.1 «Pulizia»:
+• Niente più suono «fritto»: se una traccia superava il massimo veniva tagliata; ora tutte le tracce si abbassano dello stesso tanto, quanto basta
+• Mixer con limitatore in uscita: anche con i volumi alzati il mix non distorce; lo stesso per «Esporta il mix»
+• Massima qualità più veloce: il modello Demucs della voce non gira più quando la voce la fa il RoFormer (un passaggio in meno su quattro)
+• Dettagli › «Controllo del suono»: bilanciamento sinistra/destra e picco di ogni traccia, e se il volume è stato abbassato
+• Prove automatiche più severe: ogni canale controllato da solo, sinistro e destro
+
 Novità della 0.6.0 «Carattere»:
 • In alto a destra: libreria, guida (?) e impostazioni (ingranaggio), sempre a portata di clic
 • Libreria a sinistra: tutte le canzoni separate, con ricerca e numeri (canzoni, minuti di musica, tempo medio)

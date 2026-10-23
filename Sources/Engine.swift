@@ -37,6 +37,9 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
+    static let voiceSpecialist = "HTDemucsFT-3"
+
     /// Tutto quello che va scaricato per questa qualità.
     var allModels: [String] { (voiceModel.map { [$0] } ?? []) + models }
 

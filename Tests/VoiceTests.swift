@@ -106,5 +106,6 @@ final class VoiceTests: XCTestCase {
         let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
         XCTAssertGreaterThan(q, 25, "la voce dell'app è diversa da quella del RoFormer originale")
+        EndToEndTests.checkChannels("voce", ref: ref, est: out, mix: mix)
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AudioToolbox
 import SwiftUI
 
 // ════════════════════════════════════════════════════════════════════
@@ -77,6 +78,19 @@ final class MixPlayer: ObservableObject {
     @Published private(set) var exporting = false
 
     private let engine = AVAudioEngine()
+    /// Limitatore in uscita: con i volumi alzati le tracce sommate possono superare il massimo;
+    /// invece di tagliare (suono «fritto») il limitatore abbassa solo quei picchi.
+    private lazy var limiter: AVAudioUnitEffect = {
+        let d = AudioComponentDescription(componentType: kAudioUnitType_Effect, componentSubType: kAudioUnitSubType_PeakLimiter,
+                                          componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
+        let l = AVAudioUnitEffect(audioComponentDescription: d)
+        engine.attach(l)
+        let fmt = engine.outputNode.inputFormat(forBus: 0)
+        engine.disconnectNodeOutput(engine.mainMixerNode)
+        engine.connect(engine.mainMixerNode, to: l, format: fmt)
+        engine.connect(l, to: engine.outputNode, format: fmt)
+        return l
+    }()
     private var players: [String: AVAudioPlayerNode] = [:]
     private var files: [String: AVAudioFile] = [:]
     private var startPosition: Double = 0
@@ -119,6 +133,7 @@ final class MixPlayer: ObservableObject {
     func play(from seconds: Double) {
         guard !players.isEmpty else { return }
         stopNodes()
+        _ = limiter
         do { if !engine.isRunning { try engine.start() } } catch { return }
         let at = max(0, min(seconds, duration))
         for (k, p) in players {
@@ -177,7 +192,8 @@ final class MixPlayer: ObservableObject {
             let tracks = try chosen.map { (key: $0.key, audio: try AudioIO.read($0.url)) }
             let mixed = MixState.mix(tracks, state: state)
             let url = folder.appendingPathComponent("\(name).\(format.fileExtension)")
-            try AudioIO.write(mixed, to: url, format: format)
+            // Con i volumi alzati il mix può superare il massimo: si abbassa tutto quanto basta, senza tagliare
+            try AudioIO.write(mixed, to: url, format: format, gain: Stem.safeGain(peaks: [Stem.measure(mixed).peak]))
             return url
         }.value
     }

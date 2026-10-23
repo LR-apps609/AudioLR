@@ -31,6 +31,15 @@ final class EndToEndTests: XCTestCase {
         return 10 * log10(num / max(den, 1e-20))
     }
 
+    /// Canale per canale: un errore su un solo lato (per esempio il destro) non si nasconde nella somma.
+    static func checkChannels(_ name: String, ref: [[Float]], est: [[Float]], mix: [[Float]], file: StaticString = #filePath, line: UInt = #line) {
+        for c in 0..<2 {
+            let q = snr(ref[c], est[c])
+            let vsMix = snr(mix[c], zip(mix[c], zip(ref[c], est[c])).map { $0.0 - ($0.1.0 - $0.1.1) })
+            XCTAssertTrue(q > 25 || vsMix > 35, "\(name), canale \(c == 0 ? "sinistro" : "destro"): \(q) dB", file: file, line: line)
+        }
+    }
+
     func testSeparationMatchesDemucs() async throws {
         executionTimeAllowance = 400
         let (mix, expected) = try await fixture()
@@ -57,6 +66,7 @@ final class EndToEndTests: XCTestCase {
             report.append("\(name) \(String(format: "%.1f", q)) dB")
             // 16 bit contro 32 bit di PyTorch: oltre 25 dB la differenza non si sente
             XCTAssertTrue(q > 25 || vsMix > 35, "\(name): troppo diverso da Demucs (\(q) dB, \(vsMix) dB sulla canzone)")
+            Self.checkChannels(name, ref: expected[s], est: out[s], mix: mix)
         }
         let audio = Double(mix[0].count) / AudioIO.sampleRate
         let line = "Fedeltà a Demucs: " + report.joined(separator: " · ") +
@@ -129,6 +139,7 @@ final class EndToEndTests: XCTestCase {
             let vsMix = Self.snr(all, zip(all, zip(ref, est)).map { $0.0 - ($0.1.0 - $0.1.1) })
             parts.append(String(format: "%@ %.1f dB", core.sources[s], q))
             XCTAssertTrue(q > 25 || vsMix > 35, "\(core.sources[s]) nel pezzo: \(q) dB")
+            Self.checkChannels(core.sources[s], ref: segOut[s], est: res[s], mix: piece)
         }
         XCTAssertTrue(Separator.plausible(piece: piece, result: res))
         Self.note("Pezzo intero: " + parts.joined(separator: " · "))
@@ -177,6 +188,7 @@ final class EndToEndTests: XCTestCase {
             let vsMix = Self.snr(mixAll, zip(mixAll, zip(ref, est)).map { $0.0 - ($0.1.0 - $0.1.1) })
             report.append(String(format: "%@ %.1f dB", name, q))
             XCTAssertTrue(q > 25 || vsMix > 35, "\(name): troppo diverso da Demucs (\(q) dB)")
+            Self.checkChannels(name, ref: expected[s], est: out[s], mix: mix)
         }
         Self.note("Massima qualità: " + report.joined(separator: " · ") + String(format: " — %.1f s", seconds))
     }
