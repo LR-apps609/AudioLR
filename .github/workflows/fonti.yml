@@ -44,7 +44,9 @@ jobs:
           groups = {}
           for line in seen:
               low = line.lower()
+              if "demucs" in low and ("ensemble" in low or " + " in low or "| + |" in low): continue
               k = "fadr" if "fadr" in low else "demucs" if ("demucs" in low) else "commerciali" if re.search("moises|lalal|audioshake", low) else "roformer"
+              if k == "roformer": continue
               groups.setdefault(k, []).append(line)
           for k, lines in groups.items():
               lines.sort(key=lambda l: int(l.split("|")[0]) if l.split("|")[0].strip().isdigit() else 9999)
