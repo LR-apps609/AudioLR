@@ -81,6 +81,7 @@ final class Separator {
         let S = core.sources.count
 
         let (norm, gMean, gStd) = Self.normalized(mix)
+        let specialtyIndices = core.specialty.compactMap { core.sources.firstIndex(of: $0) }
 
         var out = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: S)
         var total = [Float](repeating: 0, count: length)
@@ -93,7 +94,7 @@ final class Separator {
             let delta = seg - chunk
             let piece = Self.piece(norm, offset: offset, segment: seg)
             let result = try runSegment(piece)
-            if n == 0, !Self.plausible(piece: piece, result: result) { throw ImplausibleResult() }
+            if n == 0, !Self.plausible(piece: piece, result: result, keep: specialtyIndices) { throw ImplausibleResult() }
             let trim = delta / 2
             for s in 0..<S {
                 for c in 0..<2 {
@@ -162,19 +163,27 @@ final class Separator {
 
     /// Le tracce sommate devono ridare (quasi) il pezzo: con Demucs la differenza è sotto −15 dB,
     /// un calcolo sbagliato la porta sopra lo 0 dB. Il limite (−6 dB) sta in mezzo, con ampio margine.
-    static func plausible(piece: [[Float]], result: [[[Float]]]) -> Bool {
-        var signal = 0.0, error = 0.0
+    /// Un modello specializzato (htdemucs_ft) è affidabile solo sul suo strumento (`keep`): le altre tracce
+    /// non contano, e si controlla che il suo strumento non sia più forte della canzone stessa.
+    static func plausible(piece: [[Float]], result: [[[Float]]], keep: [Int]? = nil) -> Bool {
+        let all = Array(result.indices)
+        let kept = keep ?? all
+        var signal = 0.0, error = 0.0, stem = 0.0
         for c in 0..<2 {
             for i in 0..<piece[c].count {
-                var sum: Float = 0
+                var sum: Float = 0, part: Float = 0
                 for s in result.indices { sum += result[s][c][i] }
+                for s in kept { part += result[s][c][i] }
                 let v = Double(piece[c][i]), d = Double(sum) - v
-                if !d.isFinite { return false }
+                if !d.isFinite || !part.isFinite { return false }
                 signal += v * v
                 error += d * d
+                stem += Double(part) * Double(part)
             }
         }
-        return signal == 0 || error / signal < 0.25
+        if signal == 0 { return true }
+        if kept.count == all.count { return error / signal < 0.25 }
+        return stem / signal < 2
     }
 
     /// Un pezzo di `segment` campioni (2 canali) → per ogni strumento, 2 canali.

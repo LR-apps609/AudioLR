@@ -183,9 +183,11 @@ final class SeparationJob: ObservableObject {
         let piece = Separator.piece(norm, offset: offset, segment: ane.segment)
         let a = try Separator(core: ane).runSegment(piece)
         let b = try Separator(core: gpu).runSegment(piece)
+        // Conta solo lo strumento in cui il modello è specializzato (con htdemucs_ft le altre tracce sono di scarto)
+        let keep = gpu.specialty.compactMap { gpu.sources.firstIndex(of: $0) }
         // Se nemmeno la grafica dà un risultato coerente, si lascia decidere al controllo durante la separazione
-        guard Separator.plausible(piece: piece, result: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
-        return EngineChoice.decide(agreement: Separator.agreement(b, a))
+        guard Separator.plausible(piece: piece, result: b, keep: keep) else { return EngineChoice.Decision(units: .all, agreement: 0) }
+        return EngineChoice.decide(agreement: Separator.agreement(keep.map { b[$0] }, keep.map { a[$0] }))
     }
 
     func cancel() {

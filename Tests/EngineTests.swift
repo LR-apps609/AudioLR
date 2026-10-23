@@ -146,6 +146,13 @@ final class EngineTests: XCTestCase {
         XCTAssertThrowsError(try Separator(core: GarbageCore()).separate(mix)) { e in
             XCTAssertTrue(e is ImplausibleResult)
         }
+        // Un modello specializzato: conta solo il suo strumento, le altre tracce possono essere qualsiasi cosa
+        let piece = tones(8192)
+        var junk: [[[Float]]] = (0..<4).map { _ in [[Float](repeating: 5, count: 8192), [Float](repeating: -5, count: 8192)] }
+        junk[3] = piece.map { $0.map { $0 * 0.5 } }
+        XCTAssertTrue(Separator.plausible(piece: piece, result: junk, keep: [3]))
+        XCTAssertFalse(Separator.plausible(piece: piece, result: junk, keep: [0]), "il suo strumento è esagerato")
+        XCTAssertFalse(Separator.plausible(piece: piece, result: junk), "come modello per tutto non torna")
         // Un modello «onesto» passa il controllo
         XCTAssertNoThrow(try Separator(core: FakeCore(segment: 8192, viaSpectrum: false)).separate(mix))
     }
