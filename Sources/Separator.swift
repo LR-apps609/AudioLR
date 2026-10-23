@@ -20,6 +20,10 @@ protocol SeparationCore {
     func run(spec: [Float], wave: [Float]) throws -> (spec: [Float], wave: [Float])
 }
 
+/// Il primo pezzo è uscito incoerente (le tracce sommate non danno la canzone): succede se l'unità di calcolo
+/// sbaglia con i numeri a 16 bit (per esempio il solo processore dei Mac Intel). Si riprova con un'altra.
+struct ImplausibleResult: Error {}
+
 struct SeparationError: LocalizedError {
     let message: String
     init(_ m: String) { message = m }
@@ -95,6 +99,7 @@ final class Separator {
                 if lo < hi { for i in lo..<hi { piece[c][i - from] = norm[c][i] } }
             }
             let result = try runSegment(piece)
+            if n == 0, !Self.plausible(piece: piece, result: result) { throw ImplausibleResult() }
             let trim = delta / 2
             for s in 0..<S {
                 for c in 0..<2 {
@@ -113,6 +118,23 @@ final class Separator {
             }
         }
         return out
+    }
+
+    /// Le tracce sommate devono ridare (quasi) il pezzo: con Demucs la differenza è sotto −15 dB,
+    /// un calcolo sbagliato la porta sopra lo 0 dB. Il limite (−6 dB) sta in mezzo, con ampio margine.
+    static func plausible(piece: [[Float]], result: [[[Float]]]) -> Bool {
+        var signal = 0.0, error = 0.0
+        for c in 0..<2 {
+            for i in 0..<piece[c].count {
+                var sum: Float = 0
+                for s in result.indices { sum += result[s][c][i] }
+                let v = Double(piece[c][i]), d = Double(sum) - v
+                if !d.isFinite { return false }
+                signal += v * v
+                error += d * d
+            }
+        }
+        return signal == 0 || error / signal < 0.25
     }
 
     /// Un pezzo di `segment` campioni (2 canali) → per ogni strumento, 2 canali.

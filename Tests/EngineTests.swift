@@ -132,6 +132,24 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    /// Un modello che sbaglia (tracce che sommate non danno la canzone) viene riconosciuto subito.
+    final class GarbageCore: SeparationCore {
+        let segment = 8192
+        let sources = ["drums", "bass", "other", "vocals"]
+        func run(spec: [Float], wave: [Float]) throws -> (spec: [Float], wave: [Float]) {
+            ([Float](repeating: 3, count: spec.count * 4), [Float](repeating: -2, count: wave.count * 4))
+        }
+    }
+
+    func testImplausibleResultIsCaught() {
+        let mix = tones(30_000)
+        XCTAssertThrowsError(try Separator(core: GarbageCore()).separate(mix)) { e in
+            XCTAssertTrue(e is ImplausibleResult)
+        }
+        // Un modello «onesto» passa il controllo
+        XCTAssertNoThrow(try Separator(core: FakeCore(segment: 8192, viaSpectrum: false)).separate(mix))
+    }
+
     func testCancelStops() {
         let sep = Separator(core: FakeCore(segment: 8192, viaSpectrum: false))
         let mix = [noise(40_000), noise(40_000, seed: 2)]

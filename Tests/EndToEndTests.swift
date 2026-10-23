@@ -35,14 +35,11 @@ final class EndToEndTests: XCTestCase {
         executionTimeAllowance = 400
         let (mix, expected) = try await fixture()
 
-        // Il modello come lo usa l'app (scaricato e preparato da ModelStore), ma solo sul processore:
-        // il risultato è lo stesso su ogni Mac e il confronto è preciso
-        do { _ = try await ModelStore.shared.load { _ in } } catch {
+        // Il modello esattamente come lo usa l'app (scaricato e preparato da ModelStore, tutte le unità di calcolo)
+        let core: CoreMLSeparationCore
+        do { core = try await ModelStore.shared.load { _ in } } catch {
             throw XCTSkip("modello non disponibile: \(error.localizedDescription)")
         }
-        let cfg = MLModelConfiguration()
-        cfg.computeUnits = .cpuOnly
-        let core = try CoreMLSeparationCore(model: MLModel(contentsOf: ModelStore.compiled, configuration: cfg))
         XCTAssertEqual(core.sources, ["drums", "bass", "other", "vocals"])
         XCTAssertEqual(core.segment, 343_980)
 
@@ -63,7 +60,7 @@ final class EndToEndTests: XCTestCase {
         }
         let audio = Double(mix[0].count) / AudioIO.sampleRate
         let line = "Fedeltà a Demucs: " + report.joined(separator: " · ") +
-            String(format: " — %.1f s di audio in %.1f s (solo processore)", audio, seconds)
+            String(format: " — %.1f s di audio in %.1f s (Mac di GitHub, senza Neural Engine)", audio, seconds)
         print(line)
         // Il workflow la mostra nella pagina della compilazione
         try? line.write(toFile: "/tmp/audiolr-fedelta.txt", atomically: true, encoding: .utf8)
@@ -120,39 +117,25 @@ final class EndToEndTests: XCTestCase {
         Self.note(String(format: "iSTFT: %.1e (coniugata %.1e)", eBack, eBackConj))
         XCTAssertLessThan(eBack, 1e-3, "iSTFT diversa da Demucs")
 
-        // 3. Un pezzo intero con il modello vero
-        do { _ = try await ModelStore.shared.load { _ in } } catch { throw XCTSkip("modello non disponibile") }
-        let cfg = MLModelConfiguration()
-        cfg.computeUnits = .cpuOnly
-        let core = try CoreMLSeparationCore(model: MLModel(contentsOf: ModelStore.compiled, configuration: cfg))
-        let t0 = Date()
-        _ = stft.forward(piece[0]); _ = stft.forward(piece[1])
-        let tStft = Date().timeIntervalSince(t0)
-        let t1 = Date()
+        // 3. Un pezzo intero con il modello vero, come lo usa l'app
+        let core: CoreMLSeparationCore
+        do { core = try await ModelStore.shared.load { _ in } } catch { throw XCTSkip("modello non disponibile") }
         let res = try Separator(core: core).runSegment(piece)
-        let tAll = Date().timeIntervalSince(t1)
-        func quality(_ r: [[[Float]]]) -> String {
-            (0..<S).map { s in
-                String(format: "%@ %.1f", core.sources[s], Self.snr(segOut[s][0] + segOut[s][1], r[s][0] + r[s][1]))
-            }.joined(separator: " ")
+        var parts: [String] = []
+        for s in 0..<S {
+            let ref = segOut[s][0] + segOut[s][1], est = res[s][0] + res[s][1]
+            let q = Self.snr(ref, est)
+            let all = piece[0] + piece[1]
+            let vsMix = Self.snr(all, zip(all, zip(ref, est)).map { $0.0 - ($0.1.0 - $0.1.1) })
+            parts.append(String(format: "%@ %.1f dB", core.sources[s], q))
+            XCTAssertTrue(q > 25 || vsMix > 35, "\(core.sources[s]) nel pezzo: \(q) dB")
         }
-        Self.note("Pezzo (solo processore): " + quality(res) + String(format: " — %.1f s, STFT %.1f s", tAll, tStft))
+        XCTAssertTrue(Separator.plausible(piece: piece, result: res))
+        Self.note("Pezzo intero: " + parts.joined(separator: " · "))
 
-        // Com'è fatta l'uscita di Core ML
+        // Il risultato di Core ML ha righe «allineate» (passi diversi dalla misura): vanno lette bene
         let probe = try Self.rawPrediction(core, piece: piece, stft: stft)
-        Self.note("Uscita spec_out: tipo \(probe.spec.dataType.rawValue), forma \(probe.spec.shape), passi \(probe.spec.strides)" +
-                  "; wave_out: tipo \(probe.wave.dataType.rawValue), passi \(probe.wave.strides)")
-        probe.spec.withUnsafeMutableBytes { _, strides in Self.note("passi veri spec_out: \(strides)") }
-
-        // Le altre unità di calcolo
-        for (name, units) in [("tutte", MLComputeUnits.all), ("processore+grafica", .cpuAndGPU)] {
-            let c = MLModelConfiguration()
-            c.computeUnits = units
-            let other = try CoreMLSeparationCore(model: MLModel(contentsOf: ModelStore.compiled, configuration: c))
-            let t = Date()
-            let r = try Separator(core: other).runSegment(piece)
-            Self.note("Pezzo (\(name)): " + quality(r) + String(format: " — %.1f s", Date().timeIntervalSince(t)))
-        }
+        Self.note("Passi di wave_out: \(probe.wave.strides) per \(probe.wave.shape)")
     }
 
     /// Una previsione «a mano», per guardare com'è fatta l'uscita.

@@ -99,18 +99,30 @@ final class SeparationJob: ObservableObject {
 
                 await self?.set(.separating(0))
                 let began = Date()
-                let separator = Separator(core: core)
-                let out = try separator.separate(mix, progress: { p in
-                    let elapsed = Date().timeIntervalSince(began)
-                    let left: Double? = p > 0.02 ? elapsed / p * (1 - p) : nil
-                    Task { @MainActor in
-                        self?.phase = .separating(p)
-                        self?.remaining = left
+                func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
+                    try Separator(core: core).separate(mix, progress: { p in
+                        let elapsed = Date().timeIntervalSince(began)
+                        let left: Double? = p > 0.02 ? elapsed / p * (1 - p) : nil
+                        Task { @MainActor in
+                            self?.phase = .separating(p)
+                            self?.remaining = left
+                        }
+                    }, isCancelled: { cancel.isSet })
+                }
+                var used = core
+                let out: [[[Float]]]
+                do {
+                    out = try run(core)
+                } catch is ImplausibleResult {
+                    // Il calcolo «misto» ha sbagliato: si riprova solo con grafica e processore
+                    used = try await ModelStore.shared.load(units: .cpuAndGPU) { _ in }
+                    do { out = try run(used) } catch is ImplausibleResult {
+                        throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
                     }
-                }, isCancelled: { cancel.isSet })
+                }
 
                 await self?.set(.saving)
-                let (dir, stems) = try SeparationJob.save(out, sources: core.sources, song: url)
+                let (dir, stems) = try SeparationJob.save(out, sources: used.sources, song: url)
                 await self?.finish(dir: dir, stems: stems)
             } catch is CancellationError {
                 await self?.set(.idle)

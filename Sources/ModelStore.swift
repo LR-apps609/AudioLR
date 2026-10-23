@@ -24,16 +24,18 @@ final class ModelStore: @unchecked Sendable {
 
     var isReady: Bool { FileManager.default.fileExists(atPath: Self.compiled.path) }
 
-    private var core: CoreMLSeparationCore?
+    /// Un modello pronto per ogni scelta di unità di calcolo.
+    private var cores: [Int: CoreMLSeparationCore] = [:]
     private let lock = NSLock()
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
-    func load(progress: @escaping (Double) -> Void) async throws -> CoreMLSeparationCore {
-        let cached = lock.withLock { core }
+    /// `units`: dove fare i calcoli (di solito tutto: Neural Engine, grafica e processore).
+    func load(units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> CoreMLSeparationCore {
+        let cached = lock.withLock { cores[units.rawValue] }
         if let c = cached { return c }
         if !isReady { try await download(progress: progress) }
         let cfg = MLModelConfiguration()
-        cfg.computeUnits = .all
+        cfg.computeUnits = units
         let model: MLModel
         do { model = try MLModel(contentsOf: Self.compiled, configuration: cfg) } catch {
             // Modello rovinato (scaricamento interrotto, macOS diverso…): la prossima volta si riscarica
@@ -41,7 +43,7 @@ final class ModelStore: @unchecked Sendable {
             throw SeparationError("il modello di IA non si apre: riprova, verrà scaricato di nuovo")
         }
         let c = try CoreMLSeparationCore(model: model)
-        lock.withLock { core = c }
+        lock.withLock { cores[units.rawValue] = c }
         return c
     }
 
