@@ -149,6 +149,48 @@ final class AppTests: XCTestCase {
         XCTAssertTrue(stems.allSatisfy { $0.url.pathExtension == "flac" })
     }
 
+    // MARK: Mixer
+
+    func testMixerMuteSoloAndVolume() {
+        var m = MixState()
+        XCTAssertEqual(m.effectiveGain("vocals"), 1)
+        m.gain["bass"] = 1.3
+        XCTAssertEqual(m.effectiveGain("bass"), 1.3)
+        m.muted.insert("drums")
+        XCTAssertEqual(m.effectiveGain("drums"), 0)
+        m.solo.insert("bass")
+        XCTAssertEqual(m.effectiveGain("vocals"), 0, "con un solo attivo, le altre tacciono")
+        XCTAssertEqual(m.effectiveGain("bass"), 1.3)
+        XCTAssertNil(m.preset)
+    }
+
+    func testMixerPresets() {
+        var m = MixState()
+        XCTAssertEqual(m.preset, .all)
+        m.apply(.karaoke)
+        XCTAssertEqual(m.effectiveGain("vocals"), 0)
+        XCTAssertEqual(m.effectiveGain("drums"), 1)
+        XCTAssertEqual(m.preset, .karaoke)
+        m.apply(.voice)
+        XCTAssertEqual(m.effectiveGain("vocals"), 1)
+        XCTAssertEqual(m.effectiveGain("other"), 0)
+        XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Solo voce")
+        m.apply(.all)
+        m.gain["vocals"] = 0.3
+        XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Mix")
+    }
+
+    func testMixSumsWithGains() {
+        var m = MixState()
+        m.gain["vocals"] = 0.5
+        m.muted = ["bass"]
+        let out = MixState.mix([(key: "vocals", audio: [[1, 1], [2, 2]]),
+                                (key: "drums", audio: [[0.25, 0.25], [0.25, 0.25]]),
+                                (key: "bass", audio: [[9, 9], [9, 9]])], state: m)
+        XCTAssertEqual(out[0], [0.75, 0.75])
+        XCTAssertEqual(out[1], [1.25, 1.25])
+    }
+
     // MARK: Cronologia
 
     func testHistoryKeepsExistingFoldersNewestFirst() throws {

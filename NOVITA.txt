@@ -3,6 +3,8 @@ Novità della 0.5.0 «Voce pulita»:
 • Batteria, basso e altri strumenti vengono cercati nella base senza voce, ognuno con il suo modello specializzato
 • La base senza voce è esattamente la canzone meno la voce
 • La prima volta scarica anche il modello voce (circa 100 MB in più)
+• Mixer: tutte le tracce suonano insieme (barra spaziatrice), con muto, solo e volume per ognuna
+• Scorciatoie «Tutto», «Karaoke» e «Solo voce», e «Esporta il mix» per salvare quello che senti
 
 Novità della 0.4.0 «Studio professionale»:
 • Impostazioni (⌘,): qualità di serie, formato delle tracce (WAV 24 o 16 bit, FLAC, Apple Lossless), cartella a scelta, base senza voce sì o no, suono e Finder a fine lavoro

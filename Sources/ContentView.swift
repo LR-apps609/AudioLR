@@ -16,6 +16,8 @@ extension Notification.Name {
 struct ContentView: View {
     @EnvironmentObject private var job: SeparationJob
     @StateObject private var player = StemPlayer()
+    @StateObject private var mixer = MixPlayer()
+    @State private var exported: URL?
     @State private var dropping = false
     @State private var news: [String] = []
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
@@ -222,7 +224,7 @@ struct ContentView: View {
     // MARK: Risultati
 
     private var results: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center) {
                 songTitle
                 Spacer()
@@ -231,13 +233,21 @@ struct ContentView: View {
                 } label: { Label("Mostra nel Finder", systemImage: "folder") }
                 Button {
                     player.stop()
+                    mixer.stop()
                     job.reset()
                 } label: { Label("Un'altra canzone", systemImage: "plus") }
                 .buttonStyle(.borderedProminent)
             }
+            transport
             ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(job.stems) { stem in StemRow(stem: stem, player: player) }
+                VStack(spacing: 6) {
+                    ForEach(job.stems.filter { $0.key != "instrumental" }) { stem in
+                        MixerRow(stem: stem, mixer: mixer)
+                    }
+                    if let base = job.stems.first(where: { $0.key == "instrumental" }) {
+                        Divider().padding(.vertical, 4)
+                        StemRow(stem: base, player: player)
+                    }
                 }
                 .padding(.bottom, 4)
             }
@@ -251,6 +261,58 @@ struct ContentView: View {
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
         }
         .padding(22)
+        .onAppear { mixer.load(job.stems, folder: job.folder) }
+        .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
+        .onDisappear { mixer.stop() }
+    }
+
+    /// Il trasporto del mixer: suona tutto insieme, scorciatoie, esportazione del mix.
+    private var transport: some View {
+        HStack(spacing: 12) {
+            Button {
+                player.stop()
+                mixer.toggle()
+            } label: {
+                Image(systemName: mixer.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(Theme.brass.gradient))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.space, modifiers: [])
+            .help(mixer.isPlaying ? "Pausa (spazio)" : "Suona tutte le tracce insieme (spazio)")
+            .accessibilityLabel(mixer.isPlaying ? "Pausa" : "Suona il mix")
+            TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                Text("\(formatTime(mixer.position)) / \(formatTime(mixer.duration))")
+                    .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(.secondary)
+                    .onAppear { mixer.tick() }
+                    .task(id: Int(mixer.position * 4)) { mixer.tick() }
+            }
+            Picker("Scorciatoie", selection: Binding(
+                get: { mixer.state.preset?.rawValue ?? "" },
+                set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
+                ForEach(MixState.Preset.allCases) { p in Text(p.title).tag(p.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 250)
+            Spacer()
+            Button {
+                guard let f = job.folder else { return }
+                Task {
+                    if let url = try? await mixer.export(stems: job.stems, folder: f, title: job.title) {
+                        exported = url
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+            } label: {
+                if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
+            }
+            .disabled(mixer.exporting || job.folder == nil)
+            .help("Salva quello che senti, con muto, solo e volumi, accanto alle tracce")
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
     }
 
     // MARK: Errore
@@ -528,5 +590,70 @@ struct RecentRow: View {
             Button("Mostra nel Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.folderURL]) }
             Button("Togli dai recenti") { job.forget(item) }
         }
+    }
+}
+
+// MARK: - Una traccia del mixer
+
+struct MixerRow: View {
+    let stem: Stem
+    @ObservedObject var mixer: MixPlayer
+
+    var body: some View {
+        let muted = mixer.state.muted.contains(stem.key)
+        let solo = mixer.state.solo.contains(stem.key)
+        let audible = mixer.state.effectiveGain(stem.key) > 0
+        HStack(spacing: 10) {
+            StemBadge(key: stem.key, symbol: stem.symbol, size: 32)
+                .opacity(audible ? 1 : 0.4)
+            Text(stem.name).font(.system(size: 13, weight: .semibold)).frame(width: 104, alignment: .leading)
+            toggle("M", on: muted, tint: Theme.voiceMute, help: muted ? "Riattiva" : "Muto") {
+                if muted { mixer.state.muted.remove(stem.key) } else { mixer.state.muted.insert(stem.key) }
+            }
+            toggle("S", on: solo, tint: Theme.brass, help: solo ? "Togli solo" : "Solo") {
+                if solo { mixer.state.solo.remove(stem.key) } else { mixer.state.solo.insert(stem.key) }
+            }
+            Slider(value: Binding(get: { mixer.state.gain[stem.key] ?? 1 }, set: { mixer.state.gain[stem.key] = $0 }), in: 0...1.5)
+                .frame(width: 90)
+                .tint(Theme.color(stem.key))
+                .help("Volume")
+                .accessibilityLabel("Volume \(stem.name)")
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !mixer.isPlaying)) { _ in
+                GeometryReader { g in
+                    let p = mixer.duration > 0 ? mixer.position / mixer.duration : 0
+                    WaveformView(peaks: stem.peaks, color: Theme.color(stem.key),
+                                 dim: Theme.color(stem.key).opacity(0.35),
+                                 progress: audible ? p : 0, playhead: p)
+                        .opacity(audible ? 1 : 0.35)
+                        .contentShape(Rectangle())
+                        .onTapGesture(coordinateSpace: .local) { pt in
+                            mixer.seek(to: Double(pt.x / max(g.size.width, 1)))
+                            if !mixer.isPlaying { mixer.toggle() }
+                        }
+                }
+            }
+            .frame(height: 30)
+            Button { NSWorkspace.shared.activateFileViewerSelecting([stem.url]) } label: {
+                Image(systemName: "folder").font(.system(size: 12))
+            }
+            .buttonStyle(.borderless)
+            .help("Mostra il file nel Finder")
+            .accessibilityLabel("Mostra \(stem.name) nel Finder")
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(solo ? Theme.color(stem.key).opacity(0.10) : Theme.well.opacity(0.6)))
+        .onDrag { NSItemProvider(contentsOf: stem.url) ?? NSItemProvider() }
+    }
+
+    private func toggle(_ label: String, on: Bool, tint: Color, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 11, weight: .bold, design: .rounded))
+                .frame(width: 22, height: 22)
+                .foregroundStyle(on ? .white : Color.secondary)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? tint : Theme.ink.opacity(0.07)))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel("\(help) \(stem.name)")
     }
 }

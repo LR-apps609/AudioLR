@@ -38,6 +38,8 @@ enum Theme {
     static let green = Color(light: 0x4E9A6A, dark: 0x7CC796)
 
     static let accent = brass
+    /// Il rosso del tasto «muto» del mixer.
+    static let voiceMute = Color(light: 0xB8463A, dark: 0xE0705F)
 
     /// I quattro strumenti nell'ordine dell'icona, dall'alto: voce, batteria, basso, altri strumenti.
     static let stemOrder = ["vocals", "drums", "bass", "other"]
