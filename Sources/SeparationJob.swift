@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import CoreML
 
 // ════════════════════════════════════════════════════════════════════
 //  Il lavoro su una canzone: modello → lettura → separazione → file WAV.
