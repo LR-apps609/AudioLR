@@ -111,6 +111,8 @@ jobs:
           echo "::notice::Test superati: $passed · falliti: $failed · saltati: $skipped"
           # La prova con il modello vero: quanto AudioLR è fedele a Demucs e quanto è veloce
           [ -f /tmp/audiolr-fedelta.txt ] && echo "::notice::$(cat /tmp/audiolr-fedelta.txt)"
+          [ -f /tmp/audiolr-passi.txt ] && echo "::notice::$(tr '\n' '|' < /tmp/audiolr-passi.txt)"
+          rm -f /tmp/audiolr-fedelta.txt /tmp/audiolr-passi.txt
           echo "## Test automatici" >> $GITHUB_STEP_SUMMARY
           echo "Superati: $passed · Falliti: $failed" >> $GITHUB_STEP_SUMMARY
           exit $status
