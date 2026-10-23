@@ -1,0 +1,44 @@
+# Legge la classifica pubblica MVSep (Multisong, 100 brani) e riporta le righe dei metodi che ci interessano:
+# Fadr, Demucs (htdemucs, htdemucs_ft) e i RoFormer usati da AudioLR. Solo lettura, nessun file pubblicato.
+name: Fonti esterne
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/fonti.yml]
+
+jobs:
+  classifica:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Classifica MVSep
+        run: |
+          pip install -q beautifulsoup4 requests
+          python - <<'PY'
+          import requests, re
+          from bs4 import BeautifulSoup
+          keys = re.compile(r"fadr|demucs4 ht|htdemucs|demucs v4|melband roformer.*kim|kim.*melband|mel.?band roformer \(kim|viperx|bs roformer \(viperx|moises|lalal|audioshake", re.I)
+          seen = set(); header = None
+          for page in range(1, 80):
+              url = f"https://mvsep.com/quality_checker/multisong_leaderboard?sort=vocals&page={page}"
+              try:
+                  r = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+              except Exception as e:
+                  print("::warning::", url, e); continue
+              soup = BeautifulSoup(r.text, "html.parser")
+              rows = soup.select("table tr")
+              if not rows: break
+              if header is None:
+                  header = " | ".join(c.get_text(" ", strip=True) for c in rows[0].find_all(["th", "td"]))
+                  print("::notice::COLONNE: " + header[:900])
+              n = 0
+              for tr in rows[1:]:
+                  cells = [c.get_text(" ", strip=True) for c in tr.find_all("td")]
+                  if not cells: continue
+                  n += 1
+                  line = " | ".join(cells)
+                  if keys.search(line) and line not in seen:
+                      seen.add(line); print("::notice::" + line[:900])
+              if n == 0: break
+          print("righe trovate:", len(seen))
+          PY
