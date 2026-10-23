@@ -1,3 +1,11 @@
+Novità della 0.6.0 «Carattere»:
+• In alto a destra: libreria, guida (?) e impostazioni (ingranaggio), sempre a portata di clic
+• Libreria a sinistra: tutte le canzoni separate, con ricerca e numeri (canzoni, minuti di musica, tempo medio)
+• Dettagli di ogni separazione: file di partenza, motore, e quanto è durata ogni fase (modelli, voce, strumenti, salvataggio)
+• «Di cosa è fatta la canzone»: quanta parte del suono è voce, batteria, basso e altri strumenti; la percentuale anche nel mixer
+• Impostazioni nuove: aspetto chiaro o scuro, precisione della voce (Equilibrio o Precisione), modelli installati e licenze
+• Guida con i tasti rapidi
+
 Novità della 0.5.1 «Voce pronta»:
 • Il modello voce RoFormer è disponibile: alla prossima separazione in Massima qualità si scarica da solo (circa 200 MB, una volta sola)
 • La prima volta AudioLR prova anche il modello voce sul Neural Engine e sulla grafica, e sceglie il più preciso

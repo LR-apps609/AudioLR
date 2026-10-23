@@ -11,6 +11,20 @@ import AVFoundation
 enum AudioIO {
     static let sampleRate = 44_100.0
 
+    /// «MP3 · 44,1 kHz · stereo · 8,2 MB», per le informazioni sulla canzone.
+    static func describe(_ url: URL) -> String? {
+        guard let f = try? AVAudioFile(forReading: url) else { return nil }
+        let fmt = f.fileFormat
+        let khz = fmt.sampleRate / 1000
+        let rate = khz == khz.rounded() ? String(format: "%.0f kHz", khz) : String(format: "%.1f kHz", khz).replacingOccurrences(of: ".", with: ",")
+        let ch = fmt.channelCount == 1 ? "mono" : fmt.channelCount == 2 ? "stereo" : "\(fmt.channelCount) canali"
+        var parts = [url.pathExtension.uppercased(), rate, ch]
+        if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+            parts.append(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+        }
+        return parts.joined(separator: " · ")
+    }
+
     /// Due canali a 44,1 kHz, valori tra −1 e 1.
     static func read(_ url: URL) throws -> [[Float]] {
         let file: AVAudioFile

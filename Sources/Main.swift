@@ -13,9 +13,9 @@ struct AudioLRApp: App {
         Window("AudioLR", id: "main") {
             ContentView()
                 .environmentObject(job)
-                .frame(minWidth: 640, minHeight: 520)
+                .frame(minWidth: 860, minHeight: 560)
         }
-        .defaultSize(width: 780, height: 620)
+        .defaultSize(width: 1020, height: 680)
         .commands { AudioLRCommands(job: job) }
 
         Settings {
@@ -61,6 +61,7 @@ struct AudioLRCommands: Commands {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UpdateCheck.autoCheckSoon()          // una volta al giorno, in silenzio
+        Prefs.applyAppearance()
     }
 
     /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone

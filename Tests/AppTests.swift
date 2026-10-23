@@ -216,6 +216,30 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(History.stems(in: d, title: "Brano").map(\.key), ["vocals", "drums", "instrumental"])
     }
 
+    func testLibraryStats() {
+        let items = [HistoryItem(title: "A", folder: "/a", date: Date(), quality: "best", duration: 90, seconds: 60),
+                     HistoryItem(title: "B", folder: "/b", date: Date(), quality: "fast", duration: 150, seconds: 20),
+                     HistoryItem(title: "C", folder: "/c", date: Date(), quality: "fast")]
+        let s = History.stats(items)
+        XCTAssertEqual(s.songs, 3)
+        XCTAssertEqual(s.minutes, 4, accuracy: 1e-9)
+        XCTAssertEqual(s.averageSeconds ?? 0, 40, accuracy: 1e-9)
+    }
+
+    func testOldHistoryStillReads() throws {
+        // Le separazioni salvate dalle versioni precedenti non hanno durata, tempi e motore
+        let json = #"[{"id":"\#(UUID().uuidString)","title":"Vecchia","folder":"/x","date":0,"quality":"best"}]"#
+        let items = try JSONDecoder().decode([HistoryItem].self, from: Data(json.utf8))
+        XCTAssertEqual(items.first?.title, "Vecchia")
+        XCTAssertNil(items.first?.duration)
+    }
+
+    func testStemMeasure() {
+        let m = Stem.measure([[0.5, -0.5], [0, 0]])
+        XCTAssertEqual(m.energy, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(m.peakDB, 20 * log10(0.5), accuracy: 1e-6)
+    }
+
     func testHistoryDates() {
         let now = Date()
         XCTAssertTrue(History.when(now, now: now).hasPrefix("oggi"))

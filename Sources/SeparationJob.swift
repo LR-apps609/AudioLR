@@ -15,7 +15,18 @@ struct Stem: Identifiable, Equatable {
     let url: URL
     /// Forma d'onda (0…1) per il disegno.
     var peaks: [Float] = []
+    /// Quanta parte dell'energia della canzone è in questa traccia (0…1).
+    var share: Double? = nil
+    /// Il punto più forte della traccia, in dB (0 = il massimo possibile).
+    var peakDB: Double? = nil
     var id: String { key }
+
+    /// Energia e picco di una traccia stereo.
+    static func measure(_ audio: [[Float]]) -> (energy: Double, peakDB: Double) {
+        var e = 0.0, p: Float = 0
+        for ch in audio { for v in ch { e += Double(v) * Double(v); p = max(p, abs(v)) } }
+        return (e, p > 0 ? 20 * log10(Double(p)) : -120)
+    }
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
@@ -70,6 +81,16 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var engineText: String?
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
+    /// Quanto è durata ogni fase dell'ultima separazione (per capire dove va il tempo).
+    @Published private(set) var timings: [Timing] = []
+    /// Il file di partenza: nome, formato, frequenza.
+    @Published private(set) var sourceInfo: String?
+
+    struct Timing: Identifiable, Equatable {
+        let name: String
+        let seconds: Double
+        var id: String { name }
+    }
 
     private var task: Task<Void, Never>?
     private var cancelled = Cancel()
@@ -114,6 +135,8 @@ final class SeparationJob: ObservableObject {
         duration = 0
         elapsed = nil
         engineText = nil
+        timings = []
+        sourceInfo = AudioIO.describe(url)
         self.quality = quality
         let models = quality.models
         let wantedVoice = quality.voiceModel
@@ -122,6 +145,15 @@ final class SeparationJob: ObservableObject {
         let cancel = Cancel()
         cancelled = cancel
         task = Task.detached(priority: .userInitiated) { [weak self] in
+            // Cronometro delle fasi
+            var times: [Timing] = []
+            var clock = Date()
+            func lap(_ name: String) {
+                let now = Date()
+                let d = now.timeIntervalSince(clock)
+                if d >= 0.05 { times.append(Timing(name: name, seconds: d)) }
+                clock = now
+            }
             do {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
                 var voiceName = wantedVoice
@@ -137,11 +169,13 @@ final class SeparationJob: ObservableObject {
                         voiceName = nil
                     }
                 }
+                lap("Preparazione dei modelli")
                 await self?.set(.reading)
                 let mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
                 let seconds = Double(mix[0].count) / AudioIO.sampleRate
                 await self?.loaded(peaks: Peaks.of(mix), duration: seconds)
+                lap("Lettura della canzone")
 
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
@@ -157,6 +191,7 @@ final class SeparationJob: ObservableObject {
                     await self?.set(.tuning)
                     EngineChoice.store(try await SeparationJob.tuneVoice(mix: mix), for: v)
                 }
+                lap("Prova del motore")
 
                 // 3. La voce, con il suo modello (se questa qualità ne ha uno)
                 await self?.set(.separating(0))
@@ -177,6 +212,7 @@ final class SeparationJob: ObservableObject {
                     var d = EngineChoice.stored(v) ?? EngineChoice.decide(agreement: 99)
                     func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
                         let voice = try await ModelStore.shared.voice(units: units) { _ in }
+                        voice.overlap = Prefs.voiceOverlap
                         return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
                     }
                     let vo: [[Float]]
@@ -191,6 +227,7 @@ final class SeparationJob: ObservableObject {
                     voiceOut = vo
                     // Gli strumenti si cercano nella base senza voce: ogni modello fa quello in cui è migliore
                     instrumentsInput = (0..<2).map { c in zip(mix[c], vo[c]).map { $0 - $1 } }
+                    lap("Voce (RoFormer)")
                 }
 
                 // 4. Gli strumenti: con htdemucs_ft ogni modello dà il suo strumento
@@ -222,6 +259,7 @@ final class SeparationJob: ObservableObject {
                     Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
                 }
                 if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
+                lap(models.count > 1 ? "Strumenti (\(models.count) modelli Demucs)" : "Separazione (Demucs)")
                 let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
@@ -230,7 +268,9 @@ final class SeparationJob: ObservableObject {
                                                           base: voiceOut == nil ? nil : instrumentsInput)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
-                await self?.finish(dir: dir, stems: stems, engine: engine, took: took)
+                lap("Salvataggio")
+                let all = times
+                await self?.finish(dir: dir, stems: stems, engine: engine, took: took, timings: all)
             } catch is CancellationError {
                 await self?.stopped(clearing: true)
             } catch {
@@ -279,11 +319,13 @@ final class SeparationJob: ObservableObject {
             return
         }
         song = nil
+        timings = []
+        sourceInfo = nil
         title = item.title
         folder = item.folderURL
         quality = Quality(rawValue: item.quality) ?? .best
-        engineText = nil
-        elapsed = nil
+        engineText = item.engine
+        elapsed = item.seconds
         stems = found.map { f in
             let info = Stem.info(f.key)
             return Stem(key: f.key, name: info.name, symbol: info.symbol, url: f.url)
@@ -358,16 +400,17 @@ final class SeparationJob: ObservableObject {
         self.duration = duration
     }
 
-    private func finish(dir: URL, stems: [Stem], engine: String, took: Double) {
+    private func finish(dir: URL, stems: [Stem], engine: String, took: Double, timings: [Timing]) {
         engineText = engine
         elapsed = took
+        self.timings = timings
         folder = dir
         self.stems = stems
         phase = .done
         remaining = nil
         if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
         if Prefs.revealWhenDone { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
-        History.add(song: song, folder: dir, quality: quality)
+        History.add(song: song, folder: dir, quality: quality, duration: duration, seconds: took, engine: engine)
         history = History.all()
         startNextInQueue()
     }
@@ -388,11 +431,14 @@ final class SeparationJob: ObservableObject {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
         var stems: [Stem] = []
+        let measures = out.map(Stem.measure)
+        let total = max(measures.reduce(0) { $0 + $1.energy }, 1e-12)
         for (i, key) in sources.enumerated() {
             let info = Stem.info(key)
             let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
             try AudioIO.write(out[i], to: url, format: format)
-            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(out[i])))
+            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(out[i]),
+                              share: measures[i].energy / total, peakDB: measures[i].peakDB))
         }
         // La base per il karaoke: tutto tranne la voce
         if instrumental, let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
@@ -406,7 +452,9 @@ final class SeparationJob: ObservableObject {
             let info = Stem.info("instrumental")
             let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
             try AudioIO.write(base, to: url, format: format)
-            stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(base)))
+            let m = Stem.measure(base)
+            stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(base),
+                              share: m.energy / total, peakDB: m.peakDB))
         }
         stems.sort { Stem.info($0.key).order < Stem.info($1.key).order }
         return (dir, stems)

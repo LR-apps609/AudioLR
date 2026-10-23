@@ -21,9 +21,37 @@ struct ContentView: View {
     @State private var dropping = false
     @State private var news: [String] = []
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
+    @AppStorage("showLibrary") private var showLibrary = true
+    @State private var showGuide = false
+    @State private var showDetails = false
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
 
     var body: some View {
+        HStack(spacing: 0) {
+            if showLibrary {
+                LibraryView()
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                Divider()
+            }
+            main
+        }
+        .animation(.easeInOut(duration: 0.2), value: showLibrary)
+        .background(StudioBackground())
+        .foregroundStyle(Theme.ink)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !urls.isEmpty else { return false }
+            player.stop()
+            job.enqueue(urls, quality: quality)
+            return true
+        } isTargeted: { dropping = $0 }
+        .onAppear { news = WhatsNew.pending() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrOpenSong)) { _ in choose() }
+        .sheet(isPresented: Binding(get: { !news.isEmpty }, set: { if !$0 { news = [] } })) {
+            WhatsNewSheet(items: news) { news = [] }
+        }
+    }
+
+    private var main: some View {
         VStack(spacing: 16) {
             header
             Group {
@@ -44,19 +72,6 @@ struct ContentView: View {
             footer
         }
         .padding(22)
-        .background(StudioBackground())
-        .foregroundStyle(Theme.ink)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard !urls.isEmpty else { return false }
-            player.stop()
-            job.enqueue(urls, quality: quality)
-            return true
-        } isTargeted: { dropping = $0 }
-        .onAppear { news = WhatsNew.pending() }
-        .onReceive(NotificationCenter.default.publisher(for: .audiolrOpenSong)) { _ in choose() }
-        .sheet(isPresented: Binding(get: { !news.isEmpty }, set: { if !$0 { news = [] } })) {
-            WhatsNewSheet(items: news) { news = [] }
-        }
     }
 
     // MARK: Testata
@@ -71,7 +86,32 @@ struct ContentView: View {
             Spacer()
             Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
                 .help("La canzone non viene caricata su internet")
+            HStack(spacing: 2) {
+                toolButton(showLibrary ? "sidebar.left" : "sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
+                    showLibrary.toggle()
+                }
+                toolButton("questionmark.circle", help: "Come si usa") { showGuide = true }
+                    .popover(isPresented: $showGuide, arrowEdge: .bottom) { GuideView() }
+                SettingsLink {
+                    Image(systemName: "gearshape").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 28)
+                }
+                .buttonStyle(.borderless)
+                .help("Impostazioni (⌘,)")
+                .accessibilityLabel("Impostazioni")
+            }
+            .padding(3)
+            .background(Capsule().fill(Theme.card.opacity(0.8)))
+            .overlay(Capsule().strokeBorder(Theme.stroke))
         }
+    }
+
+    private func toolButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 30, height: 28)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     // MARK: Inizio
@@ -107,7 +147,7 @@ struct ContentView: View {
             }
             .padding(.top, 4)
             Spacer(minLength: 0)
-            if job.history.isEmpty {
+            if job.history.isEmpty || showLibrary {
                 VStack(spacing: 8) {
                     Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
                     HStack(spacing: 8) {
@@ -228,6 +268,9 @@ struct ContentView: View {
             HStack(alignment: .center) {
                 songTitle
                 Spacer()
+                Button { showDetails = true } label: { Label("Dettagli", systemImage: "info.circle") }
+                    .popover(isPresented: $showDetails, arrowEdge: .bottom) { DetailsView().environmentObject(job) }
+                    .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone")
                 Button {
                     if let f = job.folder { NSWorkspace.shared.activateFileViewerSelecting([f]) }
                 } label: { Label("Mostra nel Finder", systemImage: "folder") }
@@ -606,7 +649,15 @@ struct MixerRow: View {
         HStack(spacing: 10) {
             StemBadge(key: stem.key, symbol: stem.symbol, size: 32)
                 .opacity(audible ? 1 : 0.4)
-            Text(stem.name).font(.system(size: 13, weight: .semibold)).frame(width: 104, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(stem.name).font(.system(size: 13, weight: .semibold))
+                if let share = stem.share {
+                    Text(String(format: "%.0f%% della canzone", share * 100))
+                        .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+                        .help(stem.peakDB.map { String(format: "Picco %.1f dB", $0) } ?? "")
+                }
+            }
+            .frame(width: 112, alignment: .leading)
             toggle("M", on: muted, tint: Theme.voiceMute, help: muted ? "Riattiva" : "Muto") {
                 if muted { mixer.state.muted.remove(stem.key) } else { mixer.state.muted.insert(stem.key) }
             }

@@ -11,6 +11,10 @@ struct HistoryItem: Codable, Identifiable, Equatable {
     let folder: String
     let date: Date
     let quality: String
+    /// Durata della canzone, tempo impiegato e motore usato (assenti nelle separazioni delle prime versioni).
+    var duration: Double? = nil
+    var seconds: Double? = nil
+    var engine: String? = nil
 
     var folderURL: URL { URL(fileURLWithPath: folder, isDirectory: true) }
     var exists: Bool { FileManager.default.fileExists(atPath: folder) }
@@ -27,10 +31,12 @@ enum History {
         return items.filter(\.exists)
     }
 
-    static func add(song: URL?, folder: URL, quality: Quality, defaults: UserDefaults = .standard) {
+    static func add(song: URL?, folder: URL, quality: Quality, duration: Double? = nil, seconds: Double? = nil,
+                    engine: String? = nil, defaults: UserDefaults = .standard) {
         let title = song?.deletingPathExtension().lastPathComponent ?? folder.lastPathComponent
         var items = all(defaults: defaults).filter { $0.folder != folder.path }
-        items.insert(HistoryItem(title: title, folder: folder.path, date: Date(), quality: quality.rawValue), at: 0)
+        items.insert(HistoryItem(title: title, folder: folder.path, date: Date(), quality: quality.rawValue,
+                                 duration: duration, seconds: seconds, engine: engine), at: 0)
         save(Array(items.prefix(limit)), defaults: defaults)
     }
 
@@ -53,6 +59,13 @@ enum History {
             }
         }
         return found
+    }
+
+    /// Numeri della libreria: canzoni separate e minuti di musica.
+    static func stats(_ items: [HistoryItem]) -> (songs: Int, minutes: Double, averageSeconds: Double?) {
+        let mins = items.compactMap(\.duration).reduce(0, +) / 60
+        let times = items.compactMap(\.seconds)
+        return (items.count, mins, times.isEmpty ? nil : times.reduce(0, +) / Double(times.count))
     }
 
     /// «oggi, 14:32», «ieri», «12 ott»

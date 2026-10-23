@@ -75,6 +75,24 @@ enum Prefs {
         return Paths.output
     }
 
+    static let appearanceKey = "appearance"
+    static let voiceOverlapKey = "voiceOverlap"
+
+    /// Aspetto: automatico (come il Mac), chiaro o scuro.
+    static func applyAppearance(_ value: String? = nil) {
+        switch value ?? UserDefaults.standard.string(forKey: appearanceKey) ?? "auto" {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil
+        }
+    }
+
+    /// Quante volte ogni punto della canzone passa nel modello voce: 2 equilibrio, 4 più preciso e più lento.
+    static var voiceOverlap: Int {
+        let v = UserDefaults.standard.integer(forKey: voiceOverlapKey)
+        return v == 0 ? 2 : v
+    }
+
     static var makeInstrumental: Bool { UserDefaults.standard.object(forKey: instrumentalKey) as? Bool ?? true }
     static var revealWhenDone: Bool { UserDefaults.standard.bool(forKey: revealKey) }
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }
