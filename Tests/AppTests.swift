@@ -1,0 +1,206 @@
+import XCTest
+import CoreML
+
+/// Aggiornamenti, novità, salvataggio delle tracce, lettura dei risultati di Core ML, forme d'onda e testi.
+final class AppTests: XCTestCase {
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("audiolr-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: d) }
+        return d
+    }
+
+    // MARK: Aggiornamenti
+
+    func testVersionCompare() {
+        XCTAssertTrue(News.newer("0.2.0", than: "0.1.9"))
+        XCTAssertTrue(News.newer("0.10.0", than: "0.9.3"))
+        XCTAssertTrue(News.newer("1.0", than: "0.99.99"))
+        XCTAssertFalse(News.newer("0.2.0", than: "0.2.0"))
+        XCTAssertFalse(News.newer("0.2", than: "0.2.0"))
+        XCTAssertFalse(News.newer("0.1.0", than: "0.2.0"))
+    }
+
+    func testParseGitHubRelease() {
+        let json = """
+        {"tag_name": "v0.3.1", "html_url": "https://github.com/LR-apps609/AudioLR/releases/tag/v0.3.1",
+         "assets": [{"name": "AudioLR.0.3.1.zip", "browser_download_url": "https://example.com/a.zip"},
+                    {"name": "AudioLR.0.3.1.audiolr", "browser_download_url": "https://example.com/a.audiolr"}]}
+        """
+        let r = UpdateCheck.parse(Data(json.utf8))
+        XCTAssertEqual(r?.version, "0.3.1")
+        XCTAssertEqual(r?.asset.absoluteString, "https://example.com/a.audiolr")
+        XCTAssertNil(UpdateCheck.parse(Data(#"{"tag_name": "v1", "assets": []}"#.utf8)), "senza .audiolr non è un aggiornamento")
+        XCTAssertNil(UpdateCheck.parse(Data("non è json".utf8)))
+    }
+
+    func testAutoCheckOncePerDay() {
+        let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
+        let now = Date()
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
+        d.set(now.timeIntervalSince1970 - 3600, forKey: UpdateCheck.lastKey)
+        XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
+        d.set(now.timeIntervalSince1970 - 21 * 3600, forKey: UpdateCheck.lastKey)
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
+        d.set(false, forKey: UpdateCheck.autoKey)
+        XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
+    }
+
+    func testFindUpdatePackage() throws {
+        let d = try tempDir()
+        XCTAssertNil(Updater.findPackage(in: d))
+        let pkg = d.appendingPathComponent("AudioLR")
+        try FileManager.default.createDirectory(at: pkg.appendingPathComponent("Prebuilt/AudioLR.app"), withIntermediateDirectories: true)
+        XCTAssertNil(Updater.findPackage(in: d), "manca version.txt")
+        try "0.2.0".write(to: pkg.appendingPathComponent("version.txt"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(Updater.findPackage(in: d)?.lastPathComponent, "AudioLR")
+    }
+
+    // MARK: Novità
+
+    static let novita = """
+    Novità della 0.3.0 «Tre»:
+    • terza A
+    • terza B
+
+    Novità della 0.2.0 «Due»:
+    • seconda
+
+    Novità della 0.1.0 «Uno»:
+    • prima
+    """
+
+    func testNewsSinceVersion() {
+        XCTAssertEqual(News.items(since: "0.1.0", in: Self.novita), ["terza A", "terza B", "seconda"])
+        XCTAssertEqual(News.items(since: "0.2.0", in: Self.novita), ["terza A", "terza B"])
+        XCTAssertEqual(News.items(since: "", in: Self.novita), ["terza A", "terza B"], "senza versione: solo l'ultima")
+        XCTAssertEqual(News.items(since: "0.3.0", in: Self.novita), [])
+        XCTAssertEqual(News.version(inHeader: "Novità della 0.2.0 «Studio»:"), "0.2.0")
+        XCTAssertNil(News.version(inHeader: "• qualcosa"))
+    }
+
+    func testWhatsNewOnlyAfterAnUpdate() {
+        let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
+        XCTAssertEqual(WhatsNew.pending(defaults: d, current: "0.2.0", text: Self.novita), [], "primo avvio: niente")
+        XCTAssertEqual(WhatsNew.pending(defaults: d, current: "0.2.0", text: Self.novita), [], "stessa versione: niente")
+        XCTAssertEqual(WhatsNew.pending(defaults: d, current: "0.3.0", text: Self.novita), ["terza A", "terza B"])
+        XCTAssertEqual(WhatsNew.pending(defaults: d, current: "0.3.0", text: Self.novita), [], "una volta sola")
+    }
+
+    func testBundledNewsHasCurrentVersion() throws {
+        // NOVITA.txt deve cominciare con la versione di version.txt: è il testo che vede chi aggiorna
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let version = try String(contentsOf: root.appendingPathComponent("version.txt"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let news = try String(contentsOf: root.appendingPathComponent("NOVITA.txt"), encoding: .utf8)
+        let first = news.split(separator: "\n").first.map(String.init) ?? ""
+        XCTAssertEqual(News.version(inHeader: first), version)
+        XCTAssertFalse(News.items(since: "", in: news).isEmpty)
+    }
+
+    // MARK: Salvataggio
+
+    func testSaveWritesStemsAndKaraoke() throws {
+        let d = try tempDir()
+        let song = d.appendingPathComponent("La mia canzone.mp3")
+        let n = 8_000
+        let sources = ["drums", "bass", "other", "vocals"]
+        let out: [[[Float]]] = sources.indices.map { s in
+            (0..<2).map { c in (0..<n).map { i in Float(sin(Double(i) * 0.01 * Double(s + 1) + Double(c))) * 0.2 } }
+        }
+        let (dir, stems) = try SeparationJob.save(out, sources: sources, song: song, into: d)
+        XCTAssertEqual(dir.lastPathComponent, "La mia canzone")
+        XCTAssertEqual(stems.map(\.key), ["vocals", "drums", "bass", "other", "instrumental"], "in ordine: voce per prima")
+        XCTAssertEqual(stems.first?.name, "Voce")
+        for st in stems {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: st.url.path), st.name)
+            XCTAssertFalse(st.peaks.isEmpty)
+        }
+        // La base = tutto tranne la voce
+        let base = try AudioIO.read(stems.last!.url)
+        for i in stride(from: 0, to: n, by: 997) {
+            XCTAssertEqual(base[0][i], out[0][0][i] + out[1][0][i] + out[2][0][i], accuracy: 1e-4)
+        }
+        // Una seconda volta non sovrascrive: nuova cartella
+        let (dir2, _) = try SeparationJob.save(out, sources: sources, song: song, into: d)
+        XCTAssertEqual(dir2.lastPathComponent, "La mia canzone 2")
+    }
+
+    func testStemNames() {
+        XCTAssertEqual(Stem.info("vocals").name, "Voce")
+        XCTAssertEqual(Stem.info("drums").name, "Batteria")
+        XCTAssertEqual(Stem.info("bass").name, "Basso")
+        XCTAssertEqual(Stem.info("other").name, "Altri strumenti")
+        XCTAssertEqual(Stem.info("sconosciuto").name, "Sconosciuto")
+    }
+
+    // MARK: Risultati di Core ML
+
+    func testReadsCoreMLFloat32WithPaddedRows() throws {
+        // 2 righe da 3 valori, ma in memoria ogni riga occupa 4 posti (come quando Core ML «allinea»)
+        let storage = UnsafeMutablePointer<Float>.allocate(capacity: 8)
+        let values: [Float] = [1, 2, 3, -9, 4, 5, 6, -9]
+        storage.initialize(from: values, count: 8)
+        let a = try MLMultiArray(dataPointer: storage, shape: [1, 2, 3], dataType: .float32, strides: [8, 4, 1]) { $0.deallocate() }
+        XCTAssertEqual(CoreMLSeparationCore.floats(a), [1, 2, 3, 4, 5, 6])
+    }
+
+    func testReadsCoreMLFloat16() throws {
+        let a = try MLMultiArray(shape: [2, 2], dataType: .float16)
+        // 1.0, -2.0, 0.5, 3.0 in mezza precisione
+        let bits: [UInt16] = [0x3C00, 0xC000, 0x3800, 0x4200]
+        let p = a.dataPointer.assumingMemoryBound(to: UInt16.self)
+        for i in 0..<4 { p[i] = bits[i] }
+        XCTAssertEqual(CoreMLSeparationCore.floats(a), [1, -2, 0.5, 3])
+    }
+
+    func testArrayRoundTrip() throws {
+        let v: [Float] = (0..<24).map { Float($0) * 0.5 }
+        let a = try CoreMLSeparationCore.array(v, shape: [1, 2, 3, 4])
+        XCTAssertEqual(CoreMLSeparationCore.floats(a), v)
+    }
+
+    // MARK: Spettrogramma, casi limite
+
+    func testReflectPadShortSignal() {
+        // Come pad1d di Demucs: segnale più corto del margine → prima silenzio, poi specchio
+        let y = Spectrogram.reflectPad([1, 2], left: 3, right: 3)
+        XCTAssertEqual(y.count, 8)
+        XCTAssertEqual(Array(y[3..<5]), [1, 2])
+    }
+
+    func testShortSongFrames() {
+        let s = Spectrogram()
+        XCTAssertEqual(s.frames(for: 343_980), 336)
+        XCTAssertEqual(s.frames(for: 1024), 1)
+        XCTAssertEqual(s.frames(for: 1025), 2)
+        let z = s.forward([Float](repeating: 0.1, count: 3000))
+        XCTAssertEqual(z.re.count, 2048 * 3)
+    }
+
+    // MARK: Forme d'onda e testi
+
+    func testPeaks() {
+        let n = 10_000
+        let quiet = [Float](repeating: 0.1, count: n)
+        var loud = quiet
+        loud[7_500] = 0.9
+        let p = Peaks.of([quiet, loud], count: 100)
+        XCTAssertEqual(p.count, 100)
+        XCTAssertEqual(p[10], 0.1, accuracy: 1e-6)
+        XCTAssertEqual(p[75], 0.5, accuracy: 1e-6, "media dei due canali")
+        XCTAssertEqual(Peaks.of([[Float]](), count: 10), [])
+    }
+
+    @MainActor
+    func testTexts() {
+        XCTAssertEqual(formatTime(222), "3:42")
+        XCTAssertEqual(formatTime(5), "0:05")
+        XCTAssertEqual(ContentView.sentence("il file è vuoto"), "Il file è vuoto.")
+        XCTAssertEqual(ContentView.timeLeft(5), "Quasi fatto")
+        XCTAssertEqual(ContentView.timeLeft(42), "Circa 40 secondi")
+        XCTAssertEqual(ContentView.timeLeft(61), "Circa 1 minuto")
+        XCTAssertEqual(ContentView.timeLeft(200), "Circa 3 minuti")
+    }
+}

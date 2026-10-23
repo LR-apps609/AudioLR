@@ -19,15 +19,16 @@ final class Spectrogram {
     var pad: Int { hop / 2 * 3 }
 
     private let window: [Float]
-    private let forwardDFT: vDSP.DFT<Float>
-    private let inverseDFT: vDSP.DFT<Float>
+    private let forwardDFT: vDSP.DiscreteFourierTransform<Float>
+    private let inverseDFT: vDSP.DiscreteFourierTransform<Float>
 
     init(nfft: Int = 4096) {
         self.nfft = nfft
         hop = nfft / 4
         window = (0..<nfft).map { Float(0.5 - 0.5 * cos(2 * Double.pi * Double($0) / Double(nfft))) }
-        forwardDFT = vDSP.DFT(count: nfft, direction: .forward, transformType: .complexComplex, ofType: Float.self)!
-        inverseDFT = vDSP.DFT(count: nfft, direction: .inverse, transformType: .complexComplex, ofType: Float.self)!
+        // 4096 punti si possono sempre preparare: se fallisse sarebbe un errore di programma
+        forwardDFT = try! vDSP.DiscreteFourierTransform(count: nfft, direction: .forward, transformType: .complexComplex, ofType: Float.self)
+        inverseDFT = try! vDSP.DiscreteFourierTransform(count: nfft, direction: .inverse, transformType: .complexComplex, ofType: Float.self)
     }
 
     /// Quante colonne (istanti) ha lo spettrogramma di un'onda lunga `length` campioni.

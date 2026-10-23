@@ -13,21 +13,38 @@ struct AudioLRApp: App {
         Window("AudioLR", id: "main") {
             ContentView()
                 .environmentObject(job)
-                .frame(minWidth: 560, minHeight: 440)
+                .frame(minWidth: 640, minHeight: 520)
         }
-        .defaultSize(width: 720, height: 560)
+        .defaultSize(width: 780, height: 620)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Controlla aggiornamenti…") {
+                    Task { @MainActor in await UpdateCheck.check(userInitiated: true) }
+                }
+            }
+        }
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// «Apri con → AudioLR» dal Finder (e, più avanti, «Apri in AudioLR» da OrbitLR).
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UpdateCheck.autoCheckSoon()          // una volta al giorno, in silenzio
+    }
+
+    /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone
+    /// (e, più avanti, «Apri in AudioLR» da OrbitLR).
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let url = urls.first(where: { $0.isFileURL }) else { return }
+        let files = urls.filter { $0.isFileURL }
         Task { @MainActor in
+            if let update = files.first(where: { $0.pathExtension.lowercased() == "audiolr" }) {
+                Updater.shared.open(update)
+                return
+            }
+            guard let song = files.first else { return }
             NSApp.activate()
-            SeparationJob.shared.start(url)
+            SeparationJob.shared.start(song)
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !Updater.shared.busy }
 }

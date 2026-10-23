@@ -12,18 +12,20 @@ struct Stem: Identifiable, Equatable {
     let name: String
     let symbol: String
     let url: URL
+    /// Forma d'onda (0…1) per il disegno.
+    var peaks: [Float] = []
     var id: String { key }
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
         switch key {
         case "vocals": return ("Voce", "music.mic", 0)
-        case "drums": return ("Batteria", "circle.circle", 1)
+        case "drums": return ("Batteria", "metronome.fill", 1)
         case "bass": return ("Basso", "guitars", 2)
         case "guitar": return ("Chitarra", "guitars.fill", 3)
         case "piano": return ("Pianoforte", "pianokeys", 4)
-        case "other": return ("Altri strumenti", "music.note", 5)
-        case "instrumental": return ("Base (senza voce)", "music.quarternote.3", 6)
+        case "other": return ("Altri strumenti", "music.quarternote.3", 5)
+        case "instrumental": return ("Base (senza voce)", "headphones", 6)
         default: return (key.capitalized, "waveform", 7)
         }
     }
@@ -49,6 +51,10 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var folder: URL?
     /// Secondi che mancano alla fine della separazione (nil finché non si può stimare).
     @Published private(set) var remaining: Double?
+    /// Forma d'onda della canzone, appena letta.
+    @Published private(set) var mixPeaks: [Float] = []
+    /// Durata della canzone in secondi.
+    @Published private(set) var duration: Double = 0
 
     private var task: Task<Void, Never>?
     private var cancelled = Cancel()
@@ -74,6 +80,8 @@ final class SeparationJob: ObservableObject {
         stems = []
         folder = nil
         remaining = nil
+        mixPeaks = []
+        duration = 0
         phase = ModelStore.shared.isReady ? .reading : .downloading(0)
         let cancel = Cancel()
         cancelled = cancel
@@ -85,6 +93,9 @@ final class SeparationJob: ObservableObject {
                 await self?.set(.reading)
                 let mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
+                let peaks = Peaks.of(mix)
+                let seconds = Double(mix[0].count) / AudioIO.sampleRate
+                await self?.loaded(peaks: peaks, duration: seconds)
 
                 await self?.set(.separating(0))
                 let began = Date()
@@ -121,9 +132,16 @@ final class SeparationJob: ObservableObject {
         song = nil
         stems = []
         folder = nil
+        mixPeaks = []
+        duration = 0
     }
 
     private func set(_ p: Phase) { phase = p }
+
+    private func loaded(peaks: [Float], duration: Double) {
+        mixPeaks = peaks
+        self.duration = duration
+    }
 
     private func finish(dir: URL, stems: [Stem]) {
         folder = dir
@@ -134,13 +152,14 @@ final class SeparationJob: ObservableObject {
     }
 
     /// Un WAV per strumento, più la base senza voce, in Musica/AudioLR/<canzone>/.
-    nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL) throws -> (URL, [Stem]) {
+    nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL,
+                                 into root: URL = Paths.output) throws -> (URL, [Stem]) {
         let fm = FileManager.default
         let title = song.deletingPathExtension().lastPathComponent
-        var dir = Paths.output.appendingPathComponent(title, isDirectory: true)
+        var dir = root.appendingPathComponent(title, isDirectory: true)
         var n = 2
         while fm.fileExists(atPath: dir.path) {
-            dir = Paths.output.appendingPathComponent("\(title) \(n)", isDirectory: true)
+            dir = root.appendingPathComponent("\(title) \(n)", isDirectory: true)
             n += 1
         }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -150,7 +169,7 @@ final class SeparationJob: ObservableObject {
             let info = Stem.info(key)
             let url = dir.appendingPathComponent("\(title) – \(info.name).wav")
             try AudioIO.writeWAV(out[i], to: url)
-            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url))
+            stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(out[i])))
         }
         // La base per il karaoke: tutto tranne la voce
         if let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
@@ -162,7 +181,7 @@ final class SeparationJob: ObservableObject {
             let info = Stem.info("instrumental")
             let url = dir.appendingPathComponent("\(title) – \(info.name).wav")
             try AudioIO.writeWAV(base, to: url)
-            stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url))
+            stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(base)))
         }
         stems.sort { Stem.info($0.key).order < Stem.info($1.key).order }
         return (dir, stems)

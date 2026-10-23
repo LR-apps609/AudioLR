@@ -1,3 +1,11 @@
+Novità della 0.2.0 «Studio»:
+• Nuova veste grafica: icona e finestra da studio di registrazione, chiare di giorno e scure di notte
+• Mentre separa vedi l'onda della canzone colorarsi e le quattro tracce riempirsi, con le fasi del lavoro e il tempo che manca
+• Ogni traccia ha la sua forma d'onda: clic in un punto per ascoltare da lì, con la testina che scorre
+• Aggiornamenti con un doppio clic: apri il file .audiolr e AudioLR si aggiorna e si riapre da sola
+• AudioLR controlla da sola, una volta al giorno, se c'è una versione nuova (anche dal menu AudioLR → Controlla aggiornamenti)
+• Dopo un aggiornamento, una schedina ti mostra cosa c'è di nuovo
+
 Novità della 0.1.0 «Primo suono»:
 • Trascina una canzone nella finestra (o tasto destro → Apri con → AudioLR): AudioLR la separa in Voce, Batteria, Basso e Altri strumenti
 • In più, la «Base (senza voce)» pronta per il karaoke

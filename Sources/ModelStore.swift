@@ -29,7 +29,7 @@ final class ModelStore: @unchecked Sendable {
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
     func load(progress: @escaping (Double) -> Void) async throws -> CoreMLSeparationCore {
-        lock.lock(); let cached = core; lock.unlock()
+        let cached = lock.withLock { core }
         if let c = cached { return c }
         if !isReady { try await download(progress: progress) }
         let cfg = MLModelConfiguration()
@@ -41,7 +41,7 @@ final class ModelStore: @unchecked Sendable {
             throw SeparationError("il modello di IA non si apre: riprova, verrà scaricato di nuovo")
         }
         let c = try CoreMLSeparationCore(model: model)
-        lock.lock(); core = c; lock.unlock()
+        lock.withLock { core = c }
         return c
     }
 
