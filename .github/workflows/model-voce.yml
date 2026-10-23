@@ -34,18 +34,18 @@ jobs:
           curl -fL --retry 3 -o voce.yaml $B/vocals_mel_band_roformer.yaml
       - name: Conversione e prova
         run: |
-          python Tools/convert_roformer.py voce.ckpt voce.yaml VoceRoFormer 88200 2>&1 | tee conv.log || true
+          python Tools/convert_roformer.py voce.ckpt voce.yaml VoceRoFormer8 352800 2>&1 | tee conv.log || true
           # Le righe importanti (e gli errori) come annotazioni
           grep -E "RoFormer|STFT|Core ML|Fatto|pesi|voce|Error|error|assert" conv.log | tail -n 15 | while IFS= read -r l; do echo "::notice::$l"; done
-          test -f VoceRoFormer.json
+          test -f VoceRoFormer8.json
       - name: Pacchetto
         run: |
-          ditto -c -k --keepParent VoceRoFormer.mlpackage VoceRoFormer.mlpackage.zip
-          shasum -a 256 VoceRoFormer.mlpackage.zip | tee VoceRoFormer.sha256
-          ls -la VoceRoFormer.*
-          echo "::notice::VoceRoFormer: $(python -c "import json;d=json.load(open('VoceRoFormer.json'));print(d['precision'],'bit,',d['db'],'dB,',d['frames'],'colonne')")"
+          ditto -c -k --keepParent VoceRoFormer8.mlpackage VoceRoFormer8.mlpackage.zip
+          shasum -a 256 VoceRoFormer8.mlpackage.zip | tee VoceRoFormer8.sha256
+          ls -la VoceRoFormer8.*
+          echo "::notice::VoceRoFormer8: $(python -c "import json;d=json.load(open('VoceRoFormer8.json'));print(d['precision'],'bit,',d['db'],'dB,',d['frames'],'colonne')")"
       - name: Tra i file scaricabili
         if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload modelli-1 VoceRoFormer.mlpackage.zip VoceRoFormer.sha256 VoceRoFormer.json VoceRoFormer-prova.f32 --clobber
+        run: gh release upload modelli-1 VoceRoFormer8.mlpackage.zip VoceRoFormer8.sha256 VoceRoFormer8.json VoceRoFormer8-prova.f32 --clobber

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from roformer.mel_band_roformer import MelBandRoformer
 
 CKPT, CFG, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
-CHUNK = int(sys.argv[4]) if len(sys.argv) > 4 else 88200         # 2 s: oltre, la conversione supera la memoria del Mac di GitHub
+CHUNK = int(sys.argv[4]) if len(sys.argv) > 4 else 352800        # 8 s, come nell'addestramento del modello
 
 
 class Loader(yaml.SafeLoader):
@@ -162,7 +162,12 @@ assert q > 45, "dividere il modello cambia il risultato"
 
 # 3. Core ML
 x_in = torch.randn(1, T, FSEL * 2)
-traced = torch.jit.trace(core, (x_in,), check_trace=False)
+# Senza gradienti: PyTorch non tiene da parte i dati per l'addestramento, e la memoria resta bassa
+# (con i gradienti, 2 s di pezzo chiedevano 8 GB; senza, 8 s ne chiedono meno di 5)
+for p_ in core.parameters():
+    p_.requires_grad_(False)
+with torch.no_grad():
+    traced = torch.jit.trace(core, (x_in,), check_trace=False)
 
 
 def convert(precision):
