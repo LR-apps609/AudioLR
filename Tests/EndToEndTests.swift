@@ -32,6 +32,7 @@ final class EndToEndTests: XCTestCase {
     }
 
     func testSeparationMatchesDemucs() async throws {
+        executionTimeAllowance = 400
         let (mix, expected) = try await fixture()
 
         // Il modello come lo usa l'app (scaricato e preparato da ModelStore), ma solo sul processore:
@@ -90,6 +91,7 @@ final class EndToEndTests: XCTestCase {
     }
 
     func testStepsMatchDemucs() async throws {
+        executionTimeAllowance = 600
         let all = try await Self.load("HTDemucs-passi.f32")
         let n = Int(all[0]), T = Int(all[1]), L = Int(all[2]), S = Int(all[3])
         var p = 4
@@ -129,12 +131,36 @@ final class EndToEndTests: XCTestCase {
         let t1 = Date()
         let res = try Separator(core: core).runSegment(piece)
         let tAll = Date().timeIntervalSince(t1)
-        var parts: [String] = []
-        for s in 0..<S {
-            let q = Self.snr(segOut[s][0] + segOut[s][1], res[s][0] + res[s][1])
-            parts.append("\(core.sources[s]) \(String(format: "%.1f", q)) dB")
+        func quality(_ r: [[[Float]]]) -> String {
+            (0..<S).map { s in
+                String(format: "%@ %.1f", core.sources[s], Self.snr(segOut[s][0] + segOut[s][1], r[s][0] + r[s][1]))
+            }.joined(separator: " ")
         }
-        Self.note("Pezzo intero: " + parts.joined(separator: " · ") +
-                  String(format: " — %.1f s in tutto, di cui STFT %.1f s", tAll, tStft * 1))
+        Self.note("Pezzo (solo processore): " + quality(res) + String(format: " — %.1f s, STFT %.1f s", tAll, tStft))
+
+        // Com'è fatta l'uscita di Core ML
+        let probe = try Self.rawPrediction(core, piece: piece, stft: stft)
+        Self.note("Uscita spec_out: tipo \(probe.spec.dataType.rawValue), forma \(probe.spec.shape), passi \(probe.spec.strides)" +
+                  "; wave_out: tipo \(probe.wave.dataType.rawValue), passi \(probe.wave.strides)")
+        probe.spec.withUnsafeMutableBytes { _, strides in Self.note("passi veri spec_out: \(strides)") }
+
+        // Le altre unità di calcolo
+        for (name, units) in [("tutte", MLComputeUnits.all), ("processore+grafica", .cpuAndGPU)] {
+            let c = MLModelConfiguration()
+            c.computeUnits = units
+            let other = try CoreMLSeparationCore(model: MLModel(contentsOf: ModelStore.compiled, configuration: c))
+            let t = Date()
+            let r = try Separator(core: other).runSegment(piece)
+            Self.note("Pezzo (\(name)): " + quality(r) + String(format: " — %.1f s", Date().timeIntervalSince(t)))
+        }
+    }
+
+    /// Una previsione «a mano», per guardare com'è fatta l'uscita.
+    private static func rawPrediction(_ core: CoreMLSeparationCore, piece: [[Float]], stft: Spectrogram) throws -> (spec: MLMultiArray, wave: MLMultiArray) {
+        let l = stft.forward(piece[0]), r = stft.forward(piece[1])
+        let spec = try CoreMLSeparationCore.array(l.re + l.im + r.re + r.im, shape: [1, 4, core.bins, core.frames])
+        let wave = try CoreMLSeparationCore.array(piece[0] + piece[1], shape: [1, 2, core.segment])
+        let out = try core.model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["spec": spec, "wave": wave]))
+        return (out.featureValue(for: "spec_out")!.multiArrayValue!, out.featureValue(for: "wave_out")!.multiArrayValue!)
     }
 }

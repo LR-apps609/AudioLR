@@ -203,54 +203,59 @@ final class CoreMLSeparationCore: SeparationCore {
     }
 
     /// Copia un risultato di Core ML in un array semplice, anche se è a 16 bit o con le righe «allineate».
+    /// I passi veri si leggono dentro withUnsafeMutableBytes: per i risultati che Core ML tiene in memoria
+    /// grafica possono essere diversi da quelli dichiarati in `strides`.
     static func floats(_ a: MLMultiArray) -> [Float] {
         let shape = a.shape.map(\.intValue)
-        let strides = a.strides.map(\.intValue)
         let count = shape.reduce(1, *)
         let last = shape.last ?? 1
         let rows = count / max(last, 1)
         var out = [Float](repeating: 0, count: count)
+        let type = a.dataType
 
-        // Dove comincia la riga r (tutti gli indici tranne l'ultimo)
-        func rowOffset(_ r: Int) -> Int {
-            var rest = r, offset = 0
-            for d in stride(from: shape.count - 2, through: 0, by: -1) {
-                offset += (rest % shape[d]) * strides[d]
-                rest /= shape[d]
-            }
-            return offset
-        }
-        let step = strides.last ?? 1
-
-        switch a.dataType {
-        case .float32:
-            let p = a.dataPointer.assumingMemoryBound(to: Float.self)
-            for r in 0..<rows {
-                let o = rowOffset(r)
-                for i in 0..<last { out[r * last + i] = p[o + i * step] }
-            }
-        case .double:
-            let p = a.dataPointer.assumingMemoryBound(to: Double.self)
-            for r in 0..<rows {
-                let o = rowOffset(r)
-                for i in 0..<last { out[r * last + i] = Float(p[o + i * step]) }
-            }
-        default:
-            // Float16: convertito con Accelerate (il tipo Float16 non esiste sui Mac Intel)
-            let p = a.dataPointer.assumingMemoryBound(to: UInt16.self)
-            var row16 = [UInt16](repeating: 0, count: last)
-            var row32 = [Float](repeating: 0, count: last)
-            for r in 0..<rows {
-                let o = rowOffset(r)
-                for i in 0..<last { row16[i] = p[o + i * step] }
-                row16.withUnsafeMutableBufferPointer { s in
-                    row32.withUnsafeMutableBufferPointer { d in
-                        var src = vImage_Buffer(data: s.baseAddress, height: 1, width: vImagePixelCount(last), rowBytes: last * 2)
-                        var dst = vImage_Buffer(data: d.baseAddress, height: 1, width: vImagePixelCount(last), rowBytes: last * 4)
-                        vImageConvert_Planar16FtoPlanarF(&src, &dst, 0)
-                    }
+        a.withUnsafeMutableBytes { raw, rawStrides in
+            let strides = rawStrides.isEmpty ? a.strides.map(\.intValue) : rawStrides
+            // Dove comincia la riga r (tutti gli indici tranne l'ultimo)
+            func rowOffset(_ r: Int) -> Int {
+                var rest = r, offset = 0
+                for d in stride(from: shape.count - 2, through: 0, by: -1) {
+                    offset += (rest % shape[d]) * strides[d]
+                    rest /= shape[d]
                 }
-                for i in 0..<last { out[r * last + i] = row32[i] }
+                return offset
+            }
+            let step = strides.last ?? 1
+
+            switch type {
+            case .float32:
+                let p = raw.baseAddress!.assumingMemoryBound(to: Float.self)
+                for r in 0..<rows {
+                    let o = rowOffset(r)
+                    for i in 0..<last { out[r * last + i] = p[o + i * step] }
+                }
+            case .double:
+                let p = raw.baseAddress!.assumingMemoryBound(to: Double.self)
+                for r in 0..<rows {
+                    let o = rowOffset(r)
+                    for i in 0..<last { out[r * last + i] = Float(p[o + i * step]) }
+                }
+            default:
+                // Float16: convertito con Accelerate (il tipo Float16 non esiste sui Mac Intel)
+                let p = raw.baseAddress!.assumingMemoryBound(to: UInt16.self)
+                var row16 = [UInt16](repeating: 0, count: last)
+                var row32 = [Float](repeating: 0, count: last)
+                for r in 0..<rows {
+                    let o = rowOffset(r)
+                    for i in 0..<last { row16[i] = p[o + i * step] }
+                    row16.withUnsafeMutableBufferPointer { s in
+                        row32.withUnsafeMutableBufferPointer { d in
+                            var src = vImage_Buffer(data: s.baseAddress, height: 1, width: vImagePixelCount(last), rowBytes: last * 2)
+                            var dst = vImage_Buffer(data: d.baseAddress, height: 1, width: vImagePixelCount(last), rowBytes: last * 4)
+                            vImageConvert_Planar16FtoPlanarF(&src, &dst, 0)
+                        }
+                    }
+                    for i in 0..<last { out[r * last + i] = row32[i] }
+                }
             }
         }
         return out
