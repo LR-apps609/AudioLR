@@ -1,3 +1,9 @@
+Novità della 0.5.0 «Voce pulita»:
+• Massima qualità ora usa un modello dedicato alla voce (Mel-Band RoFormer): molti meno strumenti in sottofondo nella voce
+• Batteria, basso e altri strumenti vengono cercati nella base senza voce, ognuno con il suo modello specializzato
+• La base senza voce è esattamente la canzone meno la voce
+• La prima volta scarica anche il modello voce (circa 100 MB in più)
+
 Novità della 0.4.0 «Studio professionale»:
 • Impostazioni (⌘,): qualità di serie, formato delle tracce (WAV 24 o 16 bit, FLAC, Apple Lossless), cartella a scelta, base senza voce sì o no, suono e Finder a fine lavoro
 • Motore e spazio: vedi dove lavora il Mac per ogni modello, quanto spazio occupano i modelli scaricati, e puoi liberarlo
