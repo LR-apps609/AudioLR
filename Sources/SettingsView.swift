@@ -79,7 +79,7 @@ struct EngineSettings: View {
     @State private var confirmDelete = false
 
     static func load() -> [(String, EngineChoice.Decision?)] {
-        [("Veloce", EngineChoice.stored(ModelStore.name))] +
+        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored("VoceRoFormer"))] +
         Quality.best.models.enumerated().map { (i, m) in
             ("Massima · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
         }

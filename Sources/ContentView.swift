@@ -8,6 +8,11 @@ import UniformTypeIdentifiers
 //  tracce, le ascolti una per una.
 // ════════════════════════════════════════════════════════════════════
 
+extension Notification.Name {
+    /// Menu Archivio › Apri una canzone… (⌘O): la finestra apre il pannello di scelta.
+    static let audiolrOpenSong = Notification.Name("audiolrOpenSong")
+}
+
 struct ContentView: View {
     @EnvironmentObject private var job: SeparationJob
     @StateObject private var player = StemPlayer()

@@ -29,6 +29,17 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Il modello per la voce, se questa qualità ne usa uno a parte (RoFormer: molto più pulito di Demucs sulla voce).
+    var voiceModel: String? {
+        switch self {
+        case .fast: return nil
+        case .best: return "VoceRoFormer"
+        }
+    }
+
+    /// Tutto quello che va scaricato per questa qualità.
+    var allModels: [String] { (voiceModel.map { [$0] } ?? []) + models }
+
     var title: String {
         switch self {
         case .fast: return "Veloce"
@@ -39,7 +50,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
-        case .best: return "Un modello per strumento · circa 4 volte più lenta, più pulita"
+        case .best: return "Voce RoFormer e un modello per strumento · più lenta, molto più pulita"
         }
     }
 
@@ -47,7 +58,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var downloadSize: String {
         switch self {
         case .fast: return "circa 80 MB"
-        case .best: return "circa 320 MB"
+        case .best: return "circa 420 MB"
         }
     }
 }
@@ -88,6 +99,6 @@ enum EngineChoice {
 
     /// Dimentica le scelte: alla prossima separazione si riprova.
     static func reset(defaults: UserDefaults = .standard) {
-        for q in Quality.allCases { for m in q.models { defaults.removeObject(forKey: key(m)) } }
+        for q in Quality.allCases { for m in q.allModels { defaults.removeObject(forKey: key(m)) } }
     }
 }

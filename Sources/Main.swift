@@ -58,10 +58,6 @@ struct AudioLRCommands: Commands {
     }
 }
 
-extension Notification.Name {
-    static let audiolrOpenSong = Notification.Name("audiolrOpenSong")
-}
-
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UpdateCheck.autoCheckSoon()          // una volta al giorno, in silenzio

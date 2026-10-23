@@ -115,18 +115,21 @@ final class SeparationJob: ObservableObject {
         engineText = nil
         self.quality = quality
         let models = quality.models
-        phase = models.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
+        let voiceName = quality.voiceModel
+        let downloads = quality.allModels
+        phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
         cancelled = cancel
         task = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
-                for (k, name) in models.enumerated() {
-                    _ = try await ModelStore.shared.load(name) { p in
-                        let total = (Double(k) + p) / Double(models.count)
+                for (k, name) in downloads.enumerated() {
+                    _ = try await ModelStore.shared.mlModel(name) { p in
+                        let total = (Double(k) + p) / Double(downloads.count)
                         Task { @MainActor in self?.phase = .downloading(total) }
                     }
                 }
+                if let v = voiceName { _ = try await ModelStore.shared.config(v) }
                 await self?.set(.reading)
                 let mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
@@ -143,23 +146,55 @@ final class SeparationJob: ObservableObject {
                     decisions[name] = d
                     if cancel.isSet { throw CancellationError() }
                 }
+                if let v = voiceName, EngineChoice.stored(v) == nil {
+                    await self?.set(.tuning)
+                    EngineChoice.store(try await SeparationJob.tuneVoice(mix: mix), for: v)
+                }
 
-                // 3. La separazione: con htdemucs_ft ogni modello dà il suo strumento
+                // 3. La voce, con il suo modello (se questa qualità ne ha uno)
                 await self?.set(.separating(0))
                 let began = Date()
+                // Quanta parte della barra spetta alla voce
+                let voiceShare = voiceName == nil ? 0.0 : 0.35
+                func report(_ total: Double) {
+                    let elapsed = Date().timeIntervalSince(began)
+                    let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
+                    Task { @MainActor in
+                        self?.phase = .separating(total)
+                        self?.remaining = left
+                    }
+                }
+                var voiceOut: [[Float]]?
+                var instrumentsInput = mix
+                if let v = voiceName {
+                    var d = EngineChoice.stored(v) ?? EngineChoice.decide(agreement: 99)
+                    func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
+                        let voice = try await ModelStore.shared.voice(units: units) { _ in }
+                        return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                    }
+                    let vo: [[Float]]
+                    do { vo = try await runVoice(d.units) } catch is ImplausibleResult {
+                        do { vo = try await runVoice(.cpuAndGPU) } catch is ImplausibleResult {
+                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                        }
+                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: d.agreement)
+                        EngineChoice.store(d, for: v)
+                    }
+                    decisions[v] = d
+                    voiceOut = vo
+                    // Gli strumenti si cercano nella base senza voce: ogni modello fa quello in cui è migliore
+                    instrumentsInput = (0..<2).map { c in zip(mix[c], vo[c]).map { $0 - $1 } }
+                }
+
+                // 4. Gli strumenti: con htdemucs_ft ogni modello dà il suo strumento
                 var out: [[[Float]]] = []
                 var sources: [String] = []
                 for (k, name) in models.enumerated() {
                     let span = (Double(k), Double(k + 1))
+                    let input = instrumentsInput
                     func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
-                        try Separator(core: core).separate(mix, progress: { p in
-                            let total = (span.0 + p) / Double(models.count)
-                            let elapsed = Date().timeIntervalSince(began)
-                            let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
-                            Task { @MainActor in
-                                self?.phase = .separating(total)
-                                self?.remaining = left
-                            }
+                        try Separator(core: core).separate(input, progress: { p in
+                            report(voiceShare + (1 - voiceShare) * (span.0 + p) / Double(models.count))
                         }, isCancelled: { cancel.isSet })
                     }
                     var core = try await ModelStore.shared.load(name, units: decisions[name]!.units) { _ in }
@@ -179,10 +214,13 @@ final class SeparationJob: ObservableObject {
                     if sources.isEmpty { sources = core.sources }
                     Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
                 }
+                if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
                 let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
-                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url)
+                // Con la voce a parte, la base è esattamente la canzone meno la voce
+                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url,
+                                                          base: voiceOut == nil ? nil : instrumentsInput)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 await self?.finish(dir: dir, stems: stems, engine: engine, took: took)
@@ -194,6 +232,18 @@ final class SeparationJob: ObservableObject {
                 await self?.afterFailure()
             }
         }
+    }
+
+    /// Come `tune`, per il modello voce: un pezzo dal centro della canzone su Neural Engine e su grafica.
+    nonisolated static func tuneVoice(mix: [[Float]]) async throws -> EngineChoice.Decision {
+        let ane = try await ModelStore.shared.voice(units: .all) { _ in }
+        let gpu = try await ModelStore.shared.voice(units: .cpuAndGPU) { _ in }
+        let chunk = ane.config.chunk
+        let start = max(0, (mix[0].count - chunk) / 2)
+        let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
+        let a = try ane.runChunk(piece), b = try gpu.runChunk(piece)
+        guard VoiceRoFormer.plausible(piece: piece, voice: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
+        return EngineChoice.decide(agreement: Separator.agreement([b], [a]))
     }
 
     /// Prova Neural Engine e grafica sul pezzo centrale della canzone e decide dove lavorare.
@@ -318,7 +368,8 @@ final class SeparationJob: ObservableObject {
     /// Un WAV per strumento, più la base senza voce, in Musica/AudioLR/<canzone>/.
     nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL,
                                  into root: URL = Prefs.folder, format: OutputFormat = Prefs.format,
-                                 instrumental: Bool = Prefs.makeInstrumental) throws -> (URL, [Stem]) {
+                                 instrumental: Bool = Prefs.makeInstrumental,
+                                 base given: [[Float]]? = nil) throws -> (URL, [Stem]) {
         let fm = FileManager.default
         let title = song.deletingPathExtension().lastPathComponent
         var dir = root.appendingPathComponent(title, isDirectory: true)
@@ -339,9 +390,11 @@ final class SeparationJob: ObservableObject {
         // La base per il karaoke: tutto tranne la voce
         if instrumental, let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
             let length = out[0][0].count
-            var base = [[Float]](repeating: [Float](repeating: 0, count: length), count: 2)
-            for (i, _) in sources.enumerated() where i != v {
-                for c in 0..<2 { for j in 0..<length { base[c][j] += out[i][c][j] } }
+            var base = given ?? [[Float]](repeating: [Float](repeating: 0, count: length), count: 2)
+            if given == nil {
+                for (i, _) in sources.enumerated() where i != v {
+                    for c in 0..<2 { for j in 0..<length { base[c][j] += out[i][c][j] } }
+                }
             }
             let info = Stem.info("instrumental")
             let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
