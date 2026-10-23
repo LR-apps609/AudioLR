@@ -1,0 +1,46 @@
+# «Massima qualità»: htdemucs_ft, quattro modelli ognuno specializzato in uno strumento
+# (batteria, basso, altri strumenti, voce). Li converte in parallelo e li mette tra i file scaricabili.
+name: Modelli Massima qualita
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/convert_demucs.py, .github/workflows/model-ft.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        index: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          pip install "torch==2.2.2" "torchaudio==2.2.2" "coremltools==7.2" "numpy<2"
+          pip install --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install dora-search einops julius omegaconf pyyaml tqdm
+      - name: Conversione e prova
+        run: python Tools/convert_demucs.py htdemucs_ft HTDemucsFT-${{ matrix.index }} ${{ matrix.index }}
+      - name: Pacchetto
+        run: |
+          N=HTDemucsFT-${{ matrix.index }}
+          ditto -c -k --keepParent $N.mlpackage $N.mlpackage.zip
+          shasum -a 256 $N.mlpackage.zip | tee $N.sha256
+          cat $N.json
+          echo "::notice::$N: $(tr -d '\n ' < $N.json)"
+      - name: Tra i file scaricabili
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=HTDemucsFT-${{ matrix.index }}
+          gh release upload modelli-1 $N.mlpackage.zip $N.sha256 $N.json --clobber

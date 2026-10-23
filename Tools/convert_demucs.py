@@ -21,10 +21,15 @@ from demucs.pretrained import get_model
 
 NAME = sys.argv[1] if len(sys.argv) > 1 else "htdemucs"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "HTDemucs"
+# htdemucs_ft è un «sacchetto» di 4 modelli, ognuno specializzato in uno strumento: se ne converte uno per volta
+INDEX = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 
 bag = get_model(NAME)
-assert len(bag.models) == 1, "per ora solo modelli singoli (htdemucs, htdemucs_6s)"
-m = bag.models[0].eval()
+assert INDEX < len(bag.models), f"{NAME} ha {len(bag.models)} modelli"
+m = bag.models[INDEX].eval()
+# Lo strumento in cui questo modello è specializzato (nei modelli singoli: tutti)
+weights = [list(map(float, w)) for w in bag.weights][INDEX]
+SPECIALTY = [s for s, w in zip(bag.sources, weights) if w > 0]
 SR = m.samplerate
 L = int(m.segment * SR)
 HOP, NFFT = m.hop_length, m.nfft
@@ -230,6 +235,7 @@ def convert(precision):
     mlm.user_defined_metadata["samplerate"] = str(SR)
     mlm.user_defined_metadata["segment"] = str(L)
     mlm.user_defined_metadata["model"] = NAME
+    mlm.user_defined_metadata["specialty"] = ",".join(SPECIALTY)
 
     def core_ml(xn, xtn):
         p = mlm.predict({"spec": xn, "wave": xtn})
@@ -249,6 +255,7 @@ if q16 < 30:
     assert q32 > 40, "conversione non fedele"
     precision = "32"
 mlm.save(OUT + ".mlpackage")
-json.dump({"model": NAME, "sources": SOURCES, "samplerate": SR, "segment": L, "precision": precision},
+json.dump({"model": NAME, "index": INDEX, "specialty": SPECIALTY, "sources": SOURCES, "samplerate": SR, "segment": L,
+           "precision": precision, "db16": round(q16, 1)},
           open(OUT + ".json", "w"), indent=1)
 print("Fatto:", OUT + ".mlpackage")

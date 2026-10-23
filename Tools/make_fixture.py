@@ -70,3 +70,18 @@ with open("HTDemucs-passi.f32", "wb") as f:
     piece.numpy().astype("<f4").tofile(f)
     seg_out.numpy().astype("<f4").tofile(f)
 print("Fatto: HTDemucs-passi.f32")
+
+# ── «Massima qualità» (htdemucs_ft): 7 secondi della stessa canzone, separati dal sacchetto di 4 modelli ──
+ft = get_model("htdemucs_ft")
+nf = int(7 * SR)
+wf = torch.from_numpy(mix[:, :nf].copy())
+reff = wf.mean(0)
+wf = (wf - reff.mean()) / reff.std()
+with torch.no_grad():
+    outf = apply_model(ft, wf[None], shifts=0, split=True, overlap=0.25, progress=False)[0]
+outf = outf * reff.std() + reff.mean()
+with open("HTDemucsFT-prova.f32", "wb") as f:
+    np.array([nf, outf.shape[0]], dtype="<f4").tofile(f)
+    mix[:, :nf].astype("<f4").tofile(f)
+    outf.numpy().astype("<f4").tofile(f)
+print("Fatto: HTDemucsFT-prova.f32")

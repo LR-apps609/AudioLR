@@ -1,11 +1,11 @@
 # Prepara il modello Demucs per AudioLR e lo mette tra i file scaricabili (versione «modelli-1»).
-# Parte a mano (Actions → Modello Demucs → Run workflow) o quando cambia Tools/convert_demucs.py.
+# Parte a mano (Actions → Modello Demucs → Run workflow) o quando cambia questo file.
 name: Modello Demucs
 
 on:
   workflow_dispatch:
   push:
-    paths: [Tools/convert_demucs.py, .github/workflows/model.yml]
+    paths: [.github/workflows/model.yml]
 
 permissions:
   contents: write
