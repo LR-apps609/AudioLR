@@ -112,7 +112,51 @@ def four(name, mix, rate):
     return roformer(name, mix, rate)
 
 
+_app = {}
+
+
+def app_voice(mix, chunk):
+    """La voce come la calcola l'app: Mel-Band RoFormer (Kim) a pezzi di `chunk` campioni,
+    sovrapposti di metà e ricuciti con la finestra di Hamming (VoiceRoFormer.swift)."""
+    import torch, yaml, urllib.request
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+    from roformer.mel_band_roformer import MelBandRoformer
+    if "m" not in _app:
+        b = "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/"
+        for f in ("vocals_mel_band_roformer.ckpt", "vocals_mel_band_roformer.yaml"):
+            if not os.path.exists("/tmp/" + f):
+                urllib.request.urlretrieve(b + f, "/tmp/" + f)
+
+        class L(yaml.SafeLoader):
+            pass
+        L.add_constructor("tag:yaml.org,2002:python/tuple", lambda l, n: tuple(l.construct_sequence(n)))
+        cfg = yaml.load(open("/tmp/vocals_mel_band_roformer.yaml"), Loader=L)
+        m = MelBandRoformer(**cfg["model"]).eval()
+        m.load_state_dict(torch.load("/tmp/vocals_mel_band_roformer.ckpt", map_location="cpu"), strict=False)
+        m.match_input_audio_length = True
+        _app["m"] = m
+    m = _app["m"]
+    n = mix.shape[1]
+    step = chunk // 2
+    w = np.hamming(chunk).astype(np.float32)
+    out = np.zeros_like(mix)
+    count = np.zeros(n, dtype=np.float32)
+    for start in range(0, n, step):
+        ln = min(chunk, n - start)
+        piece = np.zeros((2, chunk), dtype=np.float32)
+        piece[:, :ln] = mix[:, start:start + ln]
+        with torch.no_grad():
+            v = m(torch.from_numpy(piece)[None]).numpy().reshape(-1, 2, chunk)[0]
+        out[:, start:start + ln] += v[:, :ln] * w[:ln]
+        count[start:start + ln] += w[:ln]
+    return out / np.maximum(count, 1e-10)
+
+
 def separate(mix, rate, name):
+    if METHOD.startswith("app:"):
+        # app:<secondi>: la voce come nell'app; la base è la canzone meno la voce
+        v = app_voice(mix, int(float(METHOD.split(":")[1]) * 44100))
+        return {"vocals": v, "instrumental": mix - v}
     if METHOD in ("htdemucs", "htdemucs_ft"):
         return demucs(METHOD, mix)
     if METHOD == "htdemucs_ft_s2":
