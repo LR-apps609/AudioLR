@@ -1,0 +1,128 @@
+# Banco di prova della qualità: le 50 canzoni di prova di MUSDB18 (estratti da 7 s con le tracce originali),
+# separate con ogni metodo; per ogni strumento si misura l'SDR (dB, più alto = più pulito).
+# Risultati: riepilogo in questa pagina e nella release «banco-di-prova» (banco.md, banco.json).
+name: Banco di prova
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/benchmark.py, .github/workflows/benchmark.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  misura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        metodo:
+          - htdemucs
+          - htdemucs_ft
+          - htdemucs_ft_s2
+          - roformer:vocals_mel_band_roformer.ckpt
+          - roformer:model_bs_roformer_ep_317_sdr_12.9755.ckpt
+          - roformer:BS-Roformer-SW.ckpt
+          - ibrido:vocals_mel_band_roformer.ckpt+htdemucs_ft
+          - ibrido:vocals_mel_band_roformer.ckpt+BS-Roformer-SW.ckpt
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" musdb soundfile
+          pip install -q --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install -q dora-search einops julius omegaconf pyyaml tqdm
+      - name: Separazione e misura
+        run: |
+          F=$(echo "${{ matrix.metodo }}" | tr ':+/' '___')
+          python Tools/benchmark.py "${{ matrix.metodo }}" "banco_$F.json"
+          echo "F=$F" >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v6
+        with:
+          name: banco_${{ env.F }}
+          path: banco_*.json
+
+  riepilogo:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: banco_*
+          merge-multiple: true
+      - name: Tabella
+        run: |
+          python - <<'PY'
+          import json, glob
+          rows = []
+          for f in sorted(glob.glob("banco_*.json")):
+              d = json.load(open(f))
+              r = d["riepilogo"]
+              g = lambda s: r.get(s, {}).get("mediana")
+              rows.append((d["metodo"], g("vocals"), g("instrumental"), g("drums"), g("bass"), g("other")))
+          fmt = lambda v: "—" if v is None else f"{v:.2f}"
+          md = ["| Metodo | Voce | Base | Batteria | Basso | Altro |", "|---|---|---|---|---|---|"]
+          for m, *v in sorted(rows, key=lambda x: -(x[1] or -99)):
+              md.append(f"| {m} | " + " | ".join(fmt(x) for x in v) + " |")
+          text = "\n".join(md)
+          open("banco.md", "w").write("SDR mediano (dB) sulle 50 canzoni di prova di MUSDB18 (estratti da 7 s)\n\n" + text + "\n")
+          json.dump({json.load(open(f))["metodo"]: json.load(open(f)) for f in glob.glob("banco_*.json")}, open("banco.json", "w"), ensure_ascii=False)
+          import os
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write("## Banco di prova\n\n" + text + "\n")
+          for m, *v in rows:
+              print(f"::notice::{m}: voce {fmt(v[0])} · base {fmt(v[1])} · batteria {fmt(v[2])} · basso {fmt(v[3])} · altro {fmt(v[4])}")
+          PY
+      - name: Nella release «banco-di-prova»
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view banco-di-prova >/dev/null 2>&1 || \
+            gh release create banco-di-prova --prerelease --title "Banco di prova (non è un aggiornamento)" \
+              --notes "Misure di qualità di AudioLR e dei modelli candidati."
+          gh release upload banco-di-prova banco.md banco.json --clobber
+
+  # Le canzoni da caricare su Fadr (versione gratuita) per il confronto: 5 mix dal set di prova
+  pacchetto-fadr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Canzoni
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q musdb soundfile numpy
+          python - <<'PY'
+          import musdb, soundfile as sf, os
+          db = musdb.DB(root="musdb", download=True, subsets="test")
+          os.makedirs("Prova Fadr", exist_ok=True)
+          names = []
+          for i, t in enumerate(db):
+              if i % 10 == 0:
+                  sf.write(f"Prova Fadr/{i // 10 + 1} - {t.name}.wav", t.audio, t.rate, subtype="PCM_16")
+                  names.append(t.name)
+          open("Prova Fadr/LEGGIMI.txt", "w").write(
+              "Carica ognuna di queste canzoni sulla versione gratuita di Fadr, scarica le tracce separate\n"
+              "(voce, batteria, basso, altro/strumenti) e rimandale in una cartella per canzone.\n\n" + "\n".join(names) + "\n")
+          PY
+          zip -qr "Prova-Fadr.zip" "Prova Fadr"
+      - name: Nella release «banco-di-prova»
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view banco-di-prova >/dev/null 2>&1 || \
+            gh release create banco-di-prova --prerelease --title "Banco di prova (non è un aggiornamento)" \
+              --notes "Misure di qualità di AudioLR e dei modelli candidati."
+          gh release upload banco-di-prova "Prova-Fadr.zip" --clobber
