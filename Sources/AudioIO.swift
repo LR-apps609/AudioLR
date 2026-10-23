@@ -73,10 +73,15 @@ enum AudioIO {
 
     /// WAV a 24 bit, stereo, 44,1 kHz.
     static func writeWAV(_ channels: [[Float]], to url: URL) throws {
+        try write(channels, to: url, format: .wav24)
+    }
+
+    /// Scrive le tracce nel formato scelto (WAV, FLAC, Apple Lossless), a 44,1 kHz.
+    static func write(_ channels: [[Float]], to url: URL, format: OutputFormat) throws {
         let n = channels.first?.count ?? 0
-        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
-                                         channels: AVAudioChannelCount(channels.count), interleaved: false),
-              let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(n, 1))),
+        guard let pcm = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
+                                      channels: AVAudioChannelCount(channels.count), interleaved: false),
+              let buf = AVAudioPCMBuffer(pcmFormat: pcm, frameCapacity: AVAudioFrameCount(max(n, 1))),
               let data = buf.floatChannelData else {
             throw SeparationError("non riesco a preparare il file audio")
         }
@@ -84,18 +89,14 @@ enum AudioIO {
         for (c, ch) in channels.enumerated() {
             for i in 0..<n { data[c][i] = min(1, max(-1, ch[i])) }
         }
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: channels.count,
-            AVLinearPCMBitDepthKey: 24,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ]
         try? FileManager.default.removeItem(at: url)
-        // Il file si chiude (e si completa) quando `file` esce da qui
-        let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
-        try file.write(from: buf)
+        do {
+            // Il file si chiude (e si completa) quando `file` esce da qui
+            let file = try AVAudioFile(forWriting: url, settings: format.settings(channels: channels.count, sampleRate: sampleRate),
+                                       commonFormat: .pcmFormatFloat32, interleaved: false)
+            try file.write(from: buf)
+        } catch {
+            throw SeparationError("non riesco a scrivere \(url.lastPathComponent)")
+        }
     }
 }

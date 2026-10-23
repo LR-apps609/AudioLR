@@ -127,6 +127,64 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(dir2.lastPathComponent, "La mia canzone 2")
     }
 
+    func testEveryOutputFormatRoundTrips() throws {
+        let d = try tempDir()
+        let n = 22_050
+        let tone = (0..<n).map { Float(sin(2 * Double.pi * 330 * Double($0) / 44_100)) * 0.4 }
+        for f in OutputFormat.allCases {
+            let url = d.appendingPathComponent("prova.\(f.fileExtension)")
+            try AudioIO.write([tone, tone], to: url, format: f)
+            let back = try AudioIO.read(url)
+            XCTAssertEqual(back[0].count, n, f.title)
+            XCTAssertEqual(back[0][5000], tone[5000], accuracy: f == .wav16 ? 1e-3 : 1e-4, f.title)
+        }
+    }
+
+    func testSaveRespectsFormatAndKaraokeChoice() throws {
+        let d = try tempDir()
+        let out: [[[Float]]] = (0..<4).map { _ in [[Float](repeating: 0.1, count: 4000), [Float](repeating: 0.1, count: 4000)] }
+        let (_, stems) = try SeparationJob.save(out, sources: ["drums", "bass", "other", "vocals"], song: d.appendingPathComponent("Brano.mp3"),
+                                                into: d, format: .flac, instrumental: false)
+        XCTAssertEqual(stems.count, 4, "senza base")
+        XCTAssertTrue(stems.allSatisfy { $0.url.pathExtension == "flac" })
+    }
+
+    // MARK: Cronologia
+
+    func testHistoryKeepsExistingFoldersNewestFirst() throws {
+        let d = try tempDir()
+        let defaults = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
+        let a = d.appendingPathComponent("A"), b = d.appendingPathComponent("B")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        History.add(song: URL(fileURLWithPath: "/x/Prima.mp3"), folder: a, quality: .fast, defaults: defaults)
+        History.add(song: URL(fileURLWithPath: "/x/Seconda.mp3"), folder: b, quality: .best, defaults: defaults)
+        XCTAssertEqual(History.all(defaults: defaults).map(\.title), ["Seconda", "Prima"])
+        try FileManager.default.removeItem(at: a)
+        XCTAssertEqual(History.all(defaults: defaults).map(\.title), ["Seconda"], "le cartelle cancellate spariscono")
+        History.remove(History.all(defaults: defaults)[0], defaults: defaults)
+        XCTAssertTrue(History.all(defaults: defaults).isEmpty)
+    }
+
+    func testHistoryFindsStemsByName() throws {
+        let d = try tempDir()
+        for name in ["Brano – Voce.wav", "Brano – Batteria.flac", "Brano – Base (senza voce).m4a", "altro.txt"] {
+            FileManager.default.createFile(atPath: d.appendingPathComponent(name).path, contents: Data())
+        }
+        XCTAssertEqual(History.stems(in: d, title: "Brano").map(\.key), ["vocals", "drums", "instrumental"])
+    }
+
+    func testHistoryDates() {
+        let now = Date()
+        XCTAssertTrue(History.when(now, now: now).hasPrefix("oggi"))
+        XCTAssertEqual(History.when(now.addingTimeInterval(-86_400), now: now), "ieri")
+    }
+
+    func testFolderNames() {
+        XCTAssertEqual(Prefs.displayName(of: Paths.output), "Musica › AudioLR")
+        XCTAssertEqual(Prefs.displayName(of: Paths.home.appendingPathComponent("Desktop/Tracce")), "Desktop › Tracce")
+    }
+
     func testStemNames() {
         XCTAssertEqual(Stem.info("vocals").name, "Voce")
         XCTAssertEqual(Stem.info("drums").name, "Batteria")

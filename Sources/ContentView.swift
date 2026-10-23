@@ -31,7 +31,7 @@ struct ContentView: View {
             .card(radius: 20)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Theme.brass, lineWidth: dropping && !job.isBusy ? 2.5 : 0)
+                    .strokeBorder(Theme.brass, lineWidth: dropping ? 2.5 : 0)
             )
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: job.phase)
             footer
@@ -40,12 +40,13 @@ struct ContentView: View {
         .background(StudioBackground())
         .foregroundStyle(Theme.ink)
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first, !job.isBusy else { return false }
+            guard !urls.isEmpty else { return false }
             player.stop()
-            job.start(url, quality: quality)
+            job.enqueue(urls, quality: quality)
             return true
         } isTargeted: { dropping = $0 }
         .onAppear { news = WhatsNew.pending() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrOpenSong)) { _ in choose() }
         .sheet(isPresented: Binding(get: { !news.isEmpty }, set: { if !$0 { news = [] } })) {
             WhatsNewSheet(items: news) { news = [] }
         }
@@ -79,7 +80,7 @@ struct ContentView: View {
             VStack(spacing: 6) {
                 Text(dropping ? "Lascia pure" : "Trascina qui una canzone")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                Text("MP3, M4A, WAV, AIFF, FLAC · anche con «Apri con» dal Finder")
+                Text("Anche più canzoni insieme · MP3, M4A, WAV, AIFF, FLAC")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Button { choose() } label: {
@@ -87,7 +88,6 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .keyboardShortcut("o")
             // Qualità: Massima (di serie) o Veloce
             VStack(spacing: 6) {
                 Picker("Qualità", selection: $qualityRaw) {
@@ -100,16 +100,20 @@ struct ContentView: View {
             }
             .padding(.top, 4)
             Spacer(minLength: 0)
-            VStack(spacing: 8) {
-                Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
-                HStack(spacing: 8) {
-                    ForEach(Theme.stemOrder + ["instrumental"], id: \.self) { key in
-                        let info = Stem.info(key)
-                        Chip(text: info.name, symbol: info.symbol, tint: Theme.color(key))
+            if job.history.isEmpty {
+                VStack(spacing: 8) {
+                    Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+                    HStack(spacing: 8) {
+                        ForEach(Theme.stemOrder + ["instrumental"], id: \.self) { key in
+                            let info = Stem.info(key)
+                            Chip(text: info.name, symbol: info.symbol, tint: Theme.color(key))
+                        }
                     }
                 }
+                .padding(.bottom, 6)
+            } else {
+                recents
             }
-            .padding(.bottom, 6)
         }
         .padding(26)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,6 +123,19 @@ struct ContentView: View {
                 .foregroundStyle(dropping ? Theme.brass : Theme.stroke)
                 .padding(12)
         )
+    }
+
+    /// Le ultime separazioni: un clic le riapre.
+    private var recents: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("RECENTI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+                .padding(.leading, 4)
+            VStack(spacing: 2) {
+                ForEach(job.history.prefix(4)) { item in RecentRow(item: item) }
+            }
+        }
+        .frame(maxWidth: 460)
+        .padding(.bottom, 4)
     }
 
     // MARK: Lavoro in corso
@@ -159,7 +176,11 @@ struct ContentView: View {
                     Text(detailText).font(.system(size: 11.5)).foregroundStyle(.secondary).monospacedDigit()
                 }
                 Spacer()
-                Button("Annulla") { job.cancel() }.controlSize(.large)
+                if !job.queue.isEmpty {
+                    Chip(text: job.queue.count == 1 ? "1 in coda" : "\(job.queue.count) in coda", symbol: "list.bullet", tint: Theme.brass)
+                        .help(job.queue.map { $0.deletingPathExtension().lastPathComponent }.joined(separator: "\n"))
+                }
+                Button(job.queue.isEmpty ? "Annulla" : "Annulla tutto") { job.cancel() }.controlSize(.large)
             }
             steps
         }
@@ -252,7 +273,7 @@ struct ContentView: View {
                 .frame(width: 30, height: 30)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.brass.gradient))
             VStack(alignment: .leading, spacing: 1) {
-                Text(job.song?.deletingPathExtension().lastPathComponent ?? "")
+                Text(job.title)
                     .font(.system(size: 16, weight: .semibold)).lineLimit(1).truncationMode(.middle)
                 if job.duration > 0 {
                     Text(formatTime(job.duration)).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
@@ -262,7 +283,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("Le canzoni non lasciano mai il tuo Mac · Le tracce sono in Musica › AudioLR")
+        Text("Le canzoni non lasciano mai il tuo Mac · Le tracce vanno in \(Prefs.displayName(of: Prefs.folder))")
             .font(.system(size: 11)).foregroundStyle(.tertiary)
     }
 
@@ -304,7 +325,7 @@ struct ContentView: View {
         case .downloading: return "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
         case .tuning: return "Solo la prima volta: confronto Neural Engine e grafica per scegliere il più preciso"
         case .separating: return job.remaining.map(Self.timeLeft) ?? "Calcolo il tempo che manca…"
-        case .saving: return "WAV 24 bit in Musica › AudioLR"
+        case .saving: return "\(Prefs.format.title) in \(Prefs.displayName(of: Prefs.folder))"
         default: return " "
         }
     }
@@ -325,11 +346,11 @@ struct ContentView: View {
     private func choose() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio]
-        panel.allowsMultipleSelection = false
-        panel.message = "Scegli la canzone da separare"
-        if panel.runModal() == .OK, let url = panel.url {
+        panel.allowsMultipleSelection = true
+        panel.message = "Scegli una o più canzoni da separare"
+        if panel.runModal() == .OK, !panel.urls.isEmpty {
             player.stop()
-            job.start(url, quality: quality)
+            job.enqueue(panel.urls, quality: quality)
         }
     }
 }
@@ -347,7 +368,7 @@ struct StemRow: View {
             StemBadge(key: stem.key, symbol: stem.symbol, size: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stem.name).font(.system(size: 13, weight: .semibold))
-                Text(playing ? "In ascolto" : "WAV").font(.system(size: 10.5)).foregroundStyle(playing ? Theme.color(stem.key) : Color.secondary)
+                Text(playing ? "In ascolto" : stem.url.pathExtension.uppercased()).font(.system(size: 10.5)).foregroundStyle(playing ? Theme.color(stem.key) : Color.secondary)
             }
             .frame(width: 118, alignment: .leading)
 
@@ -374,11 +395,13 @@ struct StemRow: View {
             }
             .buttonStyle(.plain)
             .help(playing ? "Ferma" : "Ascolta")
+            .accessibilityLabel(playing ? "Ferma \(stem.name)" : "Ascolta \(stem.name)")
             Button { NSWorkspace.shared.activateFileViewerSelecting([stem.url]) } label: {
                 Image(systemName: "folder").font(.system(size: 13))
             }
             .buttonStyle(.borderless)
             .help("Mostra il file nel Finder")
+            .accessibilityLabel("Mostra \(stem.name) nel Finder")
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -470,5 +493,35 @@ struct WhatsNewSheet: View {
         }
         .padding(24)
         .frame(width: 440)
+    }
+}
+
+// MARK: - Una separazione recente
+
+struct RecentRow: View {
+    let item: HistoryItem
+    @EnvironmentObject private var job: SeparationJob
+    @State private var hover = false
+
+    var body: some View {
+        Button { job.open(item) } label: {
+            HStack(spacing: 10) {
+                LogoMark(size: 22)
+                Text(item.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(History.when(item.date)).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hover ? Theme.ink.opacity(0.06) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help("Riapri le tracce di «\(item.title)»")
+        .contextMenu {
+            Button("Mostra nel Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.folderURL]) }
+            Button("Togli dai recenti") { job.forget(item) }
+        }
     }
 }

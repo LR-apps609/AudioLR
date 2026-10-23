@@ -51,6 +51,9 @@ final class ModelStore: @unchecked Sendable {
         return c
     }
 
+    /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).
+    func forget() { lock.withLock { cores.removeAll() } }
+
     private func download(_ name: String, progress: @escaping (Double) -> Void) async throws {
         let fm = FileManager.default
         try fm.createDirectory(at: Self.folder, withIntermediateDirectories: true)

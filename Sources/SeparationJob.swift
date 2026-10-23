@@ -49,6 +49,8 @@ final class SeparationJob: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var song: URL?
+    /// Il titolo della canzone (anche quando si riapre una separazione dalla cronologia).
+    @Published private(set) var title = ""
     @Published private(set) var stems: [Stem] = []
     @Published private(set) var folder: URL?
     /// Secondi che mancano alla fine della separazione (nil finché non si può stimare).
@@ -59,6 +61,10 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var duration: Double = 0
     /// La qualità della separazione in corso (o dell'ultima).
     @Published private(set) var quality: Quality = .best
+    /// Le canzoni che aspettano il loro turno (trascinate insieme, per esempio un album).
+    @Published private(set) var queue: [URL] = []
+    /// Le ultime separazioni, per riaprirle.
+    @Published private(set) var history: [HistoryItem] = History.all()
     /// Dove ha lavorato l'ultima separazione (Neural Engine o grafica), con la verifica.
     @Published private(set) var engineText: String?
     /// Quanto ci ha messo l'ultima separazione, in secondi.
@@ -82,9 +88,24 @@ final class SeparationJob: ObservableObject {
         func set() { lock.lock(); value = true; lock.unlock() }
     }
 
+    /// Più canzoni insieme: la prima parte subito, le altre aspettano in coda.
+    func enqueue(_ urls: [URL], quality: Quality = .current) {
+        let songs = urls.filter { $0.isFileURL }
+        guard let first = songs.first else { return }
+        if isBusy {
+            queue += songs
+        } else {
+            queue += songs.dropFirst()
+            start(first, quality: quality)
+        }
+    }
+
+    func clearQueue() { queue = [] }
+
     func start(_ url: URL, quality: Quality = .current) {
-        guard !isBusy else { return }
+        guard !isBusy else { queue.append(url); return }
         song = url
+        title = url.deletingPathExtension().lastPathComponent
         stems = []
         folder = nil
         remaining = nil
@@ -166,10 +187,11 @@ final class SeparationJob: ObservableObject {
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 await self?.finish(dir: dir, stems: stems, engine: engine, took: took)
             } catch is CancellationError {
-                await self?.set(.idle)
+                await self?.stopped(clearing: true)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 await self?.set(.failed(msg))
+                await self?.afterFailure()
             }
         }
     }
@@ -190,15 +212,72 @@ final class SeparationJob: ObservableObject {
         return EngineChoice.decide(agreement: Separator.agreement(keep.map { b[$0] }, keep.map { a[$0] }))
     }
 
+    /// Riapre una separazione già fatta: le tracce si riascoltano senza rifare il lavoro.
+    func open(_ item: HistoryItem) {
+        guard !isBusy else { return }
+        let found = History.stems(in: item.folderURL, title: item.title)
+        guard !found.isEmpty else {
+            History.remove(item)
+            history = History.all()
+            return
+        }
+        song = nil
+        title = item.title
+        folder = item.folderURL
+        quality = Quality(rawValue: item.quality) ?? .best
+        engineText = nil
+        elapsed = nil
+        stems = found.map { f in
+            let info = Stem.info(f.key)
+            return Stem(key: f.key, name: info.name, symbol: info.symbol, url: f.url)
+        }
+        duration = 0
+        phase = .done
+        // Le forme d'onda si calcolano dopo, senza far aspettare
+        Task.detached(priority: .utility) { [weak self] in
+            var withPeaks: [Stem] = []
+            var seconds = 0.0
+            for f in found {
+                let info = Stem.info(f.key)
+                let audio = (try? AudioIO.read(f.url)) ?? []
+                if let n = audio.first?.count { seconds = max(seconds, Double(n) / AudioIO.sampleRate) }
+                withPeaks.append(Stem(key: f.key, name: info.name, symbol: info.symbol, url: f.url, peaks: audio.isEmpty ? [] : Peaks.of(audio)))
+            }
+            await self?.reopened(withPeaks, duration: seconds, folder: item.folderURL)
+        }
+    }
+
+    private func reopened(_ stems: [Stem], duration: Double, folder: URL) {
+        guard phase == .done, self.folder == folder else { return }
+        self.stems = stems
+        self.duration = duration
+    }
+
+    func forget(_ item: HistoryItem) {
+        History.remove(item)
+        history = History.all()
+    }
+
     func cancel() {
         cancelled.set()
         task?.cancel()
+    }
+
+    /// Finita una canzone (o andata male), si passa alla prossima in coda.
+    private func startNextInQueue() {
+        guard !queue.isEmpty else { return }
+        let next = queue.removeFirst()
+        let q = quality
+        // Un attimo per vedere il risultato della canzone appena finita
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.start(next, quality: q) }
     }
 
     func reset() {
         guard !isBusy else { return }
         phase = .idle
         song = nil
+        title = ""
+        history = History.all()
         stems = []
         folder = nil
         mixPeaks = []
@@ -206,6 +285,16 @@ final class SeparationJob: ObservableObject {
     }
 
     private func set(_ p: Phase) { phase = p }
+
+    /// Annullare ferma anche la coda.
+    private func stopped(clearing: Bool) {
+        if clearing { queue = [] }
+        phase = .idle
+        history = History.all()
+    }
+
+    /// Una canzone non riuscita non blocca le altre.
+    private func afterFailure() { startNextInQueue() }
 
     private func loaded(peaks: [Float], duration: Double) {
         mixPeaks = peaks
@@ -219,12 +308,17 @@ final class SeparationJob: ObservableObject {
         self.stems = stems
         phase = .done
         remaining = nil
-        NSSound(named: "Glass")?.play()
+        if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
+        if Prefs.revealWhenDone { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
+        History.add(song: song, folder: dir, quality: quality)
+        history = History.all()
+        startNextInQueue()
     }
 
     /// Un WAV per strumento, più la base senza voce, in Musica/AudioLR/<canzone>/.
     nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL,
-                                 into root: URL = Paths.output) throws -> (URL, [Stem]) {
+                                 into root: URL = Prefs.folder, format: OutputFormat = Prefs.format,
+                                 instrumental: Bool = Prefs.makeInstrumental) throws -> (URL, [Stem]) {
         let fm = FileManager.default
         let title = song.deletingPathExtension().lastPathComponent
         var dir = root.appendingPathComponent(title, isDirectory: true)
@@ -238,20 +332,20 @@ final class SeparationJob: ObservableObject {
         var stems: [Stem] = []
         for (i, key) in sources.enumerated() {
             let info = Stem.info(key)
-            let url = dir.appendingPathComponent("\(title) – \(info.name).wav")
-            try AudioIO.writeWAV(out[i], to: url)
+            let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
+            try AudioIO.write(out[i], to: url, format: format)
             stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(out[i])))
         }
         // La base per il karaoke: tutto tranne la voce
-        if let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
+        if instrumental, let v = sources.firstIndex(of: "vocals"), sources.count > 1 {
             let length = out[0][0].count
             var base = [[Float]](repeating: [Float](repeating: 0, count: length), count: 2)
             for (i, _) in sources.enumerated() where i != v {
                 for c in 0..<2 { for j in 0..<length { base[c][j] += out[i][c][j] } }
             }
             let info = Stem.info("instrumental")
-            let url = dir.appendingPathComponent("\(title) – \(info.name).wav")
-            try AudioIO.writeWAV(base, to: url)
+            let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
+            try AudioIO.write(base, to: url, format: format)
             stems.append(Stem(key: "instrumental", name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(base)))
         }
         stems.sort { Stem.info($0.key).order < Stem.info($1.key).order }

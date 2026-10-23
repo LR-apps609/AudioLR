@@ -1,3 +1,10 @@
+Novità della 0.4.0 «Studio professionale»:
+• Impostazioni (⌘,): qualità di serie, formato delle tracce (WAV 24 o 16 bit, FLAC, Apple Lossless), cartella a scelta, base senza voce sì o no, suono e Finder a fine lavoro
+• Motore e spazio: vedi dove lavora il Mac per ogni modello, quanto spazio occupano i modelli scaricati, e puoi liberarlo
+• Recenti: le ultime separazioni nella schermata iniziale, un clic le riapre senza rifare il lavoro
+• Coda: trascina più canzoni insieme (anche un album intero), AudioLR le separa una dopo l'altra
+• Menu completi: Apri (⌘O), Nuova separazione (⌘N), Mostra le tracce nel Finder (⇧⌘R), Annulla (⌘.), Guida e Segnala un problema
+
 Novità della 0.3.0 «Qualità»:
 • Nuova «Massima qualità», scelta di serie: quattro modelli di IA, ognuno specializzato in uno strumento (voce, batteria, basso, altri strumenti). Voce più pulita e strumenti separati meglio; ci vuole circa 4 volte di più
 • «Veloce» resta disponibile, con un clic sotto il pulsante «Scegli una canzone»
