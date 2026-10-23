@@ -38,7 +38,17 @@ jobs:
                   n += 1
                   line = " | ".join(cells)
                   if keys.search(line) and line not in seen:
-                      seen.add(line); print("::notice::" + line[:900])
+                      seen.add(line)
               if n == 0: break
+          # GitHub mostra al massimo 10 annotazioni per passaggio: righe raggruppate per famiglia
+          groups = {}
+          for line in seen:
+              low = line.lower()
+              k = "fadr" if "fadr" in low else "demucs" if ("demucs" in low) else "commerciali" if re.search("moises|lalal|audioshake", low) else "roformer"
+              groups.setdefault(k, []).append(line)
+          for k, lines in groups.items():
+              lines.sort(key=lambda l: int(l.split("|")[0]) if l.split("|")[0].strip().isdigit() else 9999)
+              for i in range(0, min(len(lines), 24), 8):
+                  print(f"::notice::[{k}] " + " || ".join(x[:160] for x in lines[i:i + 8]))
           print("righe trovate:", len(seen))
           PY
