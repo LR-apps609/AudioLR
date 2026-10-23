@@ -179,6 +179,61 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(z.re.count, 2048 * 3)
     }
 
+    // MARK: Qualità e motore
+
+    func testQualityModels() {
+        XCTAssertEqual(Quality.fast.models, ["HTDemucs"])
+        XCTAssertEqual(Quality.best.models, ["HTDemucsFT-0", "HTDemucsFT-1", "HTDemucsFT-2", "HTDemucsFT-3"])
+        let d = UserDefaults.standard.string(forKey: Quality.key)
+        defer { UserDefaults.standard.set(d, forKey: Quality.key) }
+        UserDefaults.standard.removeObject(forKey: Quality.key)
+        XCTAssertEqual(Quality.current, .best, "di serie: massima qualità")
+    }
+
+    func testEngineChoiceRememberedPerModel() {
+        let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
+        XCTAssertNil(EngineChoice.stored("HTDemucs", defaults: d))
+        let good = EngineChoice.decide(agreement: 45)
+        XCTAssertEqual(good.units, .all)
+        let bad = EngineChoice.decide(agreement: 12)
+        XCTAssertEqual(bad.units, .cpuAndGPU)
+        XCTAssertTrue(bad.text.hasPrefix("Grafica"))
+        EngineChoice.store(bad, for: "HTDemucs", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("HTDemucs", defaults: d), bad)
+        XCTAssertNil(EngineChoice.stored("HTDemucsFT-0", defaults: d))
+        EngineChoice.reset(defaults: d)
+        XCTAssertNil(EngineChoice.stored("HTDemucs", defaults: d))
+    }
+
+    func testAgreement() {
+        let a: [[[Float]]] = [[[1, 2, 3], [3, 2, 1]]]
+        XCTAssertGreaterThan(Separator.agreement(a, a), 100)
+        let b: [[[Float]]] = [[[1.1, 2, 3], [3, 2, 1]]]
+        XCTAssertEqual(Separator.agreement(a, b), 10 * log10(28 / 0.01), accuracy: 0.01)
+    }
+
+    func testMergeTakesEachSpecialist() {
+        let sources = ["drums", "bass", "other", "vocals"]
+        func r(_ v: Float) -> [[[Float]]] { sources.map { _ in [[v], [v]] } }
+        var out: [[[Float]]] = []
+        for (k, key) in sources.enumerated() {
+            Separator.merge(&out, r(Float(k + 1)), sources: sources, specialty: [key])
+        }
+        XCTAssertEqual(out.map { $0[0][0] }, [1, 2, 3, 4], "ogni strumento dal suo modello")
+        // Un modello «per tutto» sostituisce tutto
+        var all: [[[Float]]] = []
+        Separator.merge(&all, r(7), sources: sources, specialty: sources)
+        XCTAssertEqual(all.map { $0[1][0] }, [7, 7, 7, 7])
+    }
+
+    func testPieceIsCenteredLikeDemucs() {
+        let norm: [[Float]] = [(0..<10).map(Float.init), (0..<10).map { Float($0) * 2 }]
+        // Pezzo da 8 che comincia a 6: restano 4 campioni, centrati con 2 prima (4, 5) e 2 di silenzio dopo
+        let p = Separator.piece(norm, offset: 6, segment: 8)
+        XCTAssertEqual(p[0], [4, 5, 6, 7, 8, 9, 0, 0])
+        XCTAssertEqual(Separator.piece(norm, offset: 0, segment: 4)[1], [0, 2, 4, 6])
+    }
+
     // MARK: Forme d'onda e testi
 
     func testPeaks() {

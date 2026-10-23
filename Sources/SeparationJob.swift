@@ -39,6 +39,8 @@ final class SeparationJob: ObservableObject {
         case idle
         case downloading(Double)
         case reading
+        /// Prima volta con un modello: provo Neural Engine e grafica su un pezzo
+        case tuning
         case separating(Double)
         case saving
         case done
@@ -55,13 +57,19 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var mixPeaks: [Float] = []
     /// Durata della canzone in secondi.
     @Published private(set) var duration: Double = 0
+    /// La qualità della separazione in corso (o dell'ultima).
+    @Published private(set) var quality: Quality = .best
+    /// Dove ha lavorato l'ultima separazione (Neural Engine o grafica), con la verifica.
+    @Published private(set) var engineText: String?
+    /// Quanto ci ha messo l'ultima separazione, in secondi.
+    @Published private(set) var elapsed: Double?
 
     private var task: Task<Void, Never>?
     private var cancelled = Cancel()
 
     var isBusy: Bool {
         switch phase {
-        case .downloading, .reading, .separating, .saving: return true
+        case .downloading, .reading, .tuning, .separating, .saving: return true
         default: return false
         }
     }
@@ -74,7 +82,7 @@ final class SeparationJob: ObservableObject {
         func set() { lock.lock(); value = true; lock.unlock() }
     }
 
-    func start(_ url: URL) {
+    func start(_ url: URL, quality: Quality = .current) {
         guard !isBusy else { return }
         song = url
         stems = []
@@ -82,48 +90,81 @@ final class SeparationJob: ObservableObject {
         remaining = nil
         mixPeaks = []
         duration = 0
-        phase = ModelStore.shared.isReady ? .reading : .downloading(0)
+        elapsed = nil
+        engineText = nil
+        self.quality = quality
+        let models = quality.models
+        phase = models.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
         cancelled = cancel
         task = Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let core = try await ModelStore.shared.load { p in
-                    Task { @MainActor in self?.phase = .downloading(p) }
+                // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
+                for (k, name) in models.enumerated() {
+                    _ = try await ModelStore.shared.load(name) { p in
+                        let total = (Double(k) + p) / Double(models.count)
+                        Task { @MainActor in self?.phase = .downloading(total) }
+                    }
                 }
                 await self?.set(.reading)
                 let mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
-                let peaks = Peaks.of(mix)
                 let seconds = Double(mix[0].count) / AudioIO.sampleRate
-                await self?.loaded(peaks: peaks, duration: seconds)
+                await self?.loaded(peaks: Peaks.of(mix), duration: seconds)
 
+                // 2. Il motore: deciso una volta per modello su questo Mac
+                var decisions: [String: EngineChoice.Decision] = [:]
+                for name in models {
+                    if let d = EngineChoice.stored(name) { decisions[name] = d; continue }
+                    await self?.set(.tuning)
+                    let d = try await SeparationJob.tune(name, mix: mix)
+                    EngineChoice.store(d, for: name)
+                    decisions[name] = d
+                    if cancel.isSet { throw CancellationError() }
+                }
+
+                // 3. La separazione: con htdemucs_ft ogni modello dà il suo strumento
                 await self?.set(.separating(0))
                 let began = Date()
-                func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
-                    try Separator(core: core).separate(mix, progress: { p in
-                        let elapsed = Date().timeIntervalSince(began)
-                        let left: Double? = p > 0.02 ? elapsed / p * (1 - p) : nil
-                        Task { @MainActor in
-                            self?.phase = .separating(p)
-                            self?.remaining = left
-                        }
-                    }, isCancelled: { cancel.isSet })
-                }
-                var used = core
-                let out: [[[Float]]]
-                do {
-                    out = try run(core)
-                } catch is ImplausibleResult {
-                    // Il calcolo «misto» ha sbagliato: si riprova solo con grafica e processore
-                    used = try await ModelStore.shared.load(units: .cpuAndGPU) { _ in }
-                    do { out = try run(used) } catch is ImplausibleResult {
-                        throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                var out: [[[Float]]] = []
+                var sources: [String] = []
+                for (k, name) in models.enumerated() {
+                    let span = (Double(k), Double(k + 1))
+                    func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
+                        try Separator(core: core).separate(mix, progress: { p in
+                            let total = (span.0 + p) / Double(models.count)
+                            let elapsed = Date().timeIntervalSince(began)
+                            let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
+                            Task { @MainActor in
+                                self?.phase = .separating(total)
+                                self?.remaining = left
+                            }
+                        }, isCancelled: { cancel.isSet })
                     }
+                    var core = try await ModelStore.shared.load(name, units: decisions[name]!.units) { _ in }
+                    let result: [[[Float]]]
+                    do {
+                        result = try run(core)
+                    } catch is ImplausibleResult {
+                        // Il calcolo ha sbagliato: si riprova solo con grafica e processore, e lo si ricorda
+                        core = try await ModelStore.shared.load(name, units: .cpuAndGPU) { _ in }
+                        do { result = try run(core) } catch is ImplausibleResult {
+                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                        }
+                        let d = EngineChoice.Decision(units: .cpuAndGPU, agreement: decisions[name]!.agreement)
+                        EngineChoice.store(d, for: name)
+                        decisions[name] = d
+                    }
+                    if sources.isEmpty { sources = core.sources }
+                    Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
                 }
+                let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
-                let (dir, stems) = try SeparationJob.save(out, sources: used.sources, song: url)
-                await self?.finish(dir: dir, stems: stems)
+                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url)
+                // Se anche un solo modello ha dovuto usare la grafica, si dice quello
+                let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
+                await self?.finish(dir: dir, stems: stems, engine: engine, took: took)
             } catch is CancellationError {
                 await self?.set(.idle)
             } catch {
@@ -131,6 +172,20 @@ final class SeparationJob: ObservableObject {
                 await self?.set(.failed(msg))
             }
         }
+    }
+
+    /// Prova Neural Engine e grafica sul pezzo centrale della canzone e decide dove lavorare.
+    nonisolated static func tune(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
+        let ane = try await ModelStore.shared.load(name, units: .all) { _ in }
+        let gpu = try await ModelStore.shared.load(name, units: .cpuAndGPU) { _ in }
+        let norm = Separator.normalized(mix).norm
+        let offset = max(0, (mix[0].count - ane.segment) / 2)
+        let piece = Separator.piece(norm, offset: offset, segment: ane.segment)
+        let a = try Separator(core: ane).runSegment(piece)
+        let b = try Separator(core: gpu).runSegment(piece)
+        // Se nemmeno la grafica dà un risultato coerente, si lascia decidere al controllo durante la separazione
+        guard Separator.plausible(piece: piece, result: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
+        return EngineChoice.decide(agreement: Separator.agreement(b, a))
     }
 
     func cancel() {
@@ -155,7 +210,9 @@ final class SeparationJob: ObservableObject {
         self.duration = duration
     }
 
-    private func finish(dir: URL, stems: [Stem]) {
+    private func finish(dir: URL, stems: [Stem], engine: String, took: Double) {
+        engineText = engine
+        elapsed = took
         folder = dir
         self.stems = stems
         phase = .done

@@ -1,3 +1,10 @@
+Novità della 0.3.0 «Qualità»:
+• Nuova «Massima qualità», scelta di serie: quattro modelli di IA, ognuno specializzato in uno strumento (voce, batteria, basso, altri strumenti). Voce più pulita e strumenti separati meglio; ci vuole circa 4 volte di più
+• «Veloce» resta disponibile, con un clic sotto il pulsante «Scegli una canzone»
+• La prima volta che usi un modello, AudioLR prova sul tuo Mac sia il Neural Engine sia la grafica e sceglie quello che dà il risultato giusto
+• A fine lavoro vedi la qualità usata, dove ha lavorato il Mac e quanto ci ha messo
+• Menu AudioLR → «Ricontrolla il motore alla prossima separazione», se vuoi rifare la prova
+
 Novità della 0.2.0 «Studio»:
 • Nuova veste grafica: icona e finestra da studio di registrazione, chiare di giorno e scure di notte
 • Mentre separa vedi l'onda della canzone colorarsi e le quattro tracce riempirsi, con le fasi del lavoro e il tempo che manca

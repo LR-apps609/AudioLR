@@ -20,44 +20,48 @@ final class ModelStore: @unchecked Sendable {
     static let name = "HTDemucs"
     static let base = URL(string: "https://github.com/LR-apps609/AudioLR/releases/download/modelli-1/")!
     static var folder: URL { Paths.support.appendingPathComponent("Modelli", isDirectory: true) }
-    static var compiled: URL { folder.appendingPathComponent(name + ".mlmodelc", isDirectory: true) }
+    static func compiled(_ name: String) -> URL { folder.appendingPathComponent(name + ".mlmodelc", isDirectory: true) }
+    static var compiled: URL { compiled(name) }
 
-    var isReady: Bool { FileManager.default.fileExists(atPath: Self.compiled.path) }
+    func isReady(_ name: String) -> Bool { FileManager.default.fileExists(atPath: Self.compiled(name).path) }
+    var isReady: Bool { isReady(Self.name) }
 
-    /// Un modello pronto per ogni scelta di unità di calcolo.
-    private var cores: [Int: CoreMLSeparationCore] = [:]
+    /// Un modello pronto per ogni nome e scelta di unità di calcolo.
+    private var cores: [String: CoreMLSeparationCore] = [:]
     private let lock = NSLock()
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
     /// `units`: dove fare i calcoli (di solito tutto: Neural Engine, grafica e processore).
-    func load(units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> CoreMLSeparationCore {
-        let cached = lock.withLock { cores[units.rawValue] }
+    func load(_ name: String = ModelStore.name, units: MLComputeUnits = .all,
+              progress: @escaping (Double) -> Void) async throws -> CoreMLSeparationCore {
+        let key = "\(name)#\(units.rawValue)"
+        let cached = lock.withLock { cores[key] }
         if let c = cached { return c }
-        if !isReady { try await download(progress: progress) }
+        if !isReady(name) { try await download(name, progress: progress) }
         let cfg = MLModelConfiguration()
         cfg.computeUnits = units
         let model: MLModel
-        do { model = try MLModel(contentsOf: Self.compiled, configuration: cfg) } catch {
+        do { model = try MLModel(contentsOf: Self.compiled(name), configuration: cfg) } catch {
             // Modello rovinato (scaricamento interrotto, macOS diverso…): la prossima volta si riscarica
-            try? FileManager.default.removeItem(at: Self.compiled)
+            try? FileManager.default.removeItem(at: Self.compiled(name))
             throw SeparationError("il modello di IA non si apre: riprova, verrà scaricato di nuovo")
         }
         let c = try CoreMLSeparationCore(model: model)
-        lock.withLock { cores[units.rawValue] = c }
+        lock.withLock { cores[key] = c }
         return c
     }
 
-    private func download(progress: @escaping (Double) -> Void) async throws {
+    private func download(_ name: String, progress: @escaping (Double) -> Void) async throws {
         let fm = FileManager.default
         try fm.createDirectory(at: Self.folder, withIntermediateDirectories: true)
         do {
             // Il codice di controllo, per essere sicuri che il file arrivi intero
-            let (shaData, shaResp) = try await URLSession.shared.data(from: Self.base.appendingPathComponent(Self.name + ".sha256"))
+            let (shaData, shaResp) = try await URLSession.shared.data(from: Self.base.appendingPathComponent(name + ".sha256"))
             guard (shaResp as? HTTPURLResponse)?.statusCode == 200,
                   let expected = String(decoding: shaData, as: UTF8.self).split(separator: " ").first.map(String.init) else {
                 throw SeparationError("il modello di IA non è ancora disponibile")
             }
-            let zipURL = Self.base.appendingPathComponent(Self.name + ".mlpackage.zip")
+            let zipURL = Self.base.appendingPathComponent(name + ".mlpackage.zip")
             let (tmp, resp) = try await URLSession.shared.download(from: zipURL, delegate: ProgressDelegate(progress))
             guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw SeparationError("il modello di IA non è ancora disponibile") }
             guard Self.sha256(of: tmp) == expected else { throw SeparationError("il modello scaricato è rovinato, riprova") }
@@ -73,8 +77,8 @@ final class ModelStore: @unchecked Sendable {
                 throw SeparationError("non riesco ad aprire il modello scaricato")
             }
             let built = try await MLModel.compileModel(at: pkg)
-            try? fm.removeItem(at: Self.compiled)
-            try fm.moveItem(at: built, to: Self.compiled)
+            try? fm.removeItem(at: Self.compiled(name))
+            try fm.moveItem(at: built, to: Self.compiled(name))
         } catch let e as SeparationError {
             throw e
         } catch {

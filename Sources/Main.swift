@@ -21,6 +21,7 @@ struct AudioLRApp: App {
                 Button("Controlla aggiornamenti…") {
                     Task { @MainActor in await UpdateCheck.check(userInitiated: true) }
                 }
+                Button("Ricontrolla il motore alla prossima separazione") { EngineChoice.reset() }
             }
         }
     }

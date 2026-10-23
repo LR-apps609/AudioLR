@@ -146,4 +146,40 @@ final class EndToEndTests: XCTestCase {
         let out = try core.model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["spec": spec, "wave": wave]))
         return (out.featureValue(for: "spec_out")!.multiArrayValue!, out.featureValue(for: "wave_out")!.multiArrayValue!)
     }
+
+    // MARK: Massima qualità (htdemucs_ft)
+
+    func testBestQualityMatchesDemucs() async throws {
+        executionTimeAllowance = 900
+        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent("HTDemucsFT-prova.f32"))
+        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("prova Massima qualità non ancora pubblicata") }
+        let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        let n = Int(all[0]), S = Int(all[1])
+        var p = 2
+        func take() -> [Float] { defer { p += n }; return Array(all[p..<(p + n)]) }
+        let mix = [take(), take()]
+        let expected = (0..<S).map { _ in [take(), take()] }
+
+        var out: [[[Float]]] = []
+        var sources: [String] = []
+        let start = Date()
+        for name in Quality.best.models {
+            let core: CoreMLSeparationCore
+            do { core = try await ModelStore.shared.load(name) { _ in } } catch { throw XCTSkip("\(name) non ancora pubblicato") }
+            XCTAssertEqual(core.specialty.count, 1, "\(name): un solo strumento")
+            if sources.isEmpty { sources = core.sources }
+            Separator.merge(&out, try Separator(core: core).separate(mix), sources: core.sources, specialty: core.specialty)
+        }
+        let seconds = Date().timeIntervalSince(start)
+        var report: [String] = []
+        let mixAll = mix[0] + mix[1]
+        for (s, name) in sources.enumerated() {
+            let ref = expected[s][0] + expected[s][1], est = out[s][0] + out[s][1]
+            let q = Self.snr(ref, est)
+            let vsMix = Self.snr(mixAll, zip(mixAll, zip(ref, est)).map { $0.0 - ($0.1.0 - $0.1.1) })
+            report.append(String(format: "%@ %.1f dB", name, q))
+            XCTAssertTrue(q > 25 || vsMix > 35, "\(name): troppo diverso da Demucs (\(q) dB)")
+        }
+        Self.note("Massima qualità: " + report.joined(separator: " · ") + String(format: " — %.1f s", seconds))
+    }
 }

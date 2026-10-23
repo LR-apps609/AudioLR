@@ -13,6 +13,8 @@ struct ContentView: View {
     @StateObject private var player = StemPlayer()
     @State private var dropping = false
     @State private var news: [String] = []
+    @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
+    private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -20,7 +22,7 @@ struct ContentView: View {
             Group {
                 switch job.phase {
                 case .idle: dropZone
-                case .downloading, .reading, .separating, .saving: working
+                case .downloading, .reading, .tuning, .separating, .saving: working
                 case .done: results
                 case .failed(let msg): failed(msg)
                 }
@@ -40,7 +42,7 @@ struct ContentView: View {
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first, !job.isBusy else { return false }
             player.stop()
-            job.start(url)
+            job.start(url, quality: quality)
             return true
         } isTargeted: { dropping = $0 }
         .onAppear { news = WhatsNew.pending() }
@@ -86,6 +88,17 @@ struct ContentView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .keyboardShortcut("o")
+            // Qualità: Massima (di serie) o Veloce
+            VStack(spacing: 6) {
+                Picker("Qualità", selection: $qualityRaw) {
+                    ForEach(Quality.allCases) { q in Text(q.title).tag(q.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 280)
+                Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
             Spacer(minLength: 0)
             VStack(spacing: 8) {
                 Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
@@ -160,7 +173,7 @@ struct ContentView: View {
             switch job.phase {
             case .downloading: return 0
             case .reading: return 1
-            case .separating: return 2
+            case .tuning, .separating: return 2
             case .saving: return 3
             default: return 4
             }
@@ -202,6 +215,12 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 4)
             }
+            HStack(spacing: 6) {
+                Chip(text: job.quality.title, symbol: job.quality == .best ? "sparkles" : "hare.fill", tint: Theme.brass)
+                if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
+                if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
+                Spacer()
+            }
             Text("Trascina una traccia in GarageBand, Logic o nel Finder. Clic sull'onda per ascoltare da quel punto.")
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
         }
@@ -217,7 +236,7 @@ struct ContentView: View {
             Text(Self.sentence(msg)).font(.system(size: 13)).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).frame(maxWidth: 380)
             HStack {
-                if let s = job.song { Button("Riprova") { job.start(s) }.buttonStyle(.borderedProminent) }
+                if let s = job.song { Button("Riprova") { job.start(s, quality: quality) }.buttonStyle(.borderedProminent) }
                 Button("Scegli un'altra canzone…") { job.reset(); choose() }
             }
             .controlSize(.large)
@@ -273,7 +292,8 @@ struct ContentView: View {
         switch job.phase {
         case .downloading: return "Scarico il modello di IA"
         case .reading: return "Leggo la canzone"
-        case .separating: return "Separo voce e strumenti"
+        case .tuning: return "Provo il motore del tuo Mac"
+        case .separating: return job.quality == .best ? "Separo voce e strumenti · Massima qualità" : "Separo voce e strumenti"
         case .saving: return "Salvo le tracce"
         default: return ""
         }
@@ -281,7 +301,8 @@ struct ContentView: View {
 
     private var detailText: String {
         switch job.phase {
-        case .downloading: return "Solo la prima volta, circa 80 MB. Poi funziona anche senza internet."
+        case .downloading: return "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
+        case .tuning: return "Solo la prima volta: confronto Neural Engine e grafica per scegliere il più preciso"
         case .separating: return job.remaining.map(Self.timeLeft) ?? "Calcolo il tempo che manca…"
         case .saving: return "WAV 24 bit in Musica › AudioLR"
         default: return " "
@@ -308,7 +329,7 @@ struct ContentView: View {
         panel.message = "Scegli la canzone da separare"
         if panel.runModal() == .OK, let url = panel.url {
             player.stop()
-            job.start(url)
+            job.start(url, quality: quality)
         }
     }
 }

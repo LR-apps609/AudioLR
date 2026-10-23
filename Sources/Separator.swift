@@ -18,6 +18,12 @@ protocol SeparationCore {
     /// spec: 4 × bins × frames (sinistro reale, sinistro immaginario, destro reale, destro immaginario); wave: 2 × segment.
     /// Restituisce spec: S × 4 × bins × frames e wave: S × 2 × segment.
     func run(spec: [Float], wave: [Float]) throws -> (spec: [Float], wave: [Float])
+    /// Gli strumenti in cui il modello è specializzato (di solito tutti).
+    var specialty: [String] { get }
+}
+
+extension SeparationCore {
+    var specialty: [String] { sources }
 }
 
 /// Il primo pezzo è uscito incoerente (le tracce sommate non danno la canzone): succede se l'unità di calcolo
@@ -74,13 +80,7 @@ final class Separator {
         let seg = core.segment
         let S = core.sources.count
 
-        // Come Demucs: tutta la canzone a media 0 e deviazione 1, poi si torna alla scala originale
-        var mono = [Float](repeating: 0, count: length)
-        for i in 0..<length { mono[i] = (mix[0][i] + mix[1][i]) / 2 }
-        let stats = Self.meanStd(mono)
-        let gMean = stats.mean
-        let gStd = stats.std < 1e-8 ? 1 : stats.std
-        let norm = mix.map { ch in ch.map { ($0 - gMean) / gStd } }
+        let (norm, gMean, gStd) = Self.normalized(mix)
 
         var out = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: S)
         var total = [Float](repeating: 0, count: length)
@@ -89,15 +89,9 @@ final class Separator {
 
         for (n, offset) in starts.enumerated() {
             if isCancelled() { throw CancellationError() }
-            // L'ultimo pezzo è più corto: si completa con l'audio prima (e silenzio dopo la fine), centrato come in Demucs
             let chunk = min(seg, length - offset)
             let delta = seg - chunk
-            let from = offset - delta / 2
-            var piece = [[Float]](repeating: [Float](repeating: 0, count: seg), count: 2)
-            for c in 0..<2 {
-                let lo = max(0, from), hi = min(length, from + seg)
-                if lo < hi { for i in lo..<hi { piece[c][i - from] = norm[c][i] } }
-            }
+            let piece = Self.piece(norm, offset: offset, segment: seg)
             let result = try runSegment(piece)
             if n == 0, !Self.plausible(piece: piece, result: result) { throw ImplausibleResult() }
             let trim = delta / 2
@@ -118,6 +112,52 @@ final class Separator {
             }
         }
         return out
+    }
+
+    /// Più modelli specializzati (htdemucs_ft): ognuno porta solo il suo strumento nel risultato finale.
+    /// Il primo risultato fa da base (così, se un modello mancasse, nessuna traccia resta vuota).
+    static func merge(_ out: inout [[[Float]]], _ result: [[[Float]]], sources: [String], specialty: [String]) {
+        if out.isEmpty { out = result; return }
+        for key in specialty { if let i = sources.firstIndex(of: key) { out[i] = result[i] } }
+    }
+
+    /// Come Demucs: tutta la canzone a media 0 e deviazione 1 (si torna poi alla scala originale con media e deviazione).
+    static func normalized(_ mix: [[Float]]) -> (norm: [[Float]], mean: Float, std: Float) {
+        let length = mix[0].count
+        var mono = [Float](repeating: 0, count: length)
+        for i in 0..<length { mono[i] = (mix[0][i] + mix[1][i]) / 2 }
+        let stats = meanStd(mono)
+        let std = stats.std < 1e-8 ? 1 : stats.std
+        return (mix.map { ch in ch.map { ($0 - stats.mean) / std } }, stats.mean, std)
+    }
+
+    /// Il pezzo che comincia a `offset`. L'ultimo è più corto: si completa con l'audio prima
+    /// (e silenzio dopo la fine), centrato come in Demucs.
+    static func piece(_ norm: [[Float]], offset: Int, segment seg: Int) -> [[Float]] {
+        let length = norm[0].count
+        let chunk = min(seg, length - offset)
+        let from = offset - (seg - chunk) / 2
+        var piece = [[Float]](repeating: [Float](repeating: 0, count: seg), count: 2)
+        for c in 0..<2 {
+            let lo = max(0, from), hi = min(length, from + seg)
+            if lo < hi { for i in lo..<hi { piece[c][i - from] = norm[c][i] } }
+        }
+        return piece
+    }
+
+    /// Quanto due risultati dello stesso pezzo coincidono, in dB (più alto = più uguali).
+    static func agreement(_ a: [[[Float]]], _ b: [[[Float]]]) -> Double {
+        var signal = 0.0, error = 0.0
+        for s in a.indices {
+            for c in 0..<2 {
+                for i in a[s][c].indices {
+                    let x = Double(a[s][c][i]), d = x - Double(b[s][c][i])
+                    signal += x * x
+                    error += d.isFinite ? d * d : 1e9
+                }
+            }
+        }
+        return 10 * log10(max(signal, 1e-20) / max(error, 1e-20))
     }
 
     /// Le tracce sommate devono ridare (quasi) il pezzo: con Demucs la differenza è sotto −15 dB,
@@ -189,6 +229,8 @@ final class CoreMLSeparationCore: SeparationCore {
     let frames: Int
     let bins: Int
     let sources: [String]
+    /// Gli strumenti in cui il modello è specializzato (htdemucs_ft: uno per modello; htdemucs: tutti).
+    let specialty: [String]
 
     init(model: MLModel) throws {
         self.model = model
@@ -202,6 +244,8 @@ final class CoreMLSeparationCore: SeparationCore {
         segment = waveShape[2]
         let meta = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
         sources = (meta?["sources"] ?? "drums,bass,other,vocals").split(separator: ",").map(String.init)
+        let special = (meta?["specialty"] ?? "").split(separator: ",").map(String.init).filter { sources.contains($0) }
+        specialty = special.isEmpty ? sources : special
     }
 
     func run(spec: [Float], wave: [Float]) throws -> (spec: [Float], wave: [Float]) {
