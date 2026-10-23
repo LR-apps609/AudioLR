@@ -188,4 +188,9 @@ mlm.save(OUT + ".mlpackage")
 json.dump({"kind": "melroformer", "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
            "frames": T, "freq_indices": FI.tolist(), "num_bands_per_freq": NB.tolist(), "precision": precision,
            "db": round(qbest, 1)}, open(OUT + ".json", "w"))
+# Prova di fedeltà per l'app (EndToEndTests): un pezzo e la voce secondo il modello originale
+with open(OUT + "-prova.f32", "wb") as f:
+    np.array([CHUNK, 1], dtype="<f4").tofile(f)
+    mix.astype("<f4").tofile(f)
+    ref.astype("<f4").tofile(f)
 print("Fatto:", OUT, precision, round(qbest, 1))
