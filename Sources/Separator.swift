@@ -243,9 +243,10 @@ final class CoreMLSeparationCore: SeparationCore {
         frames = specShape[3]
         segment = waveShape[2]
         let meta = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
-        sources = (meta?["sources"] ?? "drums,bass,other,vocals").split(separator: ",").map(String.init)
-        let special = (meta?["specialty"] ?? "").split(separator: ",").map(String.init).filter { sources.contains($0) }
-        specialty = special.isEmpty ? sources : special
+        let names = (meta?["sources"] ?? "drums,bass,other,vocals").split(separator: ",").map(String.init)
+        let special = (meta?["specialty"] ?? "").split(separator: ",").map(String.init).filter { names.contains($0) }
+        sources = names
+        specialty = special.isEmpty ? names : special
     }
 
     func run(spec: [Float], wave: [Float]) throws -> (spec: [Float], wave: [Float]) {
