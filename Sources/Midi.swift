@@ -36,8 +36,9 @@ final class MidiTranscriber {
 
     init(model: MLModel?) { self.model = model }
 
-    /// Il modello incluso nell'app.
-    static func bundled(units: MLComputeUnits = .all) throws -> MidiTranscriber {
+    /// Il modello incluso nell'app. Solo processore, come lo usa Spotify: è piccolo, e su grafica
+    /// e Neural Engine alcune sue operazioni non sono affidabili.
+    static func bundled(units: MLComputeUnits = .cpuOnly) throws -> MidiTranscriber {
         guard let url = Bundle.main.url(forResource: "BasicPitch", withExtension: "mlmodelc")
                 ?? Bundle(for: MidiTranscriber.self).url(forResource: "BasicPitch", withExtension: "mlmodelc") else {
             throw SeparationError("il modello delle note non è nell'app")

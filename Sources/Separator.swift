@@ -294,7 +294,7 @@ final class CoreMLSeparationCore: SeparationCore {
             // Dove comincia la riga r (tutti gli indici tranne l'ultimo)
             func rowOffset(_ r: Int) -> Int {
                 var rest = r, offset = 0
-                for d in stride(from: shape.count - 2, through: 0, by: -1) {
+                for d in stride(from: shape.count - 2, through: 0, by: -1) where shape[d] > 0 {
                     offset += (rest % shape[d]) * strides[d]
                     rest /= shape[d]
                 }
