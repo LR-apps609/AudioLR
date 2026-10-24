@@ -1,3 +1,8 @@
+Novità della 0.12.1 «Ritocchi»:
+• Le onde del mixer sono a colori pieni anche a riposo; mentre suona si colora la parte ascoltata
+• Il tasto della Sala prove ora dice «Prove»
+• Nell'Account il nome del Mac sta su una riga
+
 Novità della 0.12.0 «Note»:
 • MIDI da ogni traccia: menu «MIDI» in alto, scegli voce, basso, chitarra, pianoforte o altro; le note diventano un file .mid al tempo della canzone, pronto per GarageBand e Logic
 • Le note le trova Basic Pitch di Spotify, incluso nell'app: niente da scaricare, tutto sul Mac
