@@ -8,6 +8,13 @@ import AppKit
 final class ScreenshotTests: XCTestCase {
     let out = URL(fileURLWithPath: "/tmp/audiolr-schermate", isDirectory: true)
 
+    override func setUp() async throws {
+        // I test girano senza l'app: le finestre hanno bisogno di un'applicazione attiva
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        executionTimeAllowance = 300
+    }
+
     private func shot<V: View>(_ view: V, _ name: String, width: CGFloat, height: CGFloat) throws {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         for dark in [false, true] {
@@ -54,10 +61,12 @@ final class ScreenshotTests: XCTestCase {
         return (dir, stems)
     }
 
-    func testScreenshots() throws {
-        executionTimeAllowance = 300
+    func testShotStart() throws {
+        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio", width: 1020, height: 680)
+    }
+
+    func testShotResults() throws {
         let job = SeparationJob.shared
-        try shot(ContentView().environmentObject(job), "1-inizio", width: 1020, height: 680)
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.reset() }
         job.showcase(title: "Canzone di prova", stems: stems, folder: dir, quality: .best, duration: 214,
@@ -66,10 +75,11 @@ final class ScreenshotTests: XCTestCase {
                      timings: [.init(name: "Voce (RoFormer)", seconds: 96), .init(name: "Strumenti (BS-RoFormer SW)", seconds: 190)])
         try shot(ContentView().environmentObject(job), "2-risultati", width: 1020, height: 760)
         try shot(DetailsView().environmentObject(job), "3-dettagli", width: 320, height: 620)
-        try shot(SettingsView(), "4-impostazioni", width: 520, height: 470)
-        try shot(AccountView().environmentObject(job), "5-account", width: 480, height: 600)
-        try shot(FAQView(), "6-domande", width: 620, height: 620)
-        try shot(BugReportView(), "7-segnala", width: 520, height: 600)
-        try shot(GuideView(), "8-guida", width: 330, height: 640)
     }
+
+    func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 520, height: 470) }
+    func testShotAccount() throws { try shot(AccountView().environmentObject(SeparationJob.shared), "5-account", width: 480, height: 600) }
+    func testShotFAQ() throws { try shot(FAQView(), "6-domande", width: 620, height: 620) }
+    func testShotBugReport() throws { try shot(BugReportView(), "7-segnala", width: 520, height: 600) }
+    func testShotGuide() throws { try shot(GuideView(), "8-guida", width: 330, height: 640) }
 }
