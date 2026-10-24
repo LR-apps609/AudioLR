@@ -7,3 +7,5 @@ dist/
 Sources/Info.plist
 build-test/
 test.log
+__pycache__/
+*.pyc
