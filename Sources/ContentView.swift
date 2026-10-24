@@ -166,7 +166,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 280)
+                .frame(width: 360)
                 Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
@@ -322,7 +322,7 @@ struct ContentView: View {
                 .padding(.bottom, 4)
             }
             HStack(spacing: 6) {
-                Chip(text: job.quality.title, symbol: job.quality == .best ? "sparkles" : "hare.fill", tint: Theme.brass)
+                Chip(text: job.quality.title, symbol: job.quality.symbol, tint: Theme.brass)
                 if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
                 if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
                 Spacer()
@@ -473,7 +473,7 @@ struct ContentView: View {
         case .downloading: return "Scarico il modello di IA"
         case .reading: return "Leggo la canzone"
         case .tuning: return "Provo il motore del tuo Mac"
-        case .separating: return job.quality == .best ? "Separo voce e strumenti · Massima qualità" : "Separo voce e strumenti"
+        case .separating: return job.quality == .fast ? "Separo voce e strumenti" : "Separo voce e strumenti · \(job.quality.title)"
         case .saving: return "Salvo le tracce"
         default: return ""
         }

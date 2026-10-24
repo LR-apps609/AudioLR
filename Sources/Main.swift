@@ -71,6 +71,9 @@ struct AudioLRCommands: Commands {
             Toggle("Qualità \(Quality.fast.title)", isOn: Binding(get: { quality == Quality.fast.rawValue },
                                                                set: { if $0 { quality = Quality.fast.rawValue } }))
                 .keyboardShortcut("2", modifiers: [.command, .option])
+            Toggle("Qualità \(Quality.studio.title)", isOn: Binding(get: { quality == Quality.studio.rawValue },
+                                                                 set: { if $0 { quality = Quality.studio.rawValue } }))
+                .keyboardShortcut("3", modifiers: [.command, .option])
             Divider()
         }
         CommandMenu("Mix") {

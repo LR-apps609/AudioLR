@@ -85,7 +85,8 @@ struct EngineSettings: View {
 
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? "")),
-         ("Massima · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? ""))] +
+         ("Massima · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? "")),
+         ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? ""))] +
         Quality.best.models.enumerated().map { (i, m) in
             ("Riserva · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
         }.filter { $0.1 != nil }
@@ -198,8 +199,10 @@ struct GeneralSettings: View {
 struct AboutSettings: View {
     private let models: [(String, String, String)] = [
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
+        ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceRoFormer8", "Massima · voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
-        ("StrumentiSW", "Massima · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
+        ("VoceStudio", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
+        ("StrumentiSW", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-1", "Riserva · basso", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),

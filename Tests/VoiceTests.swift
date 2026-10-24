@@ -130,19 +130,30 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
         XCTAssertEqual(Quality.best.allModels, ["VoceRoFormer8", "StrumentiSW"])
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
+        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio", "StrumentiSW"])
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio"), "VoceRoFormer8")
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer8"), "VoceRoFormer")
+        XCTAssertNil(Quality.fallbackVoice(for: "VoceRoFormer"))
+        XCTAssertTrue(Quality.studio.everyModel.contains("VoceRoFormer"), "i modelli di riserva si dimenticano anche loro")
+        XCTAssertEqual(Theme.stems(for: .studio, split: true).count, 6)
     }
 
     // MARK: Con il modello vero
 
-    func testInstrumentsMatchSW() async throws {
+    func testInstrumentsMatchSW() async throws { try await matchesOriginal("StrumentiSW", label: "Strumenti SW") }
+
+    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio", label: "Voce Studio") }
+
+    /// Un pezzo di prova separato dall'app e dal modello originale (Tools/convert_roformer.py): tutti gli strumenti insieme.
+    private func matchesOriginal(_ name: String, label: String) async throws {
         executionTimeAllowance = 900
-        let (data, resp) = try await EndToEndTests.fixture("StrumentiSW-prova.f32")
-        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("modello strumenti non ancora pubblicato") }
+        let (data, resp) = try await EndToEndTests.fixture("\(name)-prova.f32")
+        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("\(name) non ancora pubblicato") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         let n = Int(all[0]), S = Int(all[1])
         let mix = [Array(all[2..<(2 + n)]), Array(all[(2 + n)..<(2 + 2 * n)])]
         let model: RoFormer
-        do { model = try await ModelStore.shared.roformer("StrumentiSW") { _ in } } catch { throw XCTSkip("modello strumenti non disponibile") }
+        do { model = try await ModelStore.shared.roformer(name) { _ in } } catch { throw XCTSkip("\(name) non disponibile") }
         XCTAssertEqual(model.config.chunk, n)
         XCTAssertEqual(model.stemCount, S)
         let start = Date()
@@ -156,13 +167,13 @@ final class VoiceTests: XCTestCase {
             }
         }
         let q = EndToEndTests.snr(ref, est)
-        let line = String(format: "Strumenti SW: %.1f dB dal modello originale, pezzo da %.1f s in %.1f s",
+        let line = String(format: "\(label): %.1f dB dal modello originale, pezzo da %.1f s in %.1f s",
                           q, Double(n) / 44_100, Date().timeIntervalSince(start))
         print(line)
         let path = "/tmp/audiolr-passi.txt"
         let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-        XCTAssertGreaterThan(q, 25, "gli strumenti dell'app sono diversi da quelli di SW originale")
+        XCTAssertGreaterThan(q, 25, "\(label): l'app dà un risultato diverso dal modello originale")
     }
 
     func testVoiceMatchesRoFormer() async throws {
