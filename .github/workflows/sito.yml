@@ -63,7 +63,7 @@ jobs:
         run: |
           npm i --prefix /tmp/pw playwright@1.47.2 --silent
           (cd /tmp/pw && npx playwright install --with-deps chromium > /dev/null)
-          (cd site && python3 -m http.server 8080 > /tmp/server.log 2>&1 &)
+          (python3 site/test/server.py site 8080 > /tmp/server.log 2>&1 &)
           sleep 2
           NODE_PATH=/tmp/pw/node_modules node site/test/browser.test.js http://127.0.0.1:8080/ | tee browser.log
           echo "::notice::$(grep -E 'Tracce|WAV' browser.log | tr '\n' ' ')"
@@ -126,10 +126,16 @@ jobs:
         run: |
           npm i --prefix /tmp/pw playwright@1.47.2 --silent
           (cd /tmp/pw && npx playwright install --with-deps ${{ matrix.browser }} > /dev/null)
-          (cd /tmp/sito && python3 -m http.server 8080 > /tmp/server.log 2>&1 &)
+          (python3 site/test/server.py /tmp/sito 8080 > /tmp/server.log 2>&1 &)
           sleep 2
-          NODE_PATH=/tmp/pw/node_modules node site/test/browser-full.test.js http://127.0.0.1:8080/ | tee full.log
-          grep -E "\] (4 s|WAV|Mono|Annulla|[0-9]+ s separati|Telefono|Nessuna|TUTTO)" full.log | while IFS= read -r l; do echo "::notice::$l"; done
+          set +e
+          NODE_PATH=/tmp/pw/node_modules node site/test/browser-full.test.js http://127.0.0.1:8080/ > full.log 2>&1
+          code=$?
+          cat full.log
+          # Ogni riga della prova nel riepilogo; se è fallita, l'errore come annotazione e il passo fallisce
+          grep -E "^\[" full.log | while IFS= read -r l; do echo "::notice::$l"; done
+          if [ $code -ne 0 ]; then echo "::error::$(grep -A4 'NON RIUSCITA' full.log | tr '\n' ' ' | cut -c1-900)"; fi
+          exit $code
       - uses: actions/upload-artifact@v6
         if: always()
         with:
