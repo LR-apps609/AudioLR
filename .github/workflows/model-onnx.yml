@@ -46,10 +46,15 @@ jobs:
           curl -fL --retry 3 -o m.ckpt "$B/${{ matrix.file }}.ckpt"
           curl -fL --retry 3 -o m.yaml "$B/${{ matrix.file }}.yaml" || curl -fL --retry 3 -o m.yaml "$B/model_bs_roformer_ep_317_sdr_12.9755.yaml"
       - name: Conversione e prova
+        shell: bash {0}
         run: |
-          set -o pipefail
-          ONNX=1 python Tools/convert_roformer.py m.ckpt m.yaml ${{ matrix.nome }} ${{ matrix.pezzo }} 2>&1 | tee conv.log
+          ONNX=1 python Tools/convert_roformer.py m.ckpt m.yaml ${{ matrix.nome }} ${{ matrix.pezzo }} > conv.log 2>&1
+          code=$?
+          tail -n 60 conv.log
           grep -E "RoFormer|STFT|ONNX|Fatto|pesi|stimata" conv.log | tail -n 12 | while IFS= read -r l; do echo "::notice::$l"; done
+          # Se non riesce, le ultime righe dell'errore nel riepilogo
+          if [ $code -ne 0 ]; then tail -n 8 conv.log | while IFS= read -r l; do echo "::error::$l"; done; fi
+          exit $code
       - name: Pacchetto
         run: |
           sha256sum ${{ matrix.nome }}.onnx | tee ${{ matrix.nome }}.onnx.sha256
