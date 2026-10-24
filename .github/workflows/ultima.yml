@@ -1,0 +1,27 @@
+# Segna come «ultima» la versione più alta (non l'ultima creata): con più compilazioni in parallelo
+# una versione più vecchia può essere pubblicata dopo una più nuova.
+name: Ultima versione
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/ultima.yml]
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  segna:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Versione più alta come «ultima»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TOP=$(gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^v[0-9]' | sed 's/^v//' \
+            | awk -F. '{ printf "%06d%06d%06d %s\n", $1, $2, $3, $0 }' | sort | tail -n 1 | cut -d" " -f2)
+          echo "::notice::Ultima versione: v$TOP"
+          gh release edit "v$TOP" --latest
