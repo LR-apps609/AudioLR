@@ -38,7 +38,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return nil
         case .best: return nil
-        case .studio: return "VoceStudio"
+        case .studio: return "VoceStudio2"
         }
     }
 
@@ -47,7 +47,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var instrumentModel: String? {
         switch self {
         case .fast: return nil
-        case .best, .studio: return "StrumentiSW"
+        case .best, .studio: return "StrumentiSW2"
         }
     }
 
@@ -60,7 +60,7 @@ enum Quality: String, CaseIterable, Identifiable {
     /// Se un modello voce non riesce su questo Mac (memoria, Mac più vecchio), quello più leggero da provare.
     static func fallbackVoice(for name: String) -> String? {
         switch name {
-        case "VoceStudio": return "VoceRoFormer8"
+        case "VoceStudio2": return "VoceRoFormer8"
         case "VoceRoFormer8": return lightVoice
         default: return nil
         }

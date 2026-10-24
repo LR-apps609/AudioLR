@@ -352,6 +352,20 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(Quality.current, .best, "di serie: massima qualità")
     }
 
+    func testObsoleteModelsAreRemoved() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("modelli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("StrumentiSW.mlmodelc"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("StrumentiSW2.mlmodelc"), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("VoceCori.json").path, contents: Data("{}".utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let removed = ModelStore.removeObsolete(in: dir)
+        XCTAssertEqual(Set(removed), ["StrumentiSW.mlmodelc", "VoceCori.json"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("StrumentiSW2.mlmodelc").path), "i modelli nuovi restano")
+        for m in Quality.allCases.flatMap(\.everyModel) + ExtraSplit.allCases.map(\.modelName) {
+            XCTAssertFalse(ModelStore.obsolete.contains(m), "\(m) è in uso: non va tolto")
+        }
+    }
+
     func testOldGraphicsChoiceIsReconsideredWithTheNewThreshold() {
         let d = UserDefaults(suiteName: "soglia-\(UUID().uuidString)")!
         // Scelta salvata con la vecchia soglia di 30 dB: 27 dB → grafica. Ora vale il Neural Engine

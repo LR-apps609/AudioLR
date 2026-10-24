@@ -83,6 +83,23 @@ final class ModelStore: @unchecked Sendable {
         return RoFormer(model: try await mlModel(name, units: units, progress: progress), config: cfg)
     }
 
+    /// Modelli di versioni passate, sostituiti da altri: si tolgono dal disco all'avvio (centinaia di MB).
+    static let obsolete = ["StrumentiSW", "VoceStudio", "VoceCori"]
+
+    /// Toglie dal disco i modelli che nessuna versione attuale usa più.
+    @discardableResult
+    static func removeObsolete(in folder: URL = ModelStore.folder) -> [String] {
+        let fm = FileManager.default
+        var removed: [String] = []
+        for name in obsolete {
+            for ext in ["mlmodelc", "json"] {
+                let url = folder.appendingPathComponent("\(name).\(ext)")
+                if fm.fileExists(atPath: url.path), (try? fm.removeItem(at: url)) != nil { removed.append(url.lastPathComponent) }
+            }
+        }
+        return removed
+    }
+
     /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).
     func forget() { lock.withLock { cores.removeAll(); models.removeAll() } }
 

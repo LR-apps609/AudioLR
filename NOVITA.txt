@@ -5,6 +5,7 @@ Novità della 0.13.0 «Velocità»:
 • Studio resta il massimo della qualità: voce dal modello più pulito più SW sugli strumenti
 • Nuova impostazione «Velocità» (Impostazioni › Motore): Equilibrio, più pulita, o Rapida, circa un quarto più veloce
 • Se il Neural Engine sbaglia davvero su una canzone, AudioLR se ne accorge e continua con la grafica
+• Modelli rifatti per il Neural Engine: a 16 bit non «traboccano» più con i brani forti (fedeltà 59 dB invece di 33), quindi il Neural Engine lavora di più e meglio. Si scaricano una volta (circa 330 MB per Massima); i vecchi vengono tolti dal disco da soli
 
 Novità della 0.12.1 «Ritocchi»:
 • Le onde del mixer sono a colori pieni anche a riposo; mentre suona si colora la parte ascoltata

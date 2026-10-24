@@ -144,6 +144,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UpdateCheck.autoCheckSoon()          // una volta al giorno, in silenzio
         Prefs.applyAppearance()
+        // I modelli sostituiti da versioni nuove non servono più: spazio libero sul disco
+        DispatchQueue.global(qos: .utility).async { ModelStore.removeObsolete() }
     }
 
     /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone

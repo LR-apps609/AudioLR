@@ -144,10 +144,10 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Theme.stems(for: .fast, split: true), ["vocals", "drums", "bass", "other"])
         XCTAssertEqual(Theme.stems(for: .best, split: true).count, 6)
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
-        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW"], "Massima: un solo modello, SW")
+        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"], "Massima: un solo modello, SW")
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
-        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio", "StrumentiSW"])
-        XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio"), "VoceRoFormer8")
+        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio2", "StrumentiSW2"])
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio2"), "VoceRoFormer8")
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer8"), "VoceRoFormer")
         XCTAssertNil(Quality.fallbackVoice(for: "VoceRoFormer"))
         XCTAssertTrue(Quality.studio.everyModel.contains("VoceRoFormer"), "i modelli di riserva si dimenticano anche loro")
@@ -156,11 +156,11 @@ final class VoiceTests: XCTestCase {
 
     // MARK: Con il modello vero
 
-    func testInstrumentsMatchSW() async throws { try await matchesOriginal("StrumentiSW", label: "Strumenti SW") }
+    func testInstrumentsMatchSW() async throws { try await matchesOriginal("StrumentiSW2", label: "Strumenti SW") }
 
-    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio", label: "Voce Studio") }
+    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio2", label: "Voce Studio") }
 
-    func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori", label: "Voce e cori") }
+    func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori2", label: "Voce e cori") }
 
     /// Un pezzo di prova separato dall'app e dal modello originale (Tools/convert_roformer.py): tutti gli strumenti insieme.
     private func matchesOriginal(_ name: String, label: String) async throws {

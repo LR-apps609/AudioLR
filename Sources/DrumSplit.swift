@@ -111,7 +111,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
     var source: String { self == .drums ? "drums" : "vocals" }
     /// Le tracce che ne escono.
     var parts: [String] { self == .drums ? DrumSplitter.parts : ["lead", "backing"] }
-    var modelName: String { self == .drums ? DrumSplitter.modelName : "VoceCori" }
+    var modelName: String { self == .drums ? DrumSplitter.modelName : "VoceCori2" }
 
     var title: String { self == .drums ? "Dividi la batteria" : "Separa voce e cori" }
     var detail: String {

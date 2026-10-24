@@ -215,10 +215,10 @@ struct AboutSettings: View {
     private let models: [(String, String, String)] = [
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
-        ("VoceCori", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
+        ("VoceCori2", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
         ("VoceRoFormer8", "Riserva · voce di Studio", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
-        ("VoceStudio", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
-        ("StrumentiSW", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
+        ("VoceStudio2", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
+        ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-1", "Riserva · basso", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),
