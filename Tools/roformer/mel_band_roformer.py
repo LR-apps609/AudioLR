@@ -63,11 +63,12 @@ class RMSNorm(Module):
         self.gamma = nn.Parameter(torch.ones(dim))
 
     def forward(self, x):
+        # AudioLR: forma sicura a 16 bit (Neural Engine). Prima si divide per il valore più grande,
+        # così la somma dei quadrati non trabocca; il risultato è lo stesso di F.normalize.
         x = x.to(self.gamma.device)
-        if x.dtype in (torch.float16, torch.bfloat16):
-            normalized = F.normalize(x.float(), dim=-1).to(x.dtype)
-        else:
-            normalized = F.normalize(x, dim=-1)
+        peak = x.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+        y = x / peak
+        normalized = y / torch.sqrt((y * y).sum(dim=-1, keepdim=True)).clamp(min=1e-12)
         return normalized * self.scale * self.gamma
 
 

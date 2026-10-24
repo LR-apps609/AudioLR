@@ -11,5 +11,6 @@ class Attend(nn.Module):
 
     def forward(self, q, k, v):
         scale = self.scale if self.scale is not None else q.shape[-1] ** -0.5
-        sim = torch.matmul(q, k.transpose(-1, -2)) * scale
+        # La scala prima del prodotto (non dopo): numeri più piccoli, niente traboccamenti a 16 bit
+        sim = torch.matmul(q * scale, k.transpose(-1, -2))
         return torch.matmul(sim.softmax(dim=-1), v)
