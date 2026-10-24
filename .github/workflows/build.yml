@@ -107,6 +107,9 @@ jobs:
           done
           # Il test che stava girando quando si è fermato (partito ma mai finito)
           awk '/Test Case .* started/ {cur=$0} /Test Case .* (passed|failed|skipped)/ {cur=""} /Restarting after unexpected exit/ {if (cur!="") print "::error::Interrotto (si è chiuso o ha superato il tempo): " cur; cur=""}' test.log | sort -u | head -n 5
+          # Dove si è chiuso: le prime righe del crash (funzioni dell'app e dei sistemi), una annotazione sola
+          trace=$(grep -A 40 -m 1 "Thread 0 crashed" test.log | grep -E "AudioLR|SwiftUI|AppKit|CoreML|Fatal|error:|at /" | head -n 14 | tr '\n' '|' | cut -c1-1800)
+          [ -n "$trace" ] && echo "::error::Crash: $trace" || true
           passed=$(grep -cE "Test Case .* passed" test.log || true)
           failed=$(grep -cE "Test Case .* failed" test.log || true)
           skipped=$(grep -cE "Test Case .* skipped" test.log || true)

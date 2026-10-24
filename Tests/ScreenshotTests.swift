@@ -23,11 +23,18 @@ final class ScreenshotTests: XCTestCase {
             let win = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
             win.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             win.contentView = host
+            win.setFrameOrigin(NSPoint(x: 40, y: 40))
             win.orderFrontRegardless()
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw XCTSkip("niente schermo") }
-            host.cacheDisplay(in: host.bounds, to: rep)
+            RunLoop.main.run(until: Date().addingTimeInterval(1.0))
+            // La finestra così come la mostra macOS (anche le parti disegnate con la grafica, come onde e logo):
+            // le finestre della propria app si fotografano senza permessi
+            guard let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(win.windowNumber),
+                                                   [.boundsIgnoreFraming, .bestResolution]) else {
+                win.orderOut(nil)
+                throw XCTSkip("niente schermo su questo Mac")
+            }
+            let rep = NSBitmapImageRep(cgImage: cg)
             let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
             try png.write(to: out.appendingPathComponent("\(name)-\(dark ? "scuro" : "chiaro").png"))
             win.orderOut(nil)
