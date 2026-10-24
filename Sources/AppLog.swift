@@ -45,15 +45,17 @@ enum AppLog {
     }
 }
 
+/// Un'azione che si fa una volta sola, anche se chiamata da più parti.
+final class RunOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func run(_ f: () -> Void) { lock.withLock { if !done { done = true; f() } } }
+}
+
 /// Esegue `op`, ma smette di aspettarlo dopo `seconds`: restituisce nil se non ha finito in tempo.
 /// (Il lavoro continua in sottofondo: serve per le aperture dei modelli che il sistema non sa interrompere.)
 func withTimeout<T>(_ seconds: Double, _ op: @escaping () async throws -> T) async throws -> T? {
-    final class Once: @unchecked Sendable {
-        private let lock = NSLock()
-        private var done = false
-        func run(_ f: () -> Void) { lock.withLock { if !done { done = true; f() } } }
-    }
-    let once = Once()
+    let once = RunOnce()
     return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<T?, Error>) in
         Task {
             do { let v = try await op(); once.run { cont.resume(returning: v) } } catch { once.run { cont.resume(throwing: error) } }
