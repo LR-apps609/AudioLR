@@ -18,6 +18,8 @@
   --voice: #e5917a; --drums: #e6b45c; --bass: #b497d0; --other: #76c3b9; --base: #82a5cf; --shadow: 0 10px 30px rgba(0,0,0,.35); color-scheme: dark }
 
 * { box-sizing: border-box; }
+/* «hidden» vince sempre, anche sugli elementi che hanno un display proprio */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
 body { margin: 0; background: linear-gradient(var(--bg), var(--bg2)) fixed; color: var(--ink); font: 16.5px/1.6 var(--body); }
@@ -78,9 +80,9 @@ section { padding-block: 44px; }
 .seg { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
 .seg button { border: 0; background: transparent; color: var(--ink); font: 600 13.5px var(--body); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--brass); color: #fff; }
-.stem { display: grid; grid-template-columns: auto 128px auto auto 1fr auto; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: color-mix(in srgb, var(--well) 70%, transparent); margin-top: 6px; }
-.badge { width: 32px; height: 32px; border-radius: 9px; background: var(--c); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 13px; }
-.stem b { font-size: 14px; }
+.stem { display: grid; grid-template-columns: auto 150px auto auto 1fr auto; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: color-mix(in srgb, var(--well) 70%, transparent); margin-top: 6px; }
+.badge { width: 30px; height: 30px; border-radius: 9px; background: var(--c); box-shadow: 0 3px 8px color-mix(in srgb, var(--c) 35%, transparent); }
+.stem b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 12px var(--body); cursor: pointer; }
 .ms[aria-pressed="true"].m { background: var(--mute); color: #fff; border-color: transparent; }
 .ms[aria-pressed="true"].s { background: var(--brass); color: #fff; border-color: transparent; }

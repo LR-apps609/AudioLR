@@ -136,7 +136,7 @@
       row.className = "stem";
       const color = `var(${COLORS[t.key]})`;
       const mixable = t.key !== "instrumental";
-      row.innerHTML = `<span class="badge" style="--c:${color}">${NAMES[t.key][0]}</span><b>${NAMES[t.key]}</b>` +
+      row.innerHTML = `<span class="badge" style="--c:${color}" aria-hidden="true"></span><b>${NAMES[t.key]}</b>` +
         (mixable ? `<button class="ms m" aria-pressed="false" title="Muto">M</button><button class="ms s" aria-pressed="false" title="Solo">S</button>`
                  : `<span></span><span></span>`) +
         `<canvas aria-hidden="true"></canvas><button class="btn ghost small">WAV</button>`;
