@@ -1,0 +1,51 @@
+# Modello voce «Studio»: BS-RoFormer di viperx (ep 317, il più pulito sulla voce nelle prove su MUSDB):
+# conversione in Core ML, prove di fedeltà e pubblicazione tra i file scaricabili.
+name: Modello voce Studio
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/model-studio.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          # Se l'installazione fallisce, le ultime righe diventano «annotazioni» leggibili dalla pagina della compilazione
+          pip install "torch==2.2.2" "coremltools==7.2" "numpy<2" pyyaml einops beartype \
+            "numba==0.60.0" "llvmlite==0.43.0" "librosa==0.10.2.post1" "rotary-embedding-torch==0.6.5" scipy > pip.log 2>&1 || {
+            grep -iE "error|requires|conflict|no matching" pip.log | tail -n 12 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1; }
+          python -c "import torch, coremltools, librosa, rotary_embedding_torch; print(torch.__version__, coremltools.__version__, librosa.__version__)"
+      - name: Modello originale
+        run: |
+          B=https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs
+          curl -fL --retry 3 -o sw.ckpt $B/model_bs_roformer_ep_317_sdr_12.9755.ckpt
+          curl -fL --retry 3 -o sw.yaml $B/model_bs_roformer_ep_317_sdr_12.9755.yaml
+      - name: Conversione e prova
+        run: |
+          python Tools/convert_roformer.py sw.ckpt sw.yaml VoceStudio 352800 2>&1 | tee conv.log || true
+          # Le righe importanti (e gli errori) come annotazioni
+          grep -E "RoFormer|STFT|Core ML|Fatto|pesi|stimata|Error|error|assert|Killed" conv.log | tail -n 15 | while IFS= read -r l; do echo "::notice::$l"; done
+          test -f VoceStudio.json
+      - name: Pacchetto
+        run: |
+          ditto -c -k --keepParent VoceStudio.mlpackage VoceStudio.mlpackage.zip
+          shasum -a 256 VoceStudio.mlpackage.zip | tee VoceStudio.sha256
+          ls -la VoceStudio.*
+          echo "::notice::VoceStudio: $(python -c "import json;d=json.load(open('VoceStudio.json'));print(d['precision'],'bit,',d['db'],'dB,',d['frames'],'colonne')")"
+      - name: Tra i file scaricabili
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload modelli-1 VoceStudio.mlpackage.zip VoceStudio.sha256 VoceStudio.json VoceStudio-prova.f32 --clobber
