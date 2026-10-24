@@ -163,7 +163,15 @@ jobs:
               echo "La release $TAG esiste già: non la tocco."
             fi
           else
-            gh release create "$TAG" "$FILE" "$ZIP" --title "AudioLR $VERSION" --notes-file NOVITA.txt
+            # Se nel frattempo è uscita una versione più alta (compilazioni in parallelo), questa non si pubblica:
+            # GitHub segnerebbe come «ultima» una versione più vecchia
+            TOP=$( (gh release list --limit 30 --json tagName --jq '.[].tagName' | grep '^v[0-9]'; echo "$TAG") | sed 's/^v//' \
+              | awk -F. '{ printf "%06d%06d%06d %s\n", $1, $2, $3, $0 }' | sort | tail -n 1 | cut -d" " -f2)
+            if [ "$TOP" != "$VERSION" ]; then
+              echo "::notice::Esiste già la $TOP, più nuova: la $VERSION non si pubblica."
+            else
+              gh release create "$TAG" "$FILE" "$ZIP" --title "AudioLR $VERSION" --notes-file NOVITA.txt
+            fi
           fi
 
       - uses: actions/upload-artifact@v6
