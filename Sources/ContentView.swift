@@ -469,6 +469,13 @@ struct ContentView: View {
                 }
             }
             .controlSize(.small)
+            Toggle(isOn: $mixer.ramp) {
+                Text(mixer.ramp ? "Rampa \(Int((MixPlayer.rampStart * 100).rounded()))% → \(Int((MixPlayer.rampTarget * 100).rounded()))%" : "Rampa")
+                    .font(.system(size: 11.5, weight: .medium))
+            }
+            .toggleStyle(.button).controlSize(.small)
+            .disabled(!mixer.isLooping)
+            .help("Il passaggio A-B riparte ogni volta un po' più veloce: dal 70% al 100%, +5% a giro")
             Spacer()
             if mixer.rate != 1 || mixer.semitones != 0 || mixer.loopA != nil {
                 Button("Normale") { mixer.resetPractice() }.controlSize(.small)
