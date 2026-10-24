@@ -1,0 +1,85 @@
+# Il sito: prepara ONNX Runtime Web e il modello accanto alle pagine, prova il motore contro Demucs
+# e il sito intero in un browser vero, poi lo pubblica su GitHub Pages.
+name: Sito
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, sito]
+    paths: [site/**, .github/workflows/sito.yml]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sito
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: ONNX Runtime Web e modello accanto alle pagine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p site/vendor site/models /tmp/ort
+          (cd /tmp/ort && npm pack onnxruntime-web@1.19.2 --silent && tar xzf onnxruntime-web-1.19.2.tgz)
+          cp /tmp/ort/package/dist/ort.webgpu.min.js /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.mjs /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.wasm site/vendor/
+          cp /tmp/ort/package/LICENSE site/vendor/LICENZA-onnxruntime.txt 2>/dev/null || true
+          gh release download modelli-web --repo "$GITHUB_REPOSITORY" --dir site/models --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --pattern "HTDemucsWeb-prova.f32" --clobber
+          # La descrizione del modello con i suoi pezzi e la dimensione totale (per la barra di download)
+          python3 - <<'PY'
+          import json, os, glob
+          d = json.load(open("site/models/HTDemucsWeb.json"))
+          parts = sorted(os.path.basename(p) for p in glob.glob("site/models/HTDemucsWeb.onnx.part*"))
+          d["parts"] = parts
+          d["bytes"] = sum(os.path.getsize("site/models/" + p) for p in parts)
+          json.dump(d, open("site/models/HTDemucsWeb.json", "w"))
+          print(d["parts"], d["bytes"])
+          PY
+          ls -la site/vendor site/models
+      - name: Prova del motore (Node) contro Demucs originale
+        run: |
+          mkdir -p /tmp/t && cat site/models/HTDemucsWeb.onnx.part* > /tmp/t/HTDemucsWeb.onnx && mv site/models/HTDemucsWeb-prova.f32 /tmp/t/
+          npm i --prefix /tmp/t onnxruntime-node@1.19.2 --silent
+          NODE_PATH=/tmp/t/node_modules node site/test/engine.test.js /tmp/t | tee engine.log
+          echo "::notice::$(grep -E 'Sito|Canzone' engine.log | tr '\n' ' ')"
+      - name: Prova nel browser vero (Chromium)
+        run: |
+          npm i --prefix /tmp/pw playwright@1.47.2 --silent
+          (cd /tmp/pw && npx playwright install --with-deps chromium > /dev/null)
+          (cd site && python3 -m http.server 8080 > /tmp/server.log 2>&1 &)
+          sleep 2
+          NODE_PATH=/tmp/pw/node_modules node site/test/browser.test.js http://127.0.0.1:8080/ | tee browser.log
+          echo "::notice::$(grep -E 'Tracce|WAV' browser.log | tr '\n' ' ')"
+      - name: Schermata del sito
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f sito-risultati.png ] || exit 0
+          gh release view schermate --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || exit 0
+          gh release upload schermate sito-risultati.png --repo "$GITHUB_REPOSITORY" --clobber
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
