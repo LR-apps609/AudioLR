@@ -68,7 +68,7 @@ jobs:
         run: |
           [ -f sito-risultati.png ] || exit 0
           gh release view schermate --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || exit 0
-          gh release upload schermate sito-risultati.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload schermate sito-risultati.png sito-inizio.png --repo "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

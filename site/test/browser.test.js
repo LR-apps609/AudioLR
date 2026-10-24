@@ -40,6 +40,10 @@ function testSong(seconds = 4) {
   console.log(`Tracce: ${rows.join(", ")} · ${backend} · ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   const outside = requests.filter((u) => !u.startsWith(url) && !u.startsWith("blob:") && !u.startsWith("data:"));
   if (rows.length !== 5) throw new Error("dovevano esserci 5 tracce, ce ne sono " + rows.length);
+  // A fine lavoro si vede solo il mixer: inizio e barra di avanzamento nascosti davvero
+  for (const id of ["#drop", "#working"]) {
+    if (await page.isVisible(id)) throw new Error(id + " è ancora visibile insieme ai risultati");
+  }
   if (outside.length) throw new Error("richieste fuori dal sito: " + outside.join(", "));
   const csp = problems.filter((p) => /Content Security Policy|Refused/.test(p));
   if (csp.length) throw new Error("regola di sicurezza violata: " + csp.join(" | "));
@@ -48,7 +52,9 @@ function testSong(seconds = 4) {
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#stems .stem:first-child .btn")]);
   console.log("WAV:", download.suggestedFilename());
   if (problems.length) console.log("Avvisi nella console:", problems.slice(0, 5).join(" | "));
-  await page.screenshot({ path: "sito-risultati.png", fullPage: false });
+  await page.locator("#prova").screenshot({ path: "sito-risultati.png" });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "sito-inizio.png" });
   await browser.close();
   console.log("OK");
 })().catch((e) => { console.error(String(e)); process.exit(1); });
