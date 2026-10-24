@@ -82,6 +82,8 @@ struct EngineSettings: View {
     @State private var size = ModelFiles.sizeText()
     @State private var decisions: [(String, EngineChoice.Decision?)] = EngineSettings.load()
     @State private var confirmDelete = false
+    @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
+    @AppStorage(Prefs.dualKey) private var dual = true
 
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? "")),
@@ -109,6 +111,19 @@ struct EngineSettings: View {
                 Text("Motore")
             } footer: {
                 Text("Al primo uso di ogni modello AudioLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("Velocità", selection: $speed) {
+                    Text("Equilibrio (più pulita)").tag("equilibrio")
+                    Text("Rapida (circa un quarto più veloce)").tag("rapida")
+                }
+                Toggle("Neural Engine e grafica insieme", isOn: $dual)
+                    .disabled(!SeparationJob.hasNeuralEngine)
+            } footer: {
+                Text(SeparationJob.hasNeuralEngine
+                     ? "Con i due insieme, i pezzi della canzone si dividono tra Neural Engine e grafica: molto più veloce sui Mac con chip Apple. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
+                     : "Questo Mac non ha il Neural Engine: lavora la grafica. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

@@ -348,9 +348,9 @@ final class SeparationJob: ObservableObject {
                     var used = v
                     func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
                         do {
-                            let voice = try await ModelStore.shared.voice(used, units: units) { _ in }
-                            voice.overlap = Prefs.voiceOverlap
-                            return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                            let (voice, helpers) = try await SeparationJob.workers(used, units: units)
+                            voice.overlap = Prefs.voiceOverlapValue
+                            return try voice.separate(mix, helpers: helpers, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
                         } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && !cancel.isSet
                                     && Quality.fallbackVoice(for: used) != nil {
                             // Il modello voce non riesce (memoria, Mac più vecchio): si usa quello più leggero
@@ -364,7 +364,8 @@ final class SeparationJob: ObservableObject {
                         do { vo = try await runVoice(.cpuAndGPU) } catch is ImplausibleResult {
                             throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
                         }
-                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: d.agreement)
+                        // 0: il Neural Engine qui ha dato un risultato sbagliato, si resta sulla grafica
+                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: used)
                     }
                     decisions[used] = d
@@ -383,8 +384,9 @@ final class SeparationJob: ObservableObject {
                     var d = EngineChoice.stored(w) ?? EngineChoice.decide(agreement: 99)
                     let input = instrumentsInput
                     func runSW(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
-                        let model = try await ModelStore.shared.roformer(w, units: units) { _ in }
-                        let audio = try model.separateAll(input, progress: { report(voiceShare + (1 - voiceShare) * $0) },
+                        let (model, helpers) = try await SeparationJob.workers(w, units: units)
+                        model.overlap = Prefs.instrumentOverlap
+                        let audio = try model.separateAll(input, helpers: helpers, progress: { report(voiceShare + (1 - voiceShare) * $0) },
                                                           isCancelled: { cancel.isSet })
                         return (model.config.sources, audio)
                     }
@@ -393,7 +395,7 @@ final class SeparationJob: ObservableObject {
                         do { res = try await runSW(.cpuAndGPU) } catch is ImplausibleResult {
                             throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
                         }
-                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: d.agreement)
+                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: w)
                     }
                     decisions[w] = d
@@ -418,7 +420,7 @@ final class SeparationJob: ObservableObject {
                         do { result = try run(core) } catch is ImplausibleResult {
                             throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
                         }
-                        let d = EngineChoice.Decision(units: .cpuAndGPU, agreement: decisions[name]!.agreement)
+                        let d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: name)
                         decisions[name] = d
                     }
@@ -450,6 +452,22 @@ final class SeparationJob: ObservableObject {
                 await self?.afterFailure()
             }
         }
+    }
+
+    /// Questo Mac ha il Neural Engine (i Mac con chip Apple sì, quelli Intel no).
+    nonisolated static let hasNeuralEngine: Bool = MLComputeDevice.allComputeDevices.contains {
+        if case .neuralEngine = $0 { return true } else { return false }
+    }
+
+    /// Le copie di un modello RoFormer che lavorano insieme sui pezzi della canzone: una sul Neural Engine
+    /// e una sulla grafica, se il Neural Engine è affidabile su questo Mac; altrimenti una sola, dove deciso.
+    nonisolated static func workers(_ name: String, units: MLComputeUnits) async throws -> (RoFormer, [RoFormer]) {
+        if units == .all && hasNeuralEngine && Prefs.dualEngine {
+            let ane = try await ModelStore.shared.roformer(name, units: .cpuAndNeuralEngine) { _ in }
+            let gpu = try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }
+            return (ane, [gpu])
+        }
+        return (try await ModelStore.shared.roformer(name, units: units) { _ in }, [])
     }
 
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.

@@ -104,8 +104,8 @@ final class VoiceRoFormer {
     let stft: PlainSTFT
     /// Per i test: una rete finta al posto del modello (riceve x, restituisce le maschere).
     var fakeNetwork: (([Float]) -> [Float])?
-    /// Quanto si sovrappongono due pezzi: 2 = ogni punto è coperto da due pezzi.
-    var overlap = 2
+    /// Quanto si sovrappongono due pezzi: 2 = ogni punto è coperto da due pezzi (1,5 = più rapido).
+    var overlap: Double = 2
 
     init(model: MLModel?, config: RoFormerConfig) {
         self.model = model
@@ -188,38 +188,67 @@ final class VoiceRoFormer {
     }
 
     /// La voce di tutta la canzone (2 canali), a pezzi sovrapposti.
-    func separate(_ mix: [[Float]], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [[Float]] {
-        try separateAll(mix, progress: progress, isCancelled: isCancelled)[primary]
+    func separate(_ mix: [[Float]], helpers: [RoFormer] = [], progress: (Double) -> Void = { _ in },
+                  isCancelled: () -> Bool = { false }) throws -> [[Float]] {
+        try separateAll(mix, helpers: helpers, progress: progress, isCancelled: isCancelled)[primary]
     }
 
     /// Ogni strumento di tutta la canzone (strumento × canale × campione), a pezzi sovrapposti.
-    func separateAll(_ mix: [[Float]], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [[[Float]]] {
+    /// `helpers`: altre copie dello stesso modello (per esempio una sul Neural Engine e una sulla grafica)
+    /// che lavorano insieme a questa, ognuna sul pezzo successivo libero.
+    func separateAll(_ mix: [[Float]], helpers: [RoFormer] = [], progress: (Double) -> Void = { _ in },
+                     isCancelled: () -> Bool = { false }) throws -> [[[Float]]] {
         try Self.stitch(mix, chunk: config.chunk, overlap: overlap, stems: stemCount, progress: progress,
-                        isCancelled: isCancelled, run: runChunkAll)
+                        isCancelled: isCancelled, runners: [runChunkAll] + helpers.map { $0.runChunkAll })
     }
 
     /// Pezzi sovrapposti, ricuciti con la finestra di Hamming (come audio-separator): vale per ogni modello
-    /// che lavora a pezzi di misura fissa e dà `stems` strumenti. Il primo pezzo passa il controllo di plausibilità.
-    static func stitch(_ mix: [[Float]], chunk: Int, overlap: Int, stems S: Int,
+    /// che lavora a pezzi di misura fissa e dà `stems` strumenti. I pezzi sono indipendenti: con più
+    /// `runners` (copie del modello su unità di calcolo diverse) ognuno prende il prossimo pezzo libero,
+    /// e il lavoro si divide da solo secondo la velocità di ciascuno. Ogni pezzo passa il controllo di plausibilità.
+    static func stitch(_ mix: [[Float]], chunk: Int, overlap: Double, stems S: Int,
                        progress: (Double) -> Void, isCancelled: () -> Bool,
-                       run: ([[Float]]) throws -> [[[Float]]]) throws -> [[[Float]]] {
+                       runners: [([[Float]]) throws -> [[[Float]]]]) throws -> [[[Float]]] {
+        precondition(!runners.isEmpty)
         let length = mix[0].count
-        let step = max(1, chunk / max(overlap, 1))
+        let step = max(1, Int((Double(chunk) / max(overlap, 1)).rounded()))
         let w = hamming(chunk)
         var out = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: S)
         var count = [Float](repeating: 0, count: length)
         let starts = Array(stride(from: 0, to: length, by: step))
-        for (n, start) in starts.enumerated() {
-            if isCancelled() { throw CancellationError() }
-            let len = min(chunk, length - start)
-            var piece = [[Float]](repeating: [Float](repeating: 0, count: chunk), count: 2)
-            for c in 0..<2 { for i in 0..<len { piece[c][i] = mix[c][start + i] } }
-            let v = try run(piece)
-            if n == 0, !plausible(piece: piece, stems: v) { throw ImplausibleResult() }
-            for k in 0..<S { for c in 0..<2 { for i in 0..<len { out[k][c][start + i] += v[k][c][i] * w[i] } } }
-            for i in 0..<len { count[start + i] += w[i] }
-            progress(Double(n + 1) / Double(starts.count))
+        let lock = NSLock()
+        var next = 0, done = 0
+        var failure: Error?
+        DispatchQueue.concurrentPerform(iterations: runners.count) { r in
+            while true {
+                lock.lock()
+                if failure != nil || next >= starts.count { lock.unlock(); return }
+                let n = next
+                next += 1
+                lock.unlock()
+                if isCancelled() { lock.withLock { failure = failure ?? CancellationError() }; return }
+                let start = starts[n]
+                let len = min(chunk, length - start)
+                var piece = [[Float]](repeating: [Float](repeating: 0, count: chunk), count: 2)
+                for c in 0..<2 { for i in 0..<len { piece[c][i] = mix[c][start + i] } }
+                let v: [[[Float]]]
+                do {
+                    v = try runners[r](piece)
+                    guard plausible(piece: piece, stems: v) else { throw ImplausibleResult() }
+                } catch {
+                    lock.withLock { failure = failure ?? error }
+                    return
+                }
+                lock.lock()
+                for k in 0..<S { for c in 0..<2 { for i in 0..<len { out[k][c][start + i] += v[k][c][i] * w[i] } } }
+                for i in 0..<len { count[start + i] += w[i] }
+                done += 1
+                let d = done
+                lock.unlock()
+                progress(Double(d) / Double(starts.count))
+            }
         }
+        if let failure { throw failure }
         for i in 0..<length { count[i] = 1 / max(count[i], 1e-10) }
         for k in 0..<S { for c in 0..<2 { for i in 0..<length { out[k][c][i] *= count[i] } } }
         return out
@@ -241,6 +270,8 @@ final class VoiceRoFormer {
                 b += v * v
             }
         }
-        return a == 0 || b / a < 2
+        // Un pezzo quasi muto (inizio o fine della canzone) non dice niente: si accetta
+        if a < 1e-6 * Double(piece[0].count) { return true }
+        return b / a < 2
     }
 }

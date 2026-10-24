@@ -87,6 +87,17 @@ enum Prefs {
         }
     }
 
+    /// Velocità della separazione: «equilibrio» (di serie) o «rapida» (pezzi meno sovrapposti, circa un quarto più veloce).
+    static let speedKey = "speedMode"
+    static var fast: Bool { UserDefaults.standard.string(forKey: speedKey) == "rapida" }
+    /// Neural Engine e grafica al lavoro insieme sui pezzi della canzone (di serie sì).
+    static let dualKey = "dualEngine"
+    static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
+
+    /// Sovrapposizione dei pezzi per il modello voce e per quello degli strumenti.
+    static var voiceOverlapValue: Double { fast ? 1.5 : Double(voiceOverlap) }
+    static var instrumentOverlap: Double { fast ? 1.5 : 2 }
+
     /// Quante volte ogni punto della canzone passa nel modello voce: 2 equilibrio, 4 più preciso e più lento.
     static var voiceOverlap: Int {
         let v = UserDefaults.standard.integer(forKey: voiceOverlapKey)

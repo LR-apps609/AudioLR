@@ -117,7 +117,9 @@ enum Quality: String, CaseIterable, Identifiable {
 /// La scelta del motore per ogni modello, fatta una volta sola su questo Mac e ricordata.
 enum EngineChoice {
     /// Sotto questa soglia Neural Engine e grafica danno risultati diversi in modo udibile.
-    static let threshold = 30.0
+    /// 20 dB = differenza dell'1% dell'energia: molto sotto l'errore della separazione stessa (circa 11 dB),
+    /// quindi non si sente. Prima era 30: troppo severa, molti Mac con chip Apple finivano sulla sola grafica.
+    static let threshold = 20.0
 
     struct Decision: Equatable {
         let units: MLComputeUnits
@@ -125,9 +127,14 @@ enum EngineChoice {
         let agreement: Double
 
         var text: String {
-            units == .all
-                ? String(format: "Neural Engine (verificato: %.0f dB)", agreement)
-                : String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement)
+            if units == .all {
+                return SeparationJob.hasNeuralEngine
+                    ? String(format: "Neural Engine e grafica (verificato: %.0f dB)", agreement)
+                    : "Grafica e processore"
+            }
+            return agreement > 0
+                ? String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement)
+                : "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
         }
     }
 
@@ -137,7 +144,8 @@ enum EngineChoice {
         guard let d = defaults.dictionary(forKey: key(model)),
               let raw = d["units"] as? Int, let units = MLComputeUnits(rawValue: raw),
               let agreement = d["agreement"] as? Double else { return nil }
-        return Decision(units: units, agreement: agreement)
+        // La scelta si rifà con la soglia attuale; 0 vuol dire «il Neural Engine ha sbagliato davvero»: resta la grafica
+        return agreement > 0 ? decide(agreement: agreement) : Decision(units: units, agreement: agreement)
     }
 
     static func decide(agreement: Double) -> Decision {

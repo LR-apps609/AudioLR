@@ -71,6 +71,22 @@ final class VoiceTests: XCTestCase {
         XCTAssertLessThan(err, 1e-3)
     }
 
+    func testTwoWorkersGiveTheSameResultAsOne() throws {
+        let one = identity(chunk: 8820), a = identity(chunk: 8820), b = identity(chunk: 8820)
+        let mix = tones(60_000)
+        let single = try one.separate(mix)
+        let double = try a.separate(mix, helpers: [b])
+        var err: Float = 0
+        for c in 0..<2 { for i in 0..<60_000 { err = max(err, abs(single[c][i] - double[c][i])) } }
+        XCTAssertLessThan(err, 1e-5, "dividere i pezzi tra due copie non cambia il risultato")
+        // Anche con meno sovrapposizione («Rapida») la canzone torna intera
+        a.overlap = 1.5
+        let fast = try a.separate(mix, helpers: [b])
+        var e2: Float = 0
+        for c in 0..<2 { for i in 0..<60_000 { e2 = max(e2, abs(fast[c][i] - mix[c][i])) } }
+        XCTAssertLessThan(e2, 1e-3)
+    }
+
     func testImplausibleVoiceIsCaught() {
         let v = identity(chunk: 8820)
         v.fakeNetwork = { x in [Float](repeating: 40, count: x.count) }

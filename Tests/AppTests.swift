@@ -352,6 +352,17 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(Quality.current, .best, "di serie: massima qualità")
     }
 
+    func testOldGraphicsChoiceIsReconsideredWithTheNewThreshold() {
+        let d = UserDefaults(suiteName: "soglia-\(UUID().uuidString)")!
+        // Scelta salvata con la vecchia soglia di 30 dB: 27 dB → grafica. Ora vale il Neural Engine
+        EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 27), for: "VoceRoFormer8", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("VoceRoFormer8", defaults: d)?.units, .all)
+        // Agreement 0 = il Neural Engine ha dato un risultato sbagliato: si resta sulla grafica
+        EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0), for: "StrumentiSW", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("StrumentiSW", defaults: d)?.units, .cpuAndGPU)
+        XCTAssertEqual(EngineChoice.decide(agreement: 15).units, .cpuAndGPU)
+    }
+
     func testEngineChoiceRememberedPerModel() {
         let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
         XCTAssertNil(EngineChoice.stored("HTDemucs", defaults: d))

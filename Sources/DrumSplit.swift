@@ -30,7 +30,7 @@ final class DrumSplitter {
     /// Per i test: una rete finta al posto del modello (riceve lo spettro, restituisce gli spettri degli strumenti).
     var fakeNetwork: (([Float]) -> [Float])?
     /// Quanto si sovrappongono due pezzi (i pezzi sono corti, 3 s: con 4 i passaggi non si sentono).
-    var overlap = 4
+    var overlap: Double = 4
 
     init(model: MLModel?, config: SpectralConfig) {
         self.model = model
@@ -90,7 +90,7 @@ final class DrumSplitter {
     /// Tutta la traccia della batteria → le sue parti.
     func separate(_ drums: [[Float]], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [[[Float]]] {
         try RoFormer.stitch(drums, chunk: config.chunk, overlap: overlap, stems: stemCount, progress: progress,
-                            isCancelled: isCancelled, run: runChunk)
+                            isCancelled: isCancelled, runners: [runChunk])
     }
 }
 
