@@ -3,7 +3,7 @@ Novità della 0.14.0 «Suonaci sopra»:
 • ⇧⌘K toglie o rimette l'ultimo strumento scelto; il mix esportato si chiama «Senza batteria», «Senza basso»…
 • Per i DJ: «Esporta per DJ» (⌥⌘E) crea il file .stem.mp4 per Traktor e Mixxx, con la canzone intera e batteria, basso, altri strumenti e voce. In Impostazioni si può farlo creare a ogni separazione
 • Cartelle intere: trascina una cartella (o sceglila con ⌘O) e AudioLR separa tutte le canzoni che contiene, anche nelle sottocartelle, una dopo l'altra
-• Studio: il basso ora viene dal modello Demucs specializzato nel basso, applicato alla base già senza voce. Più pieno e più pulito (9,1 dB contro 8,8 sulle 50 canzoni di prova MUSDB)
+• Studio: il basso ora unisce due modelli (SW e il Demucs specializzato nel basso) sulla base già senza voce. Più pieno e più pulito: 9,8 dB contro 8,6 sulle 50 canzoni di prova MUSDB
 • Se quel modello non si può usare, Studio continua con il basso di SW: nessuna separazione si ferma per questo
 • Studio scarica circa 80 MB in più, una volta sola
 

@@ -51,8 +51,8 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
-    /// In Studio il basso viene dal Demucs specializzato nel basso, applicato alla base senza voce:
-    /// sulle 50 canzoni di MUSDB 9,13 dB contro gli 8,82 di SW. Se non c'è, resta quello di SW.
+    /// In Studio il basso è la media di SW e del Demucs specializzato nel basso, sulla base senza voce:
+    /// sulle 50 canzoni di MUSDB 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW. Se non c'è, resta quello di SW.
     var bassModel: String? { self == .studio ? "HTDemucsFT-1" : nil }
 
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
@@ -107,7 +107,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
         case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
-        case .studio: return "La voce più pulita (BS-RoFormer viperx), SW sugli strumenti e il basso da Demucs · la più lenta"
+        case .studio: return "La voce più pulita (BS-RoFormer viperx), SW sugli strumenti, basso da due modelli · la più lenta"
         }
     }
 
