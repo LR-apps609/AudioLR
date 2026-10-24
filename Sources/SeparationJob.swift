@@ -106,6 +106,9 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var history: [HistoryItem] = History.all()
     /// Dove ha lavorato l'ultima separazione (Neural Engine o grafica), con la verifica.
     @Published private(set) var engineText: String?
+    /// Se questa separazione ha dovuto usare un modello di riserva (memoria, download…): la qualità non è quella piena
+    /// e lo si dice, invece di tacerlo.
+    @Published private(set) var qualityNote: String?
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
     /// La traccia di cui si stanno cercando le note (MIDI), e i file MIDI già creati per questa canzone.
@@ -288,6 +291,7 @@ final class SeparationJob: ObservableObject {
         duration = 0
         elapsed = nil
         engineText = nil
+        qualityNote = nil
         analysis = nil
         timings = []
         sourceInfo = AudioIO.describe(url)
@@ -321,6 +325,10 @@ final class SeparationJob: ObservableObject {
                 var swName = wantedInstruments
                 var bassName = quality.bassModel
                 var secondName = quality.secondVoice
+                // Cosa è stato fatto davvero, per dire se la qualità è quella piena
+                var voiceUsed: String? = nil
+                var bassApplied = false
+                var secondApplied = false
                 for (k, name) in downloads.enumerated() {
                     do {
                         _ = try await ModelStore.shared.mlModel(name) { p in
@@ -463,6 +471,7 @@ final class SeparationJob: ObservableObject {
                         EngineChoice.store(d, for: used)
                     }
                     decisions[used] = d
+                    voiceUsed = used
                     done(used)
                     lap("Voce (RoFormer)")
                     var vo2 = vo
@@ -478,6 +487,7 @@ final class SeparationJob: ObservableObject {
                                 for k in 0..<n { vo2[c][k] = 0.5 * (vo2[c][k] + other[c][k]) }
                             }
                             decisions[s] = sd
+                            secondApplied = true
                             done(s)
                             lap("Seconda voce (Mel-RoFormer)")
                         } catch {
@@ -556,6 +566,7 @@ final class SeparationJob: ObservableObject {
                                 let n = min(out[i][c].count, r[j][c].count)
                                 for k in 0..<n { out[i][c][k] = 0.5 * (out[i][c][k] + r[j][c][k]) }
                             }
+                            bassApplied = true
                             lap("Basso (Demucs)")
                         }
                     }
@@ -614,7 +625,13 @@ final class SeparationJob: ObservableObject {
                     if cancel.isSet { throw CancellationError() }
                 }
                 let all = times
-                await self?.finish(dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis)
+                var reduced: [String] = []
+                if let v = wantedVoice, voiceUsed != v { reduced.append(voiceUsed == nil ? "voce senza il suo modello" : "voce dal modello di riserva") }
+                if wantedInstruments != nil && swName == nil { reduced.append("strumenti dai modelli di riserva") }
+                if quality.bassModel != nil && swName != nil && !bassApplied { reduced.append("basso da un solo modello") }
+                if quality.secondVoice != nil && voiceUsed == wantedVoice && !secondApplied { reduced.append("voce da un solo modello") }
+                let note = reduced.isEmpty ? nil : "Qualità ridotta su questo Mac: " + reduced.joined(separator: ", ")
+                await self?.finish(dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis, note: note)
             } catch is CancellationError {
                 await self?.stopped(clearing: true)
             } catch {
@@ -715,6 +732,7 @@ final class SeparationJob: ObservableObject {
         folder = item.folderURL
         quality = Quality(rawValue: item.quality) ?? .best
         engineText = item.engine
+        qualityNote = nil
         analysis = item.analysis
         elapsed = item.seconds
         stems = found.map { f in
@@ -878,9 +896,10 @@ final class SeparationJob: ObservableObject {
         self.duration = duration
     }
 
-    private func finish(dir: URL, stems: [Stem], engine: String, took: Double, timings: [Timing], analysis: SongAnalysis?) {
+    private func finish(dir: URL, stems: [Stem], engine: String, took: Double, timings: [Timing], analysis: SongAnalysis?, note: String? = nil) {
         self.analysis = analysis
         engineText = engine
+        qualityNote = note
         elapsed = took
         self.timings = timings
         folder = dir

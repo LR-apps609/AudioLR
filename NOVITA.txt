@@ -2,6 +2,7 @@ Novità della 0.15.0 «Due voci»:
 • Più veloce sui Mac con 8 GB di memoria: ogni modello si libera appena ha finito il suo passaggio, e la prova del motore non apre più una copia in più. Così macOS non deve usare il disco come memoria, che rallentava molto Massima e soprattutto Studio
 • Studio può ricavare la voce da due modelli (BS-RoFormer viperx e Mel-RoFormer) e farne la media: più pulita di ognuno dei due (12,15 dB contro 11,93 sulle 50 canzoni di prova MUSDB). Si attiva in Impostazioni › Motore; Studio diventa circa un terzo più lento
 • Se il secondo modello non si può usare, Studio continua con la voce di viperx
+• Niente più ripieghi in silenzio: se su un Mac un modello non si può usare (memoria, download) e AudioLR deve usarne uno di riserva, lo dice in rosso sotto la canzone
 
 Novità della 0.14.0 «Suonaci sopra»:
 • Senza il mio strumento: nel mixer «Senza…» toglie in un clic batteria (anche divisa), basso, chitarra o pianoforte, per suonare la tua parte sopra la canzone

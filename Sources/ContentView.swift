@@ -373,6 +373,10 @@ struct ContentView: View {
             FlowLayout(spacing: 6, lineSpacing: 6, centered: false) {
                 Chip(text: job.quality.title, symbol: job.quality.symbol, tint: Theme.brass)
                 if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
+                if let q = job.qualityNote {
+                    Chip(text: q, symbol: "exclamationmark.triangle.fill", tint: Theme.voiceMute)
+                        .help("Un modello non si è potuto usare (memoria o download): riprova chiudendo le altre app. Dettagli con ⌘I.")
+                }
                 if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
                 if let a = job.analysis {
                     Chip(text: a.bpmText, symbol: "metronome", tint: Theme.color("drums"))
