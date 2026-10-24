@@ -64,6 +64,8 @@ enum FAQ {
               answer: "Dopo ogni separazione AudioLR stima il tempo (BPM, dalla batteria) e la tonalità (dagli strumenti, senza voce e batteria). Passa sopra con il mouse per vedere la sigla (es. Am) e il codice Camelot dei DJ (es. 8A). Se il tempo ti sembra la metà di quello giusto, è il doppio: succede con i brani molto veloci."),
         Entry(topic: "Mixer ed esportazione", question: "Come salvo il mio mix?",
               answer: "Premi «Esporta il mix» (⌘E): AudioLR salva quello che senti, con muto, solo e volumi, accanto alle tracce, nel formato scelto nelle Impostazioni."),
+        Entry(topic: "Mixer ed esportazione", question: "Posso usare le tracce in Traktor o Mixxx?",
+              answer: "Sì: dal tasto «Esporta il mix» scegli «Esporta per DJ» (⌥⌘E). AudioLR crea «Canzone.stem.mp4», il formato Stem di Native Instruments: la canzone intera più batteria, basso, altri strumenti e voce, in AAC a 320 kbps. Traktor e Mixxx lo aprono con le quattro tracce; Musica e gli altri lettori suonano la canzone intera. In Impostazioni › Generale puoi farlo creare a ogni separazione."),
         Entry(topic: "Mixer ed esportazione", question: "Posso usare le tracce in GarageBand o Logic?",
               answer: "Sì: trascina una traccia dalla finestra direttamente in GarageBand, Logic, Ableton o nel Finder. Tutte le tracce hanno la stessa durata e partono insieme, quindi restano allineate."),
         Entry(topic: "File e cartelle", question: "Dove vengono salvate le tracce?",

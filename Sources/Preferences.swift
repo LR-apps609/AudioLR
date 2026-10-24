@@ -107,6 +107,9 @@ enum Prefs {
     /// Massima qualità: chitarra e pianoforte in tracce proprie (altrimenti restano in «Altri strumenti»).
     static let splitKey = "splitGuitarPiano"
     static var splitGuitarPiano: Bool { UserDefaults.standard.object(forKey: splitKey) as? Bool ?? true }
+    /// Anche il file .stem.mp4 per i DJ (Traktor, Mixxx) a ogni separazione.
+    static let stemFileKey = "makeStemFile"
+    static var makeStemFile: Bool { UserDefaults.standard.bool(forKey: stemFileKey) }
     static var makeInstrumental: Bool { UserDefaults.standard.object(forKey: instrumentalKey) as? Bool ?? true }
     static var revealWhenDone: Bool { UserDefaults.standard.bool(forKey: revealKey) }
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }

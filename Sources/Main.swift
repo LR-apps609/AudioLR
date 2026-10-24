@@ -120,6 +120,9 @@ struct AudioLRCommands: Commands {
             Button("Esporta il mix") { post(.audiolrExport) }
                 .keyboardShortcut("e")
                 .disabled(job.phase != .done)
+            Button("Esporta per DJ (.stem.mp4)") { post(.audiolrStemFile) }
+                .keyboardShortcut("e", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
         }
         CommandGroup(replacing: .newItem) {
             Button("Apri una canzone…") { NotificationCenter.default.post(name: .audiolrOpenSong, object: nil) }

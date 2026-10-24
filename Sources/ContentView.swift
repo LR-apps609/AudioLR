@@ -19,6 +19,8 @@ extension Notification.Name {
     static let audiolrPlay = Notification.Name("audiolrPlay")
     /// Menu Mix › Esporta il mix (⌘E).
     static let audiolrExport = Notification.Name("audiolrExport")
+    /// Menu Mix › Esporta per DJ (.stem.mp4).
+    static let audiolrStemFile = Notification.Name("audiolrStemFile")
     /// Menu Mix › Inizio / fine del passaggio da ripetere (⌘[ e ⌘]): l'oggetto è «A» o «B».
     static let audiolrLoop = Notification.Name("audiolrLoop")
     /// Menu Vista › Dettagli della separazione (⌘I).
@@ -30,6 +32,8 @@ struct ContentView: View {
     @StateObject private var player = StemPlayer()
     @StateObject private var mixer = MixPlayer()
     @State private var exported: URL?
+    @State private var makingStemFile = false
+    @State private var stemFileError: String?
     @State private var dropping = false
     @State private var news: [String] = []
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
@@ -77,6 +81,10 @@ struct ContentView: View {
             mixer.toggle()
         }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrExport)) { _ in exportMix() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrStemFile)) { _ in exportStemFile() }
+        .alert("Il file per DJ non è riuscito", isPresented: Binding(get: { stemFileError != nil }, set: { if !$0 { stemFileError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(stemFileError ?? "") }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrLoop)) { n in
             guard job.phase == .done else { return }
             showPractice = true
@@ -498,10 +506,15 @@ struct ContentView: View {
             .frame(width: mixer.keys.contains("lead") ? 340 : 250)
             withoutMenu
             Spacer()
-            Button { exportMix() } label: {
-                if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
-            }
-            .disabled(mixer.exporting || job.folder == nil)
+            Menu {
+                Button("Esporta il mix (⌘E)") { exportMix() }
+                Button("Esporta per DJ: .stem.mp4 (⌥⌘E)") { exportStemFile() }
+            } label: {
+                if mixer.exporting || makingStemFile { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
+            } primaryAction: { exportMix() }
+            .menuStyle(.button)
+            .fixedSize()
+            .disabled(mixer.exporting || makingStemFile || job.folder == nil)
             .help("Salva quello che senti, con muto, solo e volumi, accanto alle tracce (velocità e tono della Sala prove restano quelli originali)")
         }
     }
@@ -635,6 +648,24 @@ struct ContentView: View {
         .disabled(available.isEmpty)
         .help("Togli la tua parte e suonaci sopra (⇧⌘K: l'ultimo strumento scelto)")
         .accessibilityLabel("Senza il mio strumento")
+    }
+
+    /// Il file per Traktor e Mixxx: canzone intera più batteria, basso, altri strumenti e voce.
+    private func exportStemFile() {
+        guard job.phase == .done, !makingStemFile, let f = job.folder else { return }
+        let song = job.song
+        makingStemFile = true
+        let stems = job.stems, title = job.title
+        Task {
+            defer { makingStemFile = false }
+            do {
+                let url = try await StemFile.make(stems: stems, song: song, folder: f, title: title)
+                exported = url
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                stemFileError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
     }
 
     private func exportMix() {

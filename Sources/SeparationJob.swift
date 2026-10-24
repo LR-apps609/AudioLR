@@ -474,6 +474,11 @@ final class SeparationJob: ObservableObject {
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 lap("Salvataggio")
+                // Il file per DJ, se scelto nelle Impostazioni: se non riesce, le tracce restano comunque
+                if Prefs.makeStemFile {
+                    _ = try? await StemFile.make(stems: stems, song: url, folder: dir, title: url.deletingPathExtension().lastPathComponent)
+                    lap("File per DJ (.stem.mp4)")
+                }
                 let analysis = Analysis.analyze(out, sources: sources)
                 lap("Tempo e tonalità")
                 let all = times

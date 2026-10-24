@@ -1,6 +1,7 @@
 Novità della 0.14.0 «Suonaci sopra»:
 • Senza il mio strumento: nel mixer «Senza…» toglie in un clic batteria (anche divisa), basso, chitarra o pianoforte, per suonare la tua parte sopra la canzone
 • ⇧⌘K toglie o rimette l'ultimo strumento scelto; il mix esportato si chiama «Senza batteria», «Senza basso»…
+• Per i DJ: «Esporta per DJ» (⌥⌘E) crea il file .stem.mp4 per Traktor e Mixxx, con la canzone intera e batteria, basso, altri strumenti e voce. In Impostazioni si può farlo creare a ogni separazione
 • Studio: il basso ora viene dal modello Demucs specializzato nel basso, applicato alla base già senza voce. Più pieno e più pulito (9,1 dB contro 8,8 sulle 50 canzoni di prova MUSDB)
 • Se quel modello non si può usare, Studio continua con il basso di SW: nessuna separazione si ferma per questo
 • Studio scarica circa 80 MB in più, una volta sola

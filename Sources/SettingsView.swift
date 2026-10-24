@@ -27,6 +27,7 @@ struct TracksSettings: View {
     @AppStorage(Prefs.formatKey) private var format = OutputFormat.wav24.rawValue
     @AppStorage(Prefs.folderKey) private var folder = ""
     @AppStorage(Prefs.instrumentalKey) private var instrumental = true
+    @AppStorage(Prefs.stemFileKey) private var stemFile = false
     @AppStorage(Prefs.splitKey) private var split = true
     @AppStorage(Prefs.revealKey) private var reveal = false
     @AppStorage(Prefs.soundKey) private var sound = true
@@ -55,6 +56,7 @@ struct TracksSettings: View {
                     }
                 }
                 Toggle("Crea anche la base senza voce (karaoke)", isOn: $instrumental)
+                Toggle("Crea anche il file per DJ (.stem.mp4: Traktor, Mixxx)", isOn: $stemFile)
                 Toggle("Chitarra e pianoforte in tracce proprie (Massima)", isOn: $split)
             }
             Section {
