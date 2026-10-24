@@ -220,7 +220,7 @@ if os.environ.get("ONNX"):
     wave_in = torch.randn(1, 2, L)
     with torch.no_grad():
         torch.onnx.export(core, (spec_in, wave_in), OUT + ".onnx", opset_version=17, do_constant_folding=True,
-                          input_names=["spec", "wave"], output_names=["spec_out", "wave_out"], dynamo=False)
+                          input_names=["spec", "wave"], output_names=["spec_out", "wave_out"])
     sess = ort.InferenceSession(OUT + ".onnx", providers=["CPUExecutionProvider"])
 
     def core_onnx(xn, xtn):
