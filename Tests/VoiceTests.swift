@@ -148,6 +148,12 @@ final class VoiceTests: XCTestCase {
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
         XCTAssertEqual(Quality.studio.allModels, ["VoceStudio2", "StrumentiSW2", "HTDemucsFT-1"], "Studio: il basso da Demucs")
         XCTAssertNil(Quality.best.bassModel, "Massima resta con SW da solo")
+        // La seconda voce di Studio solo se scelta nelle Impostazioni
+        let old = UserDefaults.standard.object(forKey: Prefs.doubleVoiceKey)
+        UserDefaults.standard.set(true, forKey: Prefs.doubleVoiceKey)
+        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio2", "VoceRoFormer8", "StrumentiSW2", "HTDemucsFT-1"])
+        XCTAssertNil(Quality.best.secondVoice)
+        UserDefaults.standard.set(old, forKey: Prefs.doubleVoiceKey)
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio2"), "VoceRoFormer8")
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer8"), "VoceRoFormer")
         XCTAssertNil(Quality.fallbackVoice(for: "VoceRoFormer"))

@@ -86,6 +86,7 @@ struct EngineSettings: View {
     @State private var confirmDelete = false
     @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
     @AppStorage(Prefs.dualKey) private var dual = true
+    @AppStorage(Prefs.doubleVoiceKey) private var doubleVoice = false
 
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)),
@@ -123,6 +124,7 @@ struct EngineSettings: View {
                 }
                 Toggle("Neural Engine e grafica insieme", isOn: $dual)
                     .disabled(!SeparationJob.hasNeuralEngine)
+                Toggle("Studio: voce da due modelli (più pulita, circa un terzo più lenta)", isOn: $doubleVoice)
             } footer: {
                 Text(SeparationJob.hasNeuralEngine
                      ? "Con i due insieme, i pezzi della canzone si dividono tra Neural Engine e grafica: molto più veloce sui Mac con chip Apple. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
@@ -219,7 +221,7 @@ struct AboutSettings: View {
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori2", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
-        ("VoceRoFormer8", "Riserva · voce di Studio", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
+        ("VoceRoFormer8", "Studio · seconda voce (se scelta); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("VoceStudio2", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
         ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),

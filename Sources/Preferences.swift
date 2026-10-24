@@ -91,6 +91,10 @@ enum Prefs {
     static let speedKey = "speedMode"
     static var fast: Bool { UserDefaults.standard.string(forKey: speedKey) == "rapida" }
     /// Neural Engine e grafica al lavoro insieme sui pezzi della canzone (di serie sì).
+    /// Studio con la voce da due modelli (viperx e Kim, in media): +0,22 dB, circa un terzo più lenta.
+    static let doubleVoiceKey = "studioDoubleVoice"
+    static var doubleVoice: Bool { UserDefaults.standard.bool(forKey: doubleVoiceKey) }
+
     static let dualKey = "dualEngine"
     static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
 

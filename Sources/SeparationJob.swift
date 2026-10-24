@@ -315,13 +315,14 @@ final class SeparationJob: ObservableObject {
                 var voiceName = wantedVoice
                 var swName = wantedInstruments
                 var bassName = quality.bassModel
+                var secondName = quality.secondVoice
                 for (k, name) in downloads.enumerated() {
                     do {
                         _ = try await ModelStore.shared.mlModel(name) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
                             Task { @MainActor in if case .downloading = self?.phase { self?.phase = .downloading(total) } }
                         }
-                        if name == wantedVoice || name == wantedInstruments { _ = try await ModelStore.shared.config(name) }
+                        if name == wantedVoice || name == wantedInstruments || name == quality.secondVoice { _ = try await ModelStore.shared.config(name) }
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch _ where cancel.isSet {
@@ -335,6 +336,9 @@ final class SeparationJob: ObservableObject {
                                (try? await ModelStore.shared.config(n)) != nil { voiceName = n }
                             next = Quality.fallbackVoice(for: n)
                         }
+                    } catch _ where name == quality.secondVoice {
+                        // La seconda voce è un di più: senza, resta quella di viperx
+                        secondName = nil
                     } catch _ where name == quality.bassModel {
                         // Il basso di Demucs è un di più: senza, resta quello di SW
                         bassName = nil
@@ -397,13 +401,24 @@ final class SeparationJob: ObservableObject {
                     EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix), for: v)
                     if cancel.isSet { throw CancellationError() }
                 }
+                // La seconda voce: se è già quella di riserva in uso, o la prova del motore non riesce, si fa senza
+                if secondName == voiceName { secondName = nil }
+                if let s = secondName, EngineChoice.stored(s) == nil {
+                    await self?.set(.tuning)
+                    do { EngineChoice.store(try await SeparationJob.tuneRoFormer(s, mix: mix), for: s) } catch {
+                        if cancel.isSet { throw CancellationError() }
+                        secondName = nil
+                    }
+                }
                 lap("Prova del motore")
 
                 // 3. La voce, con il suo modello (se questa qualità ne ha uno)
                 await self?.set(.separating(0))
                 let began = Date()
                 // Quanta parte della barra spetta alla voce
-                let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : 0.45
+                let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : secondName == nil ? 0.45 : 0.6
+                // Con due modelli voce, metà della parte della voce a ognuno
+                let firstShare = secondName == nil ? 1.0 : 0.5
                 func report(_ total: Double) {
                     let elapsed = Date().timeIntervalSince(began)
                     let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
@@ -424,7 +439,7 @@ final class SeparationJob: ObservableObject {
                         do {
                             let (voice, helpers) = try await SeparationJob.workers(used, units: units)
                             voice.overlap = Prefs.voiceOverlapValue
-                            return try voice.separate(mix, helpers: helpers, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                            return try voice.separate(mix, helpers: helpers, progress: { report($0 * voiceShare * firstShare) }, isCancelled: { cancel.isSet })
                         } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && !cancel.isSet
                                     && Quality.fallbackVoice(for: used) != nil {
                             // Il modello voce non riesce (memoria, Mac più vecchio): si usa quello più leggero
@@ -443,12 +458,31 @@ final class SeparationJob: ObservableObject {
                         EngineChoice.store(d, for: used)
                     }
                     decisions[used] = d
-                    voiceOut = vo
+                    lap("Voce (RoFormer)")
+                    var vo2 = vo
+                    // La seconda voce (Studio): la media dei due modelli è più pulita di ognuno
+                    if let s = secondName, s != used, let sd = EngineChoice.stored(s) {
+                        do {
+                            let (second, helpers) = try await SeparationJob.workers(s, units: sd.units)
+                            second.overlap = Prefs.voiceOverlapValue
+                            let other = try second.separate(mix, helpers: helpers, progress: { report(voiceShare * (firstShare + (1 - firstShare) * $0)) },
+                                                            isCancelled: { cancel.isSet })
+                            for c in 0..<2 {
+                                let n = min(vo2[c].count, other[c].count)
+                                for k in 0..<n { vo2[c][k] = 0.5 * (vo2[c][k] + other[c][k]) }
+                            }
+                            decisions[s] = sd
+                            lap("Seconda voce (Mel-RoFormer)")
+                        } catch {
+                            // Se non riesce resta la voce del primo modello
+                            if cancel.isSet { throw CancellationError() }
+                        }
+                    }
+                    voiceOut = vo2
                     // Gli strumenti si cercano nella base senza voce: ogni modello fa quello in cui è migliore
-                    instrumentsInput = (0..<2).map { c in zip(mix[c], vo[c]).map { $0 - $1 } }
+                    instrumentsInput = (0..<2).map { c in zip(mix[c], vo2[c]).map { $0 - $1 } }
                     // La canzone intera non serve più: con le canzoni lunghe sono centinaia di MB in meno
                     mix = []
-                    lap("Voce (RoFormer)")
                 }
 
                 // 4. Gli strumenti: con SW un modello solo per tutti; con htdemucs_ft ogni modello dà il suo strumento

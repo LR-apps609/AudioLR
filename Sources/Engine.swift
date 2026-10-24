@@ -55,6 +55,10 @@ enum Quality: String, CaseIterable, Identifiable {
     /// sulle 50 canzoni di MUSDB 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW. Se non c'è, resta quello di SW.
     var bassModel: String? { self == .studio ? "HTDemucsFT-1" : nil }
 
+    /// In Studio, se scelto nelle Impostazioni, un secondo modello voce: la media di viperx e Kim
+    /// è più pulita di ognuno dei due (12,15 dB contro 11,93 sulle 50 canzoni di MUSDB).
+    var secondVoice: String? { self == .studio && Prefs.doubleVoice ? "VoceRoFormer8" : nil }
+
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
 
@@ -72,7 +76,7 @@ enum Quality: String, CaseIterable, Identifiable {
 
     /// Tutto quello che va scaricato per questa qualità (i modelli Demucs di riserva solo se servono).
     var allModels: [String] {
-        let extra = [voiceModel, instrumentModel, bassModel].compactMap { $0 }
+        let extra = [voiceModel, secondVoice, instrumentModel, bassModel].compactMap { $0 }
         return instrumentModel == nil ? extra + models : extra
     }
 
