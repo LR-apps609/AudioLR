@@ -146,7 +146,8 @@ final class VoiceTests: XCTestCase {
 
     /// Un pezzo di prova separato dall'app e dal modello originale (Tools/convert_roformer.py): tutti gli strumenti insieme.
     private func matchesOriginal(_ name: String, label: String) async throws {
-        executionTimeAllowance = 900
+        // Sul Mac di GitHub (senza Neural Engine) i modelli grandi impiegano anche 20 minuti per un pezzo
+        executionTimeAllowance = 2400
         let (data, resp) = try await EndToEndTests.fixture("\(name)-prova.f32")
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("\(name) non ancora pubblicato") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
