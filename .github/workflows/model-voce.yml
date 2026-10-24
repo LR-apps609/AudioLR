@@ -5,7 +5,8 @@ name: Modello voce RoFormer
 on:
   workflow_dispatch:
   push:
-    paths: [Tools/convert_roformer.py, Tools/roformer/**, .github/workflows/model-voce.yml]
+    # Solo se cambia questo file: il modello voce pubblicato funziona, non va riconvertito a ogni modifica del convertitore
+    paths: [.github/workflows/model-voce.yml]
 
 permissions:
   contents: write

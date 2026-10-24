@@ -1,10 +1,11 @@
-# Converte un modello voce Mel-Band RoFormer (ad es. «vocals_mel_band_roformer» di Kimberley Jensen)
-# in Core ML per AudioLR. Si esegue sul Mac di GitHub (workflow «Modello voce RoFormer»).
+# Converte un modello RoFormer in Core ML per AudioLR: Mel-Band (ad es. la voce di Kimberley Jensen)
+# o BS-RoFormer (ad es. «BS-Roformer-SW», sei strumenti: voce, batteria, basso, chitarra, piano, altro). Si esegue sul Mac di GitHub (workflow «Modello voce RoFormer»).
 #
 # Come per Demucs, nel modello Core ML c'è solo la rete. L'app fa il resto in Swift:
 #   1. STFT di ogni canale (2048 punti, passo 441, finestra di Hann, come torch.stft non normalizzata)
 #   2. raccolta delle frequenze delle bande mel (freq_indices) → ingresso «x» (1, T, Fsel·2)
-#   3. il modello restituisce le maschere «mask» (1, T, Fsel·2) (reale/immaginaria alternate)
+#      (per BS-RoFormer le bande sono contigue e senza sovrapposizioni: tutte le frequenze in ordine)
+#   3. il modello restituisce le maschere «mask» (1, S, T, Fsel·2), una per strumento (reale/immaginaria alternate)
 #   4. somma delle maschere sulle frequenze (scatter-add), divisione per il numero di bande,
 #      prodotto complesso con la STFT, iSTFT
 # stft_np/istft_np/pipeline_np qui sotto sono la copia esatta di quello che fa l'app, confrontata con il modello intero.
@@ -18,6 +19,7 @@ import coremltools as ct
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from roformer.mel_band_roformer import MelBandRoformer
+from roformer.bs_roformer import BSRoformer
 
 CKPT, CFG, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 CHUNK = int(sys.argv[4]) if len(sys.argv) > 4 else 352800        # 8 s, come nell'addestramento del modello
@@ -30,7 +32,9 @@ class Loader(yaml.SafeLoader):
 Loader.add_constructor("tag:yaml.org,2002:python/tuple", lambda l, n: tuple(l.construct_sequence(n)))
 cfg = yaml.load(open(CFG), Loader=Loader)
 mc = dict(cfg["model"])
-m = MelBandRoformer(**mc).eval()
+BS = "freqs_per_bands" in mc
+KIND = "bsroformer" if BS else "melroformer"
+m = (BSRoformer if BS else MelBandRoformer)(**mc).eval()
 state = torch.load(CKPT, map_location="cpu")
 if isinstance(state, dict) and "state_dict" in state:
     state = state["state_dict"]
@@ -41,8 +45,13 @@ assert not missing, "il file dei pesi non corrisponde al modello"
 N, HOP = mc.get("stft_n_fft", 2048), mc.get("stft_hop_length", 441)
 assert mc.get("stft_win_length", N) == N and not mc.get("stft_normalized", False)
 T = CHUNK // HOP + 1
-FI = m.freq_indices.numpy().astype(np.int64)                      # indici in (f·2 + canale)
-NB = m.num_bands_per_freq.numpy().astype(np.float64)              # bande che coprono ogni frequenza
+if BS:
+    # Tutte le frequenze, in ordine (f·2 + canale), ognuna in una banda sola
+    FI = np.arange((N // 2 + 1) * 2, dtype=np.int64)
+    NB = np.ones(N // 2 + 1)
+else:
+    FI = m.freq_indices.numpy().astype(np.int64)                  # indici in (f·2 + canale)
+    NB = m.num_bands_per_freq.numpy().astype(np.float64)          # bande che coprono ogni frequenza
 FSEL = len(FI)
 STEMS = list(cfg["training"]["instruments"]) if not cfg["training"].get("target_instrument") else [cfg["training"]["target_instrument"]]
 print(f"{OUT}: {STEMS}, pezzo di {CHUNK} campioni, {T} colonne, {FSEL} frequenze selezionate")
@@ -58,15 +67,22 @@ class Core(torch.nn.Module):
     def forward(self, x):
         m = self.m
         x = m.band_split(x)
-        for time_transformer, freq_transformer in m.layers:
+        for block in m.layers:
+            if len(block) == 3:
+                linear, time_transformer, freq_transformer = block
+                b, t, f, d = x.shape
+                x = linear(x.reshape(b, t * f, d)).reshape(b, t, f, d)
+            else:
+                time_transformer, freq_transformer = block
             b, t, f, d = x.shape
             x = x.permute(0, 2, 1, 3).reshape(b * f, t, d)
             x = time_transformer(x)
             x = x.reshape(b, f, t, d).permute(0, 2, 1, 3).reshape(b * t, f, d)
             x = freq_transformer(x)
             x = x.reshape(b, t, f, d)
-        masks = torch.stack([fn(x) for fn in m.mask_estimators], dim=1)   # (b, n, t, fsel·2)
-        return masks[:, 0]
+        if hasattr(m, "final_norm"):
+            x = m.final_norm(x)
+        return torch.stack([fn(x) for fn in m.mask_estimators], dim=1)   # (b, n, t, fsel·2)
 
 
 # ── Copia di quello che fa l'app ───────────────────────────────────────────────────────────────
@@ -96,20 +112,23 @@ def istft_np(z, length):
 
 
 def pipeline_np(core_fn, mix):
-    """Un pezzo (2, CHUNK) come lo lavora l'app → voce (2, CHUNK)."""
+    """Un pezzo (2, CHUNK) come lo lavora l'app → strumenti (S, 2, CHUNK)."""
     z = [stft_np(mix[c]) for c in range(2)]
     F = N // 2 + 1
     full = np.empty((F * 2, T), dtype=np.complex128)            # (f·2 + canale, t)
     full[0::2], full[1::2] = z[0], z[1]
     sel = full[FI]                                               # (fsel, t)
     x = np.stack([sel.real, sel.imag], -1).transpose(1, 0, 2).reshape(1, T, FSEL * 2)
-    mask = core_fn(x.astype(np.float32))[0].astype(np.float64).reshape(T, FSEL, 2)
-    mc_ = mask[..., 0] + 1j * mask[..., 1]                       # (t, fsel)
-    summed = np.zeros((F * 2, T), dtype=np.complex128)
-    np.add.at(summed, FI, mc_.T)
-    denom = np.repeat(NB, 2)[:, None]
-    est = full * summed / np.maximum(denom, 1e-8)
-    return np.stack([istft_np(est[c::2], mix.shape[1]) for c in range(2)])
+    masks = core_fn(x.astype(np.float32))[0].astype(np.float64).reshape(-1, T, FSEL, 2)
+    out = []
+    for mask in masks:
+        mc_ = mask[..., 0] + 1j * mask[..., 1]                   # (t, fsel)
+        summed = np.zeros((F * 2, T), dtype=np.complex128)
+        np.add.at(summed, FI, mc_.T)
+        denom = np.repeat(NB, 2)[:, None]
+        est = full * summed / np.maximum(denom, 1e-8)
+        out.append(np.stack([istft_np(est[c::2], mix.shape[1]) for c in range(2)]))
+    return np.stack(out)
 
 
 def snr(ref, est):
@@ -146,9 +165,14 @@ core = Core(m).eval()
 m.match_input_audio_length = True
 with torch.no_grad():
     ref = m(torch.from_numpy(mix)[None]).numpy()[0].astype(np.float64)
-ref = ref.reshape(-1, 2, CHUNK)[0]
-print(f"voce stimata / canzone (energia): {np.sum(ref ** 2) / np.sum(mix.astype(np.float64) ** 2):.3f}")
-assert np.sum(ref ** 2) > 0.05 * np.sum(mix.astype(np.float64) ** 2), "il modello non trova la voce di prova"
+ref = ref.reshape(-1, 2, CHUNK)                                 # (S, 2, CHUNK)
+VI = STEMS.index("vocals") if "vocals" in STEMS else 0
+for k, name in enumerate(STEMS):
+    print(f"{name} stimata / canzone (energia): {np.sum(ref[k] ** 2) / np.sum(mix.astype(np.float64) ** 2):.3f}")
+# Il modello voce deve trovare la voce; uno a più strumenti può metterla dove vuole (SW la mette in «other»),
+# ma il confronto qui sotto è su tutti gli strumenti insieme, quindi basta che non sia silenzio
+loud = ref[VI] if len(STEMS) == 1 else ref
+assert np.sum(loud ** 2) > 0.05 * np.sum(mix.astype(np.float64) ** 2), "il modello non trova la voce di prova"
 
 
 def core_torch(x):
@@ -158,6 +182,8 @@ def core_torch(x):
 
 q = snr(ref, pipeline_np(core_torch, mix.astype(np.float64)))
 print(f"RoFormer diviso / intero: {q:.1f} dB")
+if os.environ.get("SOLO_TORCH"):
+    sys.exit(0)
 assert q > 45, "dividere il modello cambia il risultato"
 
 # 3. Core ML
@@ -174,9 +200,9 @@ def convert(precision):
     mlm = ct.convert(traced, inputs=[ct.TensorType(name="x", shape=x_in.shape, dtype=np.float32)],
                      outputs=[ct.TensorType(name="mask", dtype=np.float32)], convert_to="mlprogram",
                      minimum_deployment_target=ct.target.macOS13, compute_precision=precision)
-    mlm.short_description = "Mel-Band RoFormer per AudioLR: separa la voce"
+    mlm.short_description = ("BS-RoFormer" if BS else "Mel-Band RoFormer") + " per AudioLR: " + ", ".join(STEMS)
     mlm.license = "Codice MIT (BS-RoFormer, audio-separator); pesi: vedi l'autore del modello"
-    mlm.user_defined_metadata["kind"] = "melroformer"
+    mlm.user_defined_metadata["kind"] = KIND
     mlm.user_defined_metadata["sources"] = ",".join(STEMS)
 
     def core_ml(x):
@@ -205,12 +231,13 @@ try:
 except Exception as e:
     print("pesi a 8 bit non riusciti:", e)
 mlm.save(OUT + ".mlpackage")
-json.dump({"kind": "melroformer", "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
+json.dump({"kind": KIND, "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
            "frames": T, "freq_indices": FI.tolist(), "num_bands_per_freq": NB.tolist(), "precision": precision,
            "db": round(qbest, 1)}, open(OUT + ".json", "w"))
-# Prova di fedeltà per l'app (EndToEndTests): un pezzo e la voce secondo il modello originale
+# Prova di fedeltà per l'app (VoiceTests): un pezzo e gli strumenti secondo il modello originale
+# [campioni, strumenti] · canzone (2 canali) · strumento 1 (2 canali) · strumento 2 …
 with open(OUT + "-prova.f32", "wb") as f:
-    np.array([CHUNK, 1], dtype="<f4").tofile(f)
+    np.array([CHUNK, len(STEMS)], dtype="<f4").tofile(f)
     mix.astype("<f4").tofile(f)
     ref.astype("<f4").tofile(f)
 print("Fatto:", OUT, precision, round(qbest, 1))
