@@ -1,3 +1,9 @@
+Novità della 0.11.0 «Sala prove»:
+• Sala prove (⌥⌘P): rallenta fino al 50% senza cambiare il tono, oppure accelera fino al 150%
+• Tono: sposta la canzone fino a 6 semitoni in su o in giù, alla stessa velocità (per cantare o suonare nella tua tonalità)
+• Ripeti un passaggio: A all'inizio e B alla fine (⌘[ e ⌘] mentre suona) e il mixer lo ripete senza fermarsi
+• Velocità e tono valgono per l'ascolto: il mix esportato resta originale
+
 Novità della 0.10.0 «Ritmo»:
 • Tempo e tonalità di ogni canzone: BPM dalla batteria e tonalità dagli strumenti (es. «128 BPM · La minore»), con sigla e codice Camelot per i DJ
 • Separa voce e cori (⇧⌘V): la voce principale da una parte, i cori dall'altra; nuova scorciatoia del mixer «Con i cori» per il karaoke che tiene i cori

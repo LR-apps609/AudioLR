@@ -232,7 +232,8 @@ enum UpdateCheck {
         let page: URL
     }
 
-    static let api = URL(string: "https://api.github.com/repos/LR-apps609/AudioLR/releases/latest")!
+    /// Le ultime versioni pubblicate: si prende la più alta (non l'ultima creata, che può essere più vecchia).
+    static let api = URL(string: "https://api.github.com/repos/LR-apps609/AudioLR/releases?per_page=30")!
     static let lastKey = "updateLastCheck"
     static let autoKey = "updateAutoCheck"
     static let skipKey = "updateSkipVersion"
@@ -251,6 +252,13 @@ enum UpdateCheck {
         return Release(version: version, asset: u, page: page)
     }
 
+    /// Dall'elenco delle versioni di GitHub: la più alta che ha il file .audiolr.
+    static func parseList(_ data: Data) -> Release? {
+        guard let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return parse(data) }
+        let releases = list.compactMap { (try? JSONSerialization.data(withJSONObject: $0)).flatMap(parse) }
+        return releases.max { News.newer($1.version, than: $0.version) }
+    }
+
     /// Controllo automatico: al massimo una volta ogni 20 ore, se non è stato spento.
     static func shouldAutoCheck(now: Date = Date(), defaults: UserDefaults = .standard) -> Bool {
         if defaults.object(forKey: autoKey) as? Bool == false { return false }
@@ -264,7 +272,7 @@ enum UpdateCheck {
         req.setValue("AudioLR/\(current)", forHTTPHeaderField: "User-Agent")
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return parse(data)
+        return parseList(data)
     }
 
     /// All'avvio, dopo qualche secondo: in silenzio, parla solo se c'è una versione nuova.

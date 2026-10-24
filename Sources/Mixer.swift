@@ -87,6 +87,25 @@ final class MixPlayer: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published private(set) var exporting = false
 
+    // Sala prove: velocità senza cambiare tono, tono senza cambiare velocità, un passaggio da ripetere.
+    // Valgono solo per l'ascolto: il mix esportato resta alla velocità e nel tono originali.
+    /// 0,5 = metà velocità, 1 = normale.
+    @Published var rate: Double = 1 {
+        didSet {
+            // Il punto in cui si è arrivati, calcolato con la velocità di prima
+            if isPlaying, let s = startedAt { startPosition = min(duration, startPosition + Date().timeIntervalSince(s) * oldValue); startedAt = Date() }
+            timePitch.rate = Float(rate)
+        }
+    }
+    /// Semitoni in su o in giù.
+    @Published var semitones: Int = 0 { didSet { timePitch.pitch = Float(semitones * 100) } }
+    /// Il passaggio da ripetere, in secondi (entrambi presenti = ripetizione attiva).
+    @Published private(set) var loopA: Double?
+    @Published private(set) var loopB: Double?
+    var isLooping: Bool { loopA != nil && loopB != nil }
+
+    private let timePitch = AVAudioUnitTimePitch()
+
     private let engine = AVAudioEngine()
     /// Limitatore in uscita: con i volumi alzati le tracce sommate possono superare il massimo;
     /// invece di tagliare (suono «fritto») il limitatore abbassa solo quei picchi.
@@ -95,9 +114,12 @@ final class MixPlayer: ObservableObject {
                                           componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
         let l = AVAudioUnitEffect(audioComponentDescription: d)
         engine.attach(l)
+        engine.attach(timePitch)
         let fmt = engine.outputNode.inputFormat(forBus: 0)
         engine.disconnectNodeOutput(engine.mainMixerNode)
-        engine.connect(engine.mainMixerNode, to: l, format: fmt)
+        // mix → velocità e tono → limitatore → uscita
+        engine.connect(engine.mainMixerNode, to: timePitch, format: fmt)
+        engine.connect(timePitch, to: l, format: fmt)
         engine.connect(l, to: engine.outputNode, format: fmt)
         return l
     }()
@@ -112,7 +134,35 @@ final class MixPlayer: ObservableObject {
     /// Secondi dall'inizio della canzone.
     var position: Double {
         guard isPlaying, let s = startedAt else { return startPosition }
-        return min(duration, startPosition + Date().timeIntervalSince(s))
+        return min(duration, startPosition + Date().timeIntervalSince(s) * rate)
+    }
+
+    /// Segna l'inizio (A) o la fine (B) del passaggio da ripetere nel punto attuale.
+    func markLoopStart() {
+        loopA = position
+        if let b = loopB, b <= position + 0.25 { loopB = nil }
+    }
+
+    func markLoopEnd() {
+        let p = position
+        guard p > (loopA ?? 0) + 0.25 else { return }
+        if loopA == nil { loopA = 0 }
+        loopB = p
+        if isPlaying { play(from: loopA ?? 0) }
+    }
+
+    func clearLoop() {
+        loopA = nil
+        loopB = nil
+        if isPlaying { play(from: position) }
+    }
+
+    /// Velocità e tono normali, niente ripetizione.
+    func resetPractice() {
+        rate = 1
+        semitones = 0
+        loopA = nil
+        loopB = nil
     }
 
     /// Le tracce che si mescolano: la base senza voce è già un mix, quindi resta fuori; se la batteria
@@ -131,6 +181,7 @@ final class MixPlayer: ObservableObject {
         attempted = Set(wanted)
         let keep = folder == loadedFolder ? state : MixState()
         stop()
+        if folder != loadedFolder { resetPractice() }
         for p in players.values { engine.detach(p) }
         players = [:]
         files = [:]
@@ -158,12 +209,16 @@ final class MixPlayer: ObservableObject {
         stopNodes()
         _ = limiter
         do { if !engine.isRunning { try engine.start() } } catch { return }
-        let at = max(0, min(seconds, duration))
+        var at = max(0, min(seconds, duration))
+        // Con la ripetizione attiva si suona solo il passaggio (e si riparte da A se si è fuori)
+        if let a = loopA, let b = loopB, at < a || at >= b - 0.02 { at = a }
+        let end = isLooping ? loopB! : duration
         for (k, p) in players {
             guard let f = files[k] else { continue }
             let rate = f.processingFormat.sampleRate
             let first = AVAudioFramePosition(at * rate)
-            let count = AVAudioFrameCount(max(0, f.length - first))
+            let last = min(f.length, AVAudioFramePosition(end * rate))
+            let count = AVAudioFrameCount(max(0, last - first))
             guard count > 0 else { continue }
             p.scheduleSegment(f, startingFrame: first, frameCount: count, at: nil)
         }
@@ -192,9 +247,11 @@ final class MixPlayer: ObservableObject {
         if isPlaying { play(from: t) } else { startPosition = t }
     }
 
-    /// Chiamato regolarmente dalla finestra: a fine canzone si ferma.
+    /// Chiamato regolarmente dalla finestra: a fine canzone si ferma; a fine passaggio ricomincia da A.
     func tick() {
-        if isPlaying && position >= duration - 0.02 { stop() }
+        guard isPlaying else { return }
+        if let a = loopA, let b = loopB, position >= b - 0.03 { play(from: a); return }
+        if position >= duration - 0.02 { stop() }
     }
 
     private func stopNodes() { for p in players.values { p.stop() } }
