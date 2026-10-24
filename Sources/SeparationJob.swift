@@ -44,6 +44,9 @@ struct Stem: Identifiable, Equatable {
     }
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
+    /// Tutte le tracce che AudioLR può creare, nell'ordine della libreria.
+    static let allKeys = ["vocals", "lead", "backing", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
+
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
         switch key {
         case "vocals": return ("Voce", "music.mic", 0)
@@ -206,7 +209,7 @@ final class SeparationJob: ObservableObject {
 
     /// Più canzoni insieme: la prima parte subito, le altre aspettano in coda.
     func enqueue(_ urls: [URL], quality: Quality = .current) {
-        let songs = urls.filter { $0.isFileURL }
+        let songs = Self.songs(in: urls)
         guard let first = songs.first else { return }
         for s in songs { queuedQuality[s] = quality }
         if isBusy {
@@ -218,6 +221,38 @@ final class SeparationJob: ObservableObject {
     }
 
     func clearQueue() { queue = []; queuedQuality = [:] }
+
+    /// Le estensioni delle canzoni che macOS sa aprire.
+    nonisolated static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "flac", "caf", "alac", "mp4"]
+
+    /// Le canzoni da separare: i file così come sono, le cartelle aperte con le sottocartelle (in ordine di nome).
+    /// Dentro le cartelle si saltano i file nascosti, quelli non audio e le tracce già create da AudioLR.
+    nonisolated static func songs(in urls: [URL]) -> [URL] {
+        let fm = FileManager.default
+        // Le tracce e i mix già esportati da AudioLR («Canzone – Voce», «Canzone – Karaoke», «Canzone – Mix 2»…)
+        let made = Set(Stem.allKeys.map { " – " + Stem.info($0).name })
+        let mixes = [" – Mix", " – Karaoke", " – Solo voce", " – Senza "]
+        var out: [URL] = []
+        for u in urls where u.isFileURL {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: u.path, isDirectory: &isDir) else { continue }
+            guard isDir.boolValue else { out.append(u); continue }
+            guard let e = fm.enumerator(at: u, includingPropertiesForKeys: [.isRegularFileKey],
+                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
+            var found: [URL] = []
+            for case let f as URL in e {
+                let name = f.deletingPathExtension().lastPathComponent
+                guard audioExtensions.contains(f.pathExtension.lowercased()),
+                      (try? f.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                      !f.lastPathComponent.lowercased().hasSuffix(".stem.mp4"),
+                      !made.contains(where: { name.hasSuffix($0) }),
+                      !mixes.contains(where: { name.contains($0) }) else { continue }
+                found.append(f)
+            }
+            out += found.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        }
+        return out
+    }
 
     func start(_ url: URL, quality: Quality = .current) {
         guard !isBusy else { queue.append(url); queuedQuality[url] = quality; return }

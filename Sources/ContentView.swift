@@ -682,7 +682,8 @@ struct ContentView: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio]
         panel.allowsMultipleSelection = true
-        panel.message = "Scegli una o più canzoni da separare"
+        panel.canChooseDirectories = true
+        panel.message = "Scegli una o più canzoni, o una cartella intera, da separare"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             player.stop()
             job.enqueue(panel.urls, quality: quality)

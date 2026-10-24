@@ -30,6 +30,8 @@ enum FAQ {
               answer: "Trascina il file nella finestra, oppure premi ⌘O e sceglilo. AudioLR crea le tracce di voce, batteria, basso, altri strumenti e la base senza voce. Puoi trascinare anche più canzoni o un album intero: vengono separate una dopo l'altra."),
         Entry(topic: "Primi passi", question: "Quali file posso usare?",
               answer: "MP3, M4A/AAC, WAV, AIFF, FLAC, ALAC e in generale ogni file audio che il Mac sa aprire. I file protetti da DRM (per esempio scaricati da Apple Music) non si possono aprire."),
+        Entry(topic: "Primi passi", question: "Posso separare una cartella intera?",
+              answer: "Sì: trascina la cartella nella finestra, oppure scegli «Apri una canzone…» (⌘O) e seleziona la cartella. AudioLR mette in coda tutte le canzoni che contiene, anche nelle sottocartelle, in ordine di nome, e le separa una dopo l'altra mentre fai altro. Le tracce già create da AudioLR nella cartella vengono saltate."),
         Entry(topic: "Primi passi", question: "Perché la prima volta ci mette di più?",
               answer: "Al primo uso AudioLR scarica i modelli di IA (circa 330 MB per Massima, 470 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
         Entry(topic: "Primi passi", question: "Dove ritrovo le canzoni già separate?",

@@ -180,6 +180,25 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Mix")
     }
 
+    /// Una cartella intera: le canzoni anche nelle sottocartelle, in ordine, senza file nascosti, non audio
+    /// o già creati da AudioLR.
+    func testSongsInFolder() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("Cartella \(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        try fm.createDirectory(at: root.appendingPathComponent("Disco 2"), withIntermediateDirectories: true)
+        for name in ["10 Fine.mp3", "2 Inizio.wav", "Disco 2/1 Bonus.flac", "copertina.jpg", ".nascosta.mp3",
+                     "Inizio – Voce.wav", "Inizio – Karaoke.wav", "Inizio – Mix 2.wav", "Inizio – Senza batteria.wav", "Inizio.stem.mp4"] {
+            try Data([0]).write(to: root.appendingPathComponent(name))
+        }
+        let single = root.appendingPathComponent("2 Inizio.wav")
+        let base = root.resolvingSymlinksInPath().path + "/"
+        let found = SeparationJob.songs(in: [root]).map { $0.resolvingSymlinksInPath().path.replacingOccurrences(of: base, with: "") }
+        XCTAssertEqual(found, ["2 Inizio.wav", "10 Fine.mp3", "Disco 2/1 Bonus.flac"])
+        // Un file scelto da solo passa così com'è; un percorso che non esiste no
+        XCTAssertEqual(SeparationJob.songs(in: [single, root.appendingPathComponent("non c'è.mp3")]), [single])
+    }
+
     /// «Senza il mio strumento»: la batteria va via anche divisa nei suoi pezzi, il resto suona.
     func testWithoutMyInstrument() {
         var m = MixState()
