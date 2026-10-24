@@ -1,11 +1,17 @@
 # Il sito: prepara ONNX Runtime Web e il modello accanto alle pagine, prova il motore contro Demucs
-# e il sito intero in un browser vero, poi lo pubblica su GitHub Pages.
+# e il sito intero in un browser vero, poi lo impacchetta per provarlo in locale (release «sito-prova»).
+# NON si pubblica da solo: solo a mano (Actions › Sito › Run workflow › pubblica = sì), quando il sito è pronto.
 name: Sito
 
 on:
   workflow_dispatch:
+    inputs:
+      pubblica:
+        description: "Pubblicare il sito online su GitHub Pages?"
+        type: boolean
+        default: false
   push:
-    branches: [main, sito]
+    branches: [main, sito, windows]
     paths: [site/**, .github/workflows/sito.yml]
 
 permissions:
@@ -69,13 +75,30 @@ jobs:
           [ -f sito-risultati.png ] || exit 0
           gh release view schermate --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || exit 0
           gh release upload schermate sito-risultati.png sito-inizio.png --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Pacchetto per provarlo in locale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          rm -rf /tmp/pack && mkdir -p /tmp/pack/AudioLR-sito
+          cp -R site/. /tmp/pack/AudioLR-sito/
+          rm -rf /tmp/pack/AudioLR-sito/test
+          cp site/test/apri-sito.command /tmp/pack/AudioLR-sito/ 2>/dev/null || true
+          chmod +x /tmp/pack/AudioLR-sito/apri-sito.command
+          (cd /tmp/pack && zip -qr AudioLR-sito-prova.zip AudioLR-sito)
+          ls -la /tmp/pack
+          gh release view sito-prova --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create sito-prova --repo "$GITHUB_REPOSITORY" --prerelease --title "Sito · prova in locale (non pubblicato)" \
+              --notes "Il sito di AudioLR da provare sul proprio Mac, senza pubblicarlo. Scarica lo zip, aprilo e fai clic destro su apri-sito.command › Apri (la prima volta macOS chiede conferma): si apre nel browser su http://localhost:8080. Nessun dato esce dal computer."
+          gh release upload sito-prova /tmp/pack/AudioLR-sito-prova.zip --repo "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    # Solo a mano e solo da main: il sito va online quando lo si decide
+    if: github.event_name == 'workflow_dispatch' && inputs.pubblica && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
