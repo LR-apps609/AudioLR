@@ -83,6 +83,7 @@ section { padding-block: 44px; }
 .stem { display: grid; grid-template-columns: auto 150px auto auto 1fr auto; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: color-mix(in srgb, var(--well) 70%, transparent); margin-top: 6px; }
 .badge { width: 30px; height: 30px; border-radius: 9px; background: var(--c); box-shadow: 0 3px 8px color-mix(in srgb, var(--c) 35%, transparent); }
 .stem b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph { width: 28px; }
 .ms { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 12px var(--body); cursor: pointer; }
 .ms[aria-pressed="true"].m { background: var(--mute); color: #fff; border-color: transparent; }
 .ms[aria-pressed="true"].s { background: var(--brass); color: #fff; border-color: transparent; }

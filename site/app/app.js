@@ -138,7 +138,7 @@
       const mixable = t.key !== "instrumental";
       row.innerHTML = `<span class="badge" style="--c:${color}" aria-hidden="true"></span><b>${NAMES[t.key]}</b>` +
         (mixable ? `<button class="ms m" aria-pressed="false" title="Muto">M</button><button class="ms s" aria-pressed="false" title="Solo">S</button>`
-                 : `<span></span><span></span>`) +
+                 : `<span class="ph"></span><span class="ph"></span>`) +
         `<canvas aria-hidden="true"></canvas><button class="btn ghost small">WAV</button>`;
       const [m, s] = row.querySelectorAll(".ms");
       if (m) {
