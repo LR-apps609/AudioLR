@@ -188,13 +188,16 @@ final class AppTests: XCTestCase {
         defer { try? fm.removeItem(at: root) }
         try fm.createDirectory(at: root.appendingPathComponent("Disco 2"), withIntermediateDirectories: true)
         for name in ["10 Fine.mp3", "2 Inizio.wav", "Disco 2/1 Bonus.flac", "copertina.jpg", ".nascosta.mp3",
-                     "Inizio – Voce.wav", "Inizio – Karaoke.wav", "Inizio – Mix 2.wav", "Inizio – Senza batteria.wav", "Inizio.stem.mp4"] {
+                     "Inizio – Voce.wav", "Inizio – Base (senza voce).wav", "Inizio – Karaoke.wav", "Inizio – Mix 2.wav",
+                     "Inizio – Senza batteria.wav", "Inizio.stem.mp4", "video.mp4",
+                     // Canzoni vere con nomi che somigliano a quelli di AudioLR: restano
+                     "Eros – Senza di te.mp3", "Artista – Voce.mp3"] {
             try Data([0]).write(to: root.appendingPathComponent(name))
         }
         let single = root.appendingPathComponent("2 Inizio.wav")
         let base = root.resolvingSymlinksInPath().path + "/"
         let found = SeparationJob.songs(in: [root]).map { $0.resolvingSymlinksInPath().path.replacingOccurrences(of: base, with: "") }
-        XCTAssertEqual(found, ["2 Inizio.wav", "10 Fine.mp3", "Disco 2/1 Bonus.flac"])
+        XCTAssertEqual(found, ["2 Inizio.wav", "10 Fine.mp3", "Artista – Voce.mp3", "Disco 2/1 Bonus.flac", "Eros – Senza di te.mp3"])
         // Un file scelto da solo passa così com'è; un percorso che non esiste no
         XCTAssertEqual(SeparationJob.songs(in: [single, root.appendingPathComponent("non c'è.mp3")]), [single])
     }

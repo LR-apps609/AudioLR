@@ -88,30 +88,44 @@ enum StemFile {
 
         let format = try pcmFormat()
         let n = master[0].count, step = 8192
-        // Ogni traccia si scrive dalla sua coda quando il file è pronto a riceverla: AVAssetWriter le intreccia
-        await withTaskGroup(of: Void.self) { group in
-            for (i, input) in inputs.enumerated() {
-                group.addTask {
-                    await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-                        var pos = 0
-                        let queue = DispatchQueue(label: "audiolr.stem.\(i)")
-                        input.requestMediaDataWhenReady(on: queue) {
-                            while input.isReadyForMoreMediaData {
-                                if pos >= n || writer.status != .writing {
-                                    input.markAsFinished()
-                                    done.resume()
-                                    return
-                                }
-                                let count = min(step, n - pos)
-                                if let sb = try? sampleBuffer(tracks[i], from: pos, count: count, gain: gain, format: format) {
-                                    input.append(sb)
-                                }
-                                pos += count
-                            }
-                        }
-                    }
+        guard n > 0, tracks.allSatisfy({ $0.count >= 1 && $0.allSatisfy { $0.count >= n } }) else {
+            writer.cancelWriting()
+            throw SeparationError("tracce incomplete per il file DJ")
+        }
+        // Le tracce si scrivono a turno, un pezzo per volta: AVAssetWriter le intreccia nel file e accetta
+        // un pezzo di una traccia solo quando le altre sono abbastanza avanti
+        var pos = [Int](repeating: 0, count: inputs.count)
+        var finished = [Bool](repeating: false, count: inputs.count)
+        var idle = Date()
+        while finished.contains(false) && writer.status == .writing {
+            var progressed = false
+            for (i, input) in inputs.enumerated() where !finished[i] {
+                var rounds = 0
+                while input.isReadyForMoreMediaData && pos[i] < n && rounds < 4 {
+                    let count = min(step, n - pos[i])
+                    let sb = try sampleBuffer(tracks[i], from: pos[i], count: count, gain: gain, format: format)
+                    guard input.append(sb) else { break }
+                    pos[i] += count
+                    rounds += 1
+                    progressed = true
+                }
+                if pos[i] >= n {
+                    input.markAsFinished()
+                    finished[i] = true
+                    progressed = true
                 }
             }
+            if progressed {
+                idle = Date()
+            } else {
+                // Niente si muove da troppo: meglio fermarsi con un errore che restare bloccati
+                if Date().timeIntervalSince(idle) > 30 { break }
+                try? await Task.sleep(nanoseconds: 2_000_000)
+            }
+        }
+        guard writer.status == .writing, !finished.contains(false) else {
+            writer.cancelWriting()
+            throw SeparationError("il file per DJ non si è completato (\(writer.error?.localizedDescription ?? "scrittura ferma"))")
         }
         await writer.finishWriting()
         guard writer.status == .completed else {
@@ -217,10 +231,13 @@ enum StemFile {
             if String(data: data[c + 4..<c + 8], encoding: .ascii) == "udta" { udta = c }
             c += max(8, u32(c))
         }
-        if let u = udta, u + u32(u) == data.count {
+        if let u = udta {
+            // Dentro la «udta» che c'è già: tutto quello che segue resta dentro la «moov», che è l'ultimo atomo,
+            // quindi i riferimenti all'audio (nella «mdat», prima) non cambiano
+            let end = u + u32(u)
             setU32(u, u32(u) + stem.count)
             setU32(m, u32(m) + stem.count)
-            data.append(stem)
+            data.insert(contentsOf: stem, at: end)
         } else {
             let wrapped = box("udta", stem)
             setU32(m, u32(m) + wrapped.count)
@@ -230,10 +247,28 @@ enum StemFile {
 
     /// L'atomo «stem» di un file, se c'è (per le prove e per riconoscere i file).
     static func readMetadata(_ data: Data) -> Data? {
-        guard let r = data.range(of: Data("stem".utf8), options: .backwards), r.lowerBound >= 4 else { return nil }
-        let start = r.lowerBound - 4
-        let size = data[start..<start + 4].reduce(0) { $0 << 8 | Int($1) }
-        guard size > 8, start + size <= data.count else { return nil }
-        return data[(start + 8)..<(start + size)]
+        func u32(_ o: Int) -> Int { data[o..<o + 4].reduce(0) { $0 << 8 | Int($1) } }
+        func type(_ o: Int) -> String { String(data: data[o + 4..<o + 8], encoding: .ascii) ?? "" }
+        /// Il primo figlio di tipo `name` tra `from` e `to`.
+        func child(_ name: String, from: Int, to: Int) -> Int? {
+            var o = from
+            while o + 8 <= to {
+                let size = u32(o)
+                guard size >= 8, o + size <= to else { return nil }
+                if type(o) == name { return o }
+                o += size
+            }
+            return nil
+        }
+        guard let moov = child("moov", from: 0, to: data.count) else { return nil }
+        let moovEnd = moov + u32(moov)
+        var o = moov + 8
+        // Si guarda in ogni «udta» della «moov»
+        while let u = child("udta", from: o, to: moovEnd) {
+            let uEnd = u + u32(u)
+            if let st = child("stem", from: u + 8, to: uEnd) { return data[(st + 8)..<(st + u32(st))] }
+            o = uEnd
+        }
+        return nil
     }
 }

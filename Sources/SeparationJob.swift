@@ -223,15 +223,25 @@ final class SeparationJob: ObservableObject {
     func clearQueue() { queue = []; queuedQuality = [:] }
 
     /// Le estensioni delle canzoni che macOS sa aprire.
-    nonisolated static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "flac", "caf", "alac", "mp4"]
+    nonisolated static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "flac", "caf", "alac"]
 
     /// Le canzoni da separare: i file così come sono, le cartelle aperte con le sottocartelle (in ordine di nome).
-    /// Dentro le cartelle si saltano i file nascosti, quelli non audio e le tracce già create da AudioLR.
-    nonisolated static func songs(in urls: [URL]) -> [URL] {
+    /// Dentro le cartelle si saltano i file nascosti, quelli non audio e i file creati da AudioLR: «X – Voce»,
+    /// «X – Karaoke», «X – Mix 2», «X – Senza batteria»… ma solo se accanto ci sono davvero le tracce di «X»,
+    /// così una canzone che si chiama «Artista – Senza di te» non si salta.
+    nonisolated static func songs(in urls: [URL], limit: Int = 5000) -> [URL] {
         let fm = FileManager.default
-        // Le tracce e i mix già esportati da AudioLR («Canzone – Voce», «Canzone – Karaoke», «Canzone – Mix 2»…)
-        let made = Set(Stem.allKeys.map { " – " + Stem.info($0).name })
-        let mixes = [" – Mix", " – Karaoke", " – Solo voce", " – Senza "]
+        let stemNames = Set(Stem.allKeys.map { Stem.info($0).name })
+        let mixNames = ["Karaoke", "Karaoke con cori", "Solo voce", "Mix"] + MixState.Instrument.allCases.map(\.without)
+        /// «X» se il nome è «X – qualcosa» con «qualcosa» tra quelli creati da AudioLR.
+        func made(_ name: String, extra: Bool) -> String? {
+            guard let r = name.range(of: " – ", options: .backwards) else { return nil }
+            var tail = String(name[r.upperBound...])
+            // «Mix 2», «Karaoke 3»…
+            if let sp = tail.lastIndex(of: " "), Int(tail[tail.index(after: sp)...]) != nil { tail = String(tail[..<sp]) }
+            let hit = stemNames.contains(tail) || (extra && mixNames.contains(tail))
+            return hit ? String(name[..<r.lowerBound]) : nil
+        }
         var out: [URL] = []
         for u in urls where u.isFileURL {
             var isDir: ObjCBool = false
@@ -241,13 +251,21 @@ final class SeparationJob: ObservableObject {
                                         options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
             var found: [URL] = []
             for case let f as URL in e {
-                let name = f.deletingPathExtension().lastPathComponent
                 guard audioExtensions.contains(f.pathExtension.lowercased()),
-                      (try? f.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
-                      !f.lastPathComponent.lowercased().hasSuffix(".stem.mp4"),
-                      !made.contains(where: { name.hasSuffix($0) }),
-                      !mixes.contains(where: { name.contains($0) }) else { continue }
+                      (try? f.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
                 found.append(f)
+                if found.count >= limit { break }
+            }
+            // Per ogni cartella, le canzoni di cui ci sono già le tracce di AudioLR (almeno due tracce)
+            var count: [String: Int] = [:]
+            for f in found {
+                if let x = made(f.deletingPathExtension().lastPathComponent, extra: false) {
+                    count[f.deletingLastPathComponent().path + "/" + x, default: 0] += 1
+                }
+            }
+            found.removeAll { f in
+                guard let x = made(f.deletingPathExtension().lastPathComponent, extra: true) else { return false }
+                return (count[f.deletingLastPathComponent().path + "/" + x] ?? 0) >= 2
             }
             out += found.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         }
@@ -349,12 +367,29 @@ final class SeparationJob: ObservableObject {
 
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
-                for name in instrumentModels + (swName == nil ? [] : [bassName].compactMap { $0 }) {
+                for name in instrumentModels {
                     if let d = EngineChoice.stored(name) { decisions[name] = d; continue }
                     await self?.set(.tuning)
                     let d = try await SeparationJob.tune(name, mix: mix)
                     EngineChoice.store(d, for: name)
                     decisions[name] = d
+                    if cancel.isSet { throw CancellationError() }
+                }
+                // Il basso di Studio è un di più: se la prova del motore non riesce, resta il basso di SW
+                if swName != nil, let b = bassName {
+                    if let d = EngineChoice.stored(b) {
+                        decisions[b] = d
+                    } else {
+                        await self?.set(.tuning)
+                        do {
+                            let d = try await SeparationJob.tune(b, mix: mix)
+                            EngineChoice.store(d, for: b)
+                            decisions[b] = d
+                        } catch {
+                            if cancel.isSet { throw CancellationError() }
+                            bassName = nil
+                        }
+                    }
                     if cancel.isSet { throw CancellationError() }
                 }
                 for v in [voiceName, swName].compactMap({ $0 }) where EngineChoice.stored(v) == nil {
@@ -453,18 +488,28 @@ final class SeparationJob: ObservableObject {
                         // Un di più: se il modello non si carica o il calcolo non riesce, resta il basso di SW
                         var result: [[[Float]]]?
                         var bassSources: [String] = []
+                        var implausible = false
                         for units in d.units == .cpuAndGPU ? [MLComputeUnits.cpuAndGPU] : [d.units, .cpuAndGPU] where result == nil {
                             guard let core = try? await ModelStore.shared.load(b, units: units, progress: { _ in }) else { continue }
                             do {
                                 result = try run(core)
                                 bassSources = core.sources
-                                if units != d.units { EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0), for: b) }
-                            } catch is CancellationError { throw CancellationError() } catch {}
+                                // Solo se il Neural Engine ha dato un risultato sbagliato si ricorda la grafica
+                                if units != d.units && implausible {
+                                    let g = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                                    EngineChoice.store(g, for: b)
+                                    decisions[b] = g
+                                }
+                            } catch is CancellationError { throw CancellationError() } catch is ImplausibleResult {
+                                implausible = true
+                            } catch {}
                         }
                         if cancel.isSet { throw CancellationError() }
                         // Se il calcolo non riesce resta il basso di SW
-                        if let r = result, let j = bassSources.firstIndex(of: "bass") { out[i] = r[j] }
-                        lap("Basso (Demucs)")
+                        if let r = result, let j = bassSources.firstIndex(of: "bass") {
+                            out[i] = r[j]
+                            lap("Basso (Demucs)")
+                        }
                     }
                 }
                 for (k, name) in instrumentModels.enumerated() {
@@ -509,13 +554,16 @@ final class SeparationJob: ObservableObject {
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 lap("Salvataggio")
-                // Il file per DJ, se scelto nelle Impostazioni: se non riesce, le tracce restano comunque
-                if Prefs.makeStemFile {
-                    _ = try? await StemFile.make(stems: stems, song: url, folder: dir, title: url.deletingPathExtension().lastPathComponent)
-                    lap("File per DJ (.stem.mp4)")
-                }
                 let analysis = Analysis.analyze(out, sources: sources)
                 lap("Tempo e tonalità")
+                // Il file per DJ, se scelto nelle Impostazioni: se non riesce, le tracce restano comunque
+                if Prefs.makeStemFile {
+                    // Le tracce in memoria non servono più: il file si fa da quelle salvate
+                    out = []
+                    _ = try? await StemFile.make(stems: stems, song: url, folder: dir, title: url.deletingPathExtension().lastPathComponent)
+                    lap("File per DJ (.stem.mp4)")
+                    if cancel.isSet { throw CancellationError() }
+                }
                 let all = times
                 await self?.finish(dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis)
             } catch is CancellationError {

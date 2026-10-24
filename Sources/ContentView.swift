@@ -72,7 +72,9 @@ struct ContentView: View {
             guard job.phase == .done else { return }
             if let raw = n.object as? String, let i = MixState.Instrument(rawValue: raw) { without(i); return }
             // ⇧⌘K: il mio strumento (l'ultimo scelto); se è già tolto, si torna a tutto
-            guard let i = MixState.Instrument.mine ?? available.first else { return }
+            // Se nella canzone non c'è (es. chitarra in Veloce), il primo strumento che c'è
+            let mine = MixState.Instrument.mine.flatMap { available.contains($0) ? $0 : nil }
+            guard let i = mine ?? available.first else { return }
             if mixer.state.without == i { mixer.state.apply(.all) } else { without(i) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrPlay)) { _ in

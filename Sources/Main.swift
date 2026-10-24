@@ -100,6 +100,7 @@ struct AudioLRCommands: Commands {
             Menu("Senza il mio strumento") {
                 ForEach(MixState.Instrument.allCases) { i in
                     Button(i.without) { post(.audiolrWithout, i.rawValue) }
+                        .disabled(!job.stems.contains { i.keys.contains($0.key) })
                 }
             }
             .disabled(job.phase != .done)
