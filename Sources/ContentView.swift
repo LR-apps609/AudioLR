@@ -11,6 +11,14 @@ import UniformTypeIdentifiers
 extension Notification.Name {
     /// Menu Archivio › Apri una canzone… (⌘O): la finestra apre il pannello di scelta.
     static let audiolrOpenSong = Notification.Name("audiolrOpenSong")
+    /// Menu Mix: scorciatoia del mixer (l'oggetto è il nome di MixState.Preset).
+    static let audiolrPreset = Notification.Name("audiolrPreset")
+    /// Menu Mix › Suona / pausa.
+    static let audiolrPlay = Notification.Name("audiolrPlay")
+    /// Menu Mix › Esporta il mix (⌘E).
+    static let audiolrExport = Notification.Name("audiolrExport")
+    /// Menu Vista › Dettagli della separazione (⌘I).
+    static let audiolrDetails = Notification.Name("audiolrDetails")
 }
 
 struct ContentView: View {
@@ -24,6 +32,7 @@ struct ContentView: View {
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
     @State private var showDetails = false
+    @Environment(\.openWindow) private var openWindow
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
 
     var body: some View {
@@ -46,6 +55,18 @@ struct ContentView: View {
         } isTargeted: { dropping = $0 }
         .onAppear { news = WhatsNew.pending() }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrOpenSong)) { _ in choose() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrPreset)) { n in
+            if job.phase == .done, let raw = n.object as? String, let p = MixState.Preset(rawValue: raw) { mixer.state.apply(p) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrPlay)) { _ in
+            guard job.phase == .done else { return }
+            player.stop()
+            mixer.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrExport)) { _ in exportMix() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrDetails)) { _ in
+            if job.phase == .done { showDetails = true }
+        }
         .sheet(isPresented: Binding(get: { !news.isEmpty }, set: { if !$0 { news = [] } })) {
             WhatsNewSheet(items: news) { news = [] }
         }
@@ -91,7 +112,10 @@ struct ContentView: View {
                     showLibrary.toggle()
                 }
                 toolButton("questionmark.circle", help: "Come si usa") { showGuide = true }
-                    .popover(isPresented: $showGuide, arrowEdge: .bottom) { GuideView() }
+                    .popover(isPresented: $showGuide, arrowEdge: .bottom) {
+                        GuideView { showGuide = false; openWindow(id: "faq") }
+                    }
+                toolButton("person.crop.circle", help: "Account (⇧⌘A)") { openWindow(id: "account") }
                 SettingsLink {
                     Image(systemName: "gearshape").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 28)
                 }
@@ -340,15 +364,7 @@ struct ContentView: View {
             .labelsHidden()
             .frame(width: 250)
             Spacer()
-            Button {
-                guard let f = job.folder else { return }
-                Task {
-                    if let url = try? await mixer.export(stems: job.stems, folder: f, title: job.title) {
-                        exported = url
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
-                    }
-                }
-            } label: {
+            Button { exportMix() } label: {
                 if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
             }
             .disabled(mixer.exporting || job.folder == nil)
@@ -369,6 +385,7 @@ struct ContentView: View {
             HStack {
                 if let s = job.song { Button("Riprova") { job.start(s, quality: quality) }.buttonStyle(.borderedProminent) }
                 Button("Scegli un'altra canzone…") { job.reset(); choose() }
+                Button("Segnala il problema…") { openWindow(id: "bug") }
             }
             .controlSize(.large)
             .padding(.top, 4)
@@ -451,6 +468,17 @@ struct ContentView: View {
         if s < 60 { return "Circa \(Int((s / 5).rounded()) * 5) secondi" }
         let m = Int((s / 60).rounded())
         return m == 1 ? "Circa 1 minuto" : "Circa \(m) minuti"
+    }
+
+    /// Salva il mix che si sente e lo mostra nel Finder.
+    private func exportMix() {
+        guard job.phase == .done, !mixer.exporting, let f = job.folder else { return }
+        Task {
+            if let url = try? await mixer.export(stems: job.stems, folder: f, title: job.title) {
+                exported = url
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        }
     }
 
     private func choose() {

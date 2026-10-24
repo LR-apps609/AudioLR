@@ -3,7 +3,8 @@ import AppKit
 import CoreML
 
 // ════════════════════════════════════════════════════════════════════
-//  Impostazioni (⌘,): Tracce, Motore, Aggiornamenti.
+//  Impostazioni (⌘,): come lavora l'app. Profilo, piano e famiglia LR
+//  stanno nella finestra Account (⇧⌘A).
 // ════════════════════════════════════════════════════════════════════
 
 struct SettingsView: View {
@@ -81,7 +82,7 @@ struct EngineSettings: View {
     @State private var confirmDelete = false
 
     static func load() -> [(String, EngineChoice.Decision?)] {
-        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored("VoceRoFormer"))] +
+        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? ""))] +
         Quality.best.models.enumerated().map { (i, m) in
             ("Massima · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
         }
@@ -134,6 +135,7 @@ struct EngineSettings: View {
 
 struct UpdateSettings: View {
     @AppStorage(UpdateCheck.autoKey) private var auto = true
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -148,8 +150,8 @@ struct UpdateSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Link("Pagina di AudioLR su GitHub", destination: URL(string: "https://github.com/LR-apps609/AudioLR")!)
-                Link("Segnala un problema", destination: URL(string: "https://github.com/LR-apps609/AudioLR/issues/new")!)
+                Link("Pagina di AudioLR su GitHub", destination: BugReport.repo)
+                Button("Segnala un bug…") { openWindow(id: "bug") }
             }
         }
         .formStyle(.grouped)
@@ -193,7 +195,7 @@ struct GeneralSettings: View {
 struct AboutSettings: View {
     private let models: [(String, String, String)] = [
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
-        ("VoceRoFormer", "Massima · voce", "Mel-Band RoFormer · pesi di Kimberley Jensen · codice MIT"),
+        ("VoceRoFormer8", "Massima · voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("HTDemucsFT-0", "Massima · batteria", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-1", "Massima · basso", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Massima · altri strumenti", "Demucs v4 fine-tuned · MIT"),

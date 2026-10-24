@@ -87,7 +87,7 @@ final class VoiceTests: XCTestCase {
 
     func testVoiceMatchesRoFormer() async throws {
         executionTimeAllowance = 600
-        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent("VoceRoFormer-prova.f32"))
+        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent("VoceRoFormer8-prova.f32"))
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("modello voce non ancora pubblicato") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         let n = Int(all[0])

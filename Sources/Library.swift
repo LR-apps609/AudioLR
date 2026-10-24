@@ -104,6 +104,7 @@ struct LibraryRow: View {
 // MARK: - Guida
 
 struct GuideView: View {
+    var openFAQ: () -> Void = {}
     private let tips: [(String, String, String)] = [
         ("square.and.arrow.down", "Trascina una o più canzoni", "Anche un album intero: AudioLR le separa una dopo l'altra."),
         ("sparkles", "Massima o Veloce", "Massima ha la voce più pulita; Veloce è circa 4 volte più rapida."),
@@ -113,7 +114,10 @@ struct GuideView: View {
     ]
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
+        ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
+        ("⌘I", "Dettagli"), ("⌘L", "Libreria"), ("⌥⌘1 / ⌥⌘2", "Massima / Veloce"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
+        ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]
 
     var body: some View {
@@ -145,6 +149,9 @@ struct GuideView: View {
                     }
                 }
             }
+            Divider()
+            Button { openFAQ() } label: { Label("Tutte le domande frequenti", systemImage: "book") }
+                .buttonStyle(.link)
         }
         .padding(18)
         .frame(width: 330)

@@ -21,18 +21,75 @@ struct AudioLRApp: App {
         Settings {
             SettingsView()
         }
+
+        Window("Account", id: "account") {
+            AccountView().environmentObject(job)
+        }
+        .windowResizability(.contentSize)
+
+        Window("Domande frequenti", id: "faq") {
+            FAQView()
+        }
+        .defaultSize(width: 620, height: 620)
+
+        Window("Segnala un bug", id: "bug") {
+            BugReportView()
+        }
+        .windowResizability(.contentSize)
     }
 }
 
-/// I menu: Archivio (apri, nuova, mostra), aggiornamenti, Aiuto.
+/// I menu: Archivio (apri, nuova, mostra), Vista, Mix, aggiornamenti, Account, Aiuto.
 struct AudioLRCommands: Commands {
     @ObservedObject var job: SeparationJob
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage("showLibrary") private var showLibrary = true
+    @AppStorage(Quality.key) private var quality = Quality.best.rawValue
+
+    private func post(_ name: Notification.Name, _ object: Any? = nil) {
+        NotificationCenter.default.post(name: name, object: object)
+    }
 
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             Button("Controlla aggiornamenti…") {
                 Task { @MainActor in await UpdateCheck.check(userInitiated: true) }
             }
+            Button("Account…") { openWindow(id: "account") }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+        }
+        CommandGroup(before: .toolbar) {
+            Button(showLibrary ? "Nascondi la libreria" : "Mostra la libreria") { showLibrary.toggle() }
+                .keyboardShortcut("l")
+            Button("Dettagli della separazione") { post(.audiolrDetails) }
+                .keyboardShortcut("i")
+                .disabled(job.phase != .done)
+            Divider()
+            Toggle("Qualità \(Quality.best.title)", isOn: Binding(get: { quality == Quality.best.rawValue },
+                                                               set: { if $0 { quality = Quality.best.rawValue } }))
+                .keyboardShortcut("1", modifiers: [.command, .option])
+            Toggle("Qualità \(Quality.fast.title)", isOn: Binding(get: { quality == Quality.fast.rawValue },
+                                                               set: { if $0 { quality = Quality.fast.rawValue } }))
+                .keyboardShortcut("2", modifiers: [.command, .option])
+            Divider()
+        }
+        CommandMenu("Mix") {
+            Button("Suona / pausa") { post(.audiolrPlay) }
+                .disabled(job.phase != .done)
+            Divider()
+            Button("Tutte le tracce") { post(.audiolrPreset, MixState.Preset.all.rawValue) }
+                .keyboardShortcut("0")
+                .disabled(job.phase != .done)
+            Button("Karaoke (senza voce)") { post(.audiolrPreset, MixState.Preset.karaoke.rawValue) }
+                .keyboardShortcut("k")
+                .disabled(job.phase != .done)
+            Button("Solo voce") { post(.audiolrPreset, MixState.Preset.voice.rawValue) }
+                .keyboardShortcut("j")
+                .disabled(job.phase != .done)
+            Divider()
+            Button("Esporta il mix") { post(.audiolrExport) }
+                .keyboardShortcut("e")
+                .disabled(job.phase != .done)
         }
         CommandGroup(replacing: .newItem) {
             Button("Apri una canzone…") { NotificationCenter.default.post(name: .audiolrOpenSong, object: nil) }
@@ -52,8 +109,12 @@ struct AudioLRCommands: Commands {
                 .disabled(!job.isBusy)
         }
         CommandGroup(replacing: .help) {
-            Link("Guida di AudioLR", destination: URL(string: "https://github.com/LR-apps609/AudioLR#readme")!)
-            Link("Segnala un problema", destination: URL(string: "https://github.com/LR-apps609/AudioLR/issues/new")!)
+            Button("Domande frequenti") { openWindow(id: "faq") }
+                .keyboardShortcut("?", modifiers: .command)
+            Button("Segnala un bug…") { openWindow(id: "bug") }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+            Divider()
+            Link("AudioLR su GitHub", destination: BugReport.repo)
         }
     }
 }

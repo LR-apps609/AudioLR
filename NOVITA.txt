@@ -1,3 +1,11 @@
+Novità della 0.7.0 «Ascolto»:
+• Voce più pulita in Massima: il modello voce lavora su pezzi da 8 secondi invece di 2 (nelle prove: voce +0,4 dB, base karaoke +0,8 dB)
+• Nuova finestra Account (⇧⌘A): profilo, piano, i tuoi numeri e le app della famiglia LR; le Impostazioni restano per come lavora l'app
+• Domande frequenti (⌘?): come si usa AudioLR, divise per argomento e con ricerca
+• Segnala un bug (⌥⌘B): rapporto con le informazioni del Mac già compilate, da inviare su GitHub o copiare
+• Nuovo menu Mix e tasti rapidi: ⌘K karaoke, ⌘J solo voce, ⌘0 tutto, ⌘E esporta, ⌘I dettagli, ⌘L libreria, ⌥⌘1/⌥⌘2 qualità
+• Se il modello voce da 8 secondi non riesce su un Mac, AudioLR passa da sola a quello leggero
+
 Novità della 0.6.1 «Pulizia»:
 • Niente più suono «fritto»: se una traccia superava il massimo veniva tagliata; ora tutte le tracce si abbassano dello stesso tanto, quanto basta
 • Mixer con limitatore in uscita: anche con i volumi alzati il mix non distorce; lo stesso per «Esporta il mix»

@@ -33,12 +33,15 @@ enum Quality: String, CaseIterable, Identifiable {
     var voiceModel: String? {
         switch self {
         case .fast: return nil
-        case .best: return "VoceRoFormer"
+        case .best: return "VoceRoFormer8"
         }
     }
 
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
+
+    /// Il modello voce di riserva (pezzi da 2 s): più leggero, se quello da 8 s non riesce su questo Mac.
+    static let lightVoice = "VoceRoFormer"
 
     /// Tutto quello che va scaricato per questa qualità.
     var allModels: [String] { (voiceModel.map { [$0] } ?? []) + models }

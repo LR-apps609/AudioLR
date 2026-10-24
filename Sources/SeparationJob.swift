@@ -207,7 +207,7 @@ final class SeparationJob: ObservableObject {
                 }
                 if let v = voiceName, EngineChoice.stored(v) == nil {
                     await self?.set(.tuning)
-                    EngineChoice.store(try await SeparationJob.tuneVoice(mix: mix), for: v)
+                    EngineChoice.store(try await SeparationJob.tuneVoice(v, mix: mix), for: v)
                 }
                 lap("Prova del motore")
 
@@ -229,9 +229,16 @@ final class SeparationJob: ObservableObject {
                 if let v = voiceName {
                     var d = EngineChoice.stored(v) ?? EngineChoice.decide(agreement: 99)
                     func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
-                        let voice = try await ModelStore.shared.voice(units: units) { _ in }
-                        voice.overlap = Prefs.voiceOverlap
-                        return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                        do {
+                            let voice = try await ModelStore.shared.voice(v, units: units) { _ in }
+                            voice.overlap = Prefs.voiceOverlap
+                            return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                        } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && v != Quality.lightVoice {
+                            // Il modello da 8 s non riesce (memoria, Mac più vecchio): si usa quello leggero da 2 s
+                            let voice = try await ModelStore.shared.voice(Quality.lightVoice, units: units) { _ in }
+                            voice.overlap = Prefs.voiceOverlap
+                            return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                        }
                     }
                     let vo: [[Float]]
                     do { vo = try await runVoice(d.units) } catch is ImplausibleResult {
@@ -300,9 +307,9 @@ final class SeparationJob: ObservableObject {
     }
 
     /// Come `tune`, per il modello voce: un pezzo dal centro della canzone su Neural Engine e su grafica.
-    nonisolated static func tuneVoice(mix: [[Float]]) async throws -> EngineChoice.Decision {
-        let ane = try await ModelStore.shared.voice(units: .all) { _ in }
-        let gpu = try await ModelStore.shared.voice(units: .cpuAndGPU) { _ in }
+    nonisolated static func tuneVoice(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
+        let ane = try await ModelStore.shared.voice(name, units: .all) { _ in }
+        let gpu = try await ModelStore.shared.voice(name, units: .cpuAndGPU) { _ in }
         let chunk = ane.config.chunk
         let start = max(0, (mix[0].count - chunk) / 2)
         let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
