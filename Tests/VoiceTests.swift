@@ -144,7 +144,7 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Theme.stems(for: .fast, split: true), ["vocals", "drums", "bass", "other"])
         XCTAssertEqual(Theme.stems(for: .best, split: true).count, 6)
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
-        XCTAssertEqual(Quality.best.allModels, ["VoceRoFormer8", "StrumentiSW"])
+        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW"], "Massima: un solo modello, SW")
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
         XCTAssertEqual(Quality.studio.allModels, ["VoceStudio", "StrumentiSW"])
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio"), "VoceRoFormer8")

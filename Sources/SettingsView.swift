@@ -86,8 +86,8 @@ struct EngineSettings: View {
     @AppStorage(Prefs.dualKey) private var dual = true
 
     static func load() -> [(String, EngineChoice.Decision?)] {
-        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? "")),
-         ("Massima · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? "")),
+        [("Veloce", EngineChoice.stored(ModelStore.name)),
+         ("Massima e Studio · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? "")),
          ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? ""))] +
         Quality.best.models.enumerated().map { (i, m) in
             ("Riserva · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
@@ -216,7 +216,7 @@ struct AboutSettings: View {
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
-        ("VoceRoFormer8", "Massima · voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
+        ("VoceRoFormer8", "Riserva · voce di Studio", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("VoceStudio", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
         ("StrumentiSW", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),

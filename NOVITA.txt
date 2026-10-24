@@ -1,3 +1,11 @@
+Novità della 0.13.0 «Velocità»:
+• MOLTO PIÙ VELOCE: sui Mac con chip Apple il Neural Engine e la grafica lavorano insieme, ognuno su un pezzo diverso della canzone
+• Il Neural Engine non viene più scartato per differenze che non si sentono (soglia più ragionevole): sui Mac M1, M2, M3 e M4 la separazione usa finalmente tutto il chip
+• Massima con un solo modello (BS-RoFormer SW) per tutte e sei le tracce: voce pulita come prima, circa metà del tempo, 200 MB in meno da scaricare
+• Studio resta il massimo della qualità: voce dal modello più pulito più SW sugli strumenti
+• Nuova impostazione «Velocità» (Impostazioni › Motore): Equilibrio, più pulita, o Rapida, circa un quarto più veloce
+• Se il Neural Engine sbaglia davvero su una canzone, AudioLR se ne accorge e continua con la grafica
+
 Novità della 0.12.1 «Ritocchi»:
 • Le onde del mixer sono a colori pieni anche a riposo; mentre suona si colora la parte ascoltata
 • Il tasto della Sala prove ora dice «Prove»

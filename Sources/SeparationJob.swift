@@ -434,9 +434,13 @@ final class SeparationJob: ObservableObject {
                 let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
-                // Con la voce a parte, la base è esattamente la canzone meno la voce
-                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url,
-                                                          base: voiceOut == nil ? nil : instrumentsInput)
+                // La base è esattamente la canzone meno la voce: con la voce a parte è già pronta;
+                // con SW da solo (Massima) si toglie dalla canzone la voce di SW
+                var base: [[Float]]? = voiceOut == nil ? nil : instrumentsInput
+                if base == nil, swName != nil, !mix.isEmpty, let v = sources.firstIndex(of: "vocals") {
+                    base = (0..<2).map { c in zip(mix[c], out[v][c]).map { $0 - $1 } }
+                }
+                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url, base: base)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 lap("Salvataggio")

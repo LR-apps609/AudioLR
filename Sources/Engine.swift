@@ -4,9 +4,12 @@ import CoreML
 // ════════════════════════════════════════════════════════════════════
 //  Qualità e motore.
 //  • Veloce: htdemucs, un modello per tutti gli strumenti.
-//  • Massima: la voce con Mel-Band RoFormer, poi gli strumenti dalla base
-//    con BS-RoFormer «SW» (batteria, basso, chitarra, pianoforte, altro).
-//    Se SW non si può usare, i quattro modelli htdemucs_ft. È quella di serie.
+//  • Massima: un solo modello, BS-RoFormer «SW», per voce, batteria, basso,
+//    chitarra, pianoforte e altro. Sulla voce vale quanto un modello voce a
+//    parte (11,46 contro 11,53 dB sulle 50 canzoni di MUSDB) e ci mette metà
+//    del tempo. Se SW non si può usare, i modelli htdemucs_ft. È quella di serie.
+//  • Studio: la voce dal modello più pulito (BS-RoFormer viperx), poi SW
+//    sugli strumenti della base. La più pulita, la più lenta.
 //  • Il motore: al primo uso di ogni modello AudioLR prova un pezzo della
 //    canzone sia con il Neural Engine sia con la grafica. Se i due risultati
 //    non coincidono, il Neural Engine di questo Mac è impreciso con quel
@@ -34,7 +37,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var voiceModel: String? {
         switch self {
         case .fast: return nil
-        case .best: return "VoceRoFormer8"
+        case .best: return nil
         case .studio: return "VoceStudio"
         }
     }
@@ -99,8 +102,8 @@ enum Quality: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
-        case .best: return "Voce RoFormer e strumenti SW, con chitarra e piano · più lenta, molto più pulita"
-        case .studio: return "La voce più pulita (BS-RoFormer) e strumenti SW · circa 2 volte più lenta di Massima"
+        case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
+        case .studio: return "La voce più pulita (BS-RoFormer viperx) più SW sugli strumenti · la più lenta"
         }
     }
 
@@ -108,7 +111,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var downloadSize: String {
         switch self {
         case .fast: return "circa 80 MB"
-        case .best: return "circa 530 MB"
+        case .best: return "circa 330 MB"
         case .studio: return "circa 390 MB"
         }
     }
