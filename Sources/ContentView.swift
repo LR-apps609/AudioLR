@@ -308,12 +308,15 @@ struct ContentView: View {
             transport
             ScrollView {
                 VStack(spacing: 6) {
-                    ForEach(job.stems.filter { $0.key != "instrumental" }) { stem in
+                    ForEach(MixPlayer.mixable(job.stems)) { stem in
                         MixerRow(stem: stem, mixer: mixer)
                     }
-                    if let base = job.stems.first(where: { $0.key == "instrumental" }) {
+                    drumSplitRow
+                    let mixed = Set(MixPlayer.mixable(job.stems).map(\.key))
+                    let others = job.stems.filter { !mixed.contains($0.key) }
+                    if !others.isEmpty {
                         Divider().padding(.vertical, 4)
-                        StemRow(stem: base, player: player)
+                        ForEach(others) { StemRow(stem: $0, player: player) }
                     }
                 }
                 .padding(.bottom, 4)
@@ -331,6 +334,35 @@ struct ContentView: View {
         .onAppear { mixer.load(job.stems, folder: job.folder) }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
+    }
+
+    /// «Dividi la batteria»: cassa, rullante, tom, charleston, ride e crash in corsie proprie.
+    @ViewBuilder private var drumSplitRow: some View {
+        if let p = job.drumSplit {
+            HStack(spacing: 10) {
+                ProgressView(value: p).tint(Theme.color("drums")).frame(maxWidth: .infinity)
+                Text("Divido la batteria · \(Int(p * 100))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Button("Annulla") { job.cancel() }.controlSize(.small)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+        } else if job.canSplitDrums {
+            HStack(spacing: 10) {
+                Image(systemName: "square.split.2x2").foregroundStyle(Theme.color("drums"))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Dividi la batteria").font(.system(size: 12.5, weight: .semibold))
+                    Text(job.drumSplitError.map { "Non riuscito: \($0). Riprova." } ?? "Cassa, rullante, tom, charleston, ride e crash in corsie proprie")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Dividi") { mixer.stop(); job.splitDrums() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                    .help("⇧⌘D · la prima volta scarica il modello (circa 200 MB)")
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4])).foregroundStyle(Theme.stroke))
+        }
     }
 
     /// Il trasporto del mixer: suona tutto insieme, scorciatoie, esportazione del mix.

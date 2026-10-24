@@ -194,9 +194,18 @@ final class VoiceRoFormer {
 
     /// Ogni strumento di tutta la canzone (strumento × canale × campione), a pezzi sovrapposti.
     func separateAll(_ mix: [[Float]], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [[[Float]]] {
-        let length = mix[0].count, chunk = config.chunk, S = stemCount
+        try Self.stitch(mix, chunk: config.chunk, overlap: overlap, stems: stemCount, progress: progress,
+                        isCancelled: isCancelled, run: runChunkAll)
+    }
+
+    /// Pezzi sovrapposti, ricuciti con la finestra di Hamming (come audio-separator): vale per ogni modello
+    /// che lavora a pezzi di misura fissa e dà `stems` strumenti. Il primo pezzo passa il controllo di plausibilità.
+    static func stitch(_ mix: [[Float]], chunk: Int, overlap: Int, stems S: Int,
+                       progress: (Double) -> Void, isCancelled: () -> Bool,
+                       run: ([[Float]]) throws -> [[[Float]]]) throws -> [[[Float]]] {
+        let length = mix[0].count
         let step = max(1, chunk / max(overlap, 1))
-        let w = Self.hamming(chunk)
+        let w = hamming(chunk)
         var out = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: S)
         var count = [Float](repeating: 0, count: length)
         let starts = Array(stride(from: 0, to: length, by: step))
@@ -205,8 +214,8 @@ final class VoiceRoFormer {
             let len = min(chunk, length - start)
             var piece = [[Float]](repeating: [Float](repeating: 0, count: chunk), count: 2)
             for c in 0..<2 { for i in 0..<len { piece[c][i] = mix[c][start + i] } }
-            let v = try runChunkAll(piece)
-            if n == 0, !Self.plausible(piece: piece, stems: v) { throw ImplausibleResult() }
+            let v = try run(piece)
+            if n == 0, !plausible(piece: piece, stems: v) { throw ImplausibleResult() }
             for k in 0..<S { for c in 0..<2 { for i in 0..<len { out[k][c][start + i] += v[k][c][i] * w[i] } } }
             for i in 0..<len { count[start + i] += w[i] }
             progress(Double(n + 1) / Double(starts.count))

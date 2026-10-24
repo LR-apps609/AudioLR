@@ -104,18 +104,27 @@ final class MixPlayer: ObservableObject {
         return min(duration, startPosition + Date().timeIntervalSince(s))
     }
 
-    /// Prepara le tracce da mescolare (la base senza voce è già un mix, quindi resta fuori).
+    /// Le tracce che si mescolano: la base senza voce è già un mix, quindi resta fuori; se la batteria
+    /// è stata divisa, al suo posto ci sono le sue parti (cassa, rullante…).
+    nonisolated static func mixable(_ stems: [Stem]) -> [Stem] {
+        let split = stems.contains { DrumSplitter.parts.contains($0.key) }
+        return stems.filter { $0.key != "instrumental" && !(split && $0.key == "drums") }
+    }
+
+    /// Prepara le tracce da mescolare.
     func load(_ stems: [Stem], folder: URL?) {
-        guard folder != loadedFolder || keys.isEmpty else { return }
+        let wanted = Self.mixable(stems).map(\.key)
+        guard folder != loadedFolder || keys.isEmpty || Set(wanted) != Set(keys) else { return }
+        let keep = folder == loadedFolder ? state : MixState()
         stop()
         for p in players.values { engine.detach(p) }
         players = [:]
         files = [:]
         keys = []
         duration = 0
-        state = MixState()
+        state = keep
         loadedFolder = folder
-        for s in stems where s.key != "instrumental" {
+        for s in Self.mixable(stems) {
             guard let f = try? AVAudioFile(forReading: s.url) else { continue }
             let p = AVAudioPlayerNode()
             engine.attach(p)
@@ -185,7 +194,7 @@ final class MixPlayer: ObservableObject {
         exporting = true
         defer { exporting = false }
         let state = self.state
-        let chosen = stems.filter { $0.key != "instrumental" }
+        let chosen = Self.mixable(stems)
         let name = Self.exportName(state: state, title: title)
         let format = Prefs.format
         return try await Task.detached(priority: .userInitiated) {

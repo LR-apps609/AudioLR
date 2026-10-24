@@ -1,3 +1,11 @@
+Novità della 0.8.0 «Strumenti»:
+• Massima qualità con chitarra e pianoforte: oltre a voce, batteria e basso ricevi chitarra, pianoforte e altri strumenti, ognuno con la sua corsia nel mixer
+• Strumenti più puliti: un nuovo modello (BS-RoFormer SW) al posto dei quattro Demucs; nelle prove la batteria è più pulita di 1 dB e gli altri strumenti di 0,7 dB
+• Dividi la batteria (⇧⌘D): cassa, rullante, tom, charleston, ride e crash in tracce proprie, con un clic dopo la separazione
+• Meno da scaricare per Massima: circa 400 MB invece di 520
+• Impostazioni › Tracce: puoi riunire chitarra e pianoforte in «Altri strumenti» se preferisci quattro tracce
+• Domande frequenti aggiornate su strumenti e batteria
+
 Novità della 0.7.0 «Ascolto»:
 • Voce più pulita in Massima: il modello voce lavora su pezzi da 8 secondi invece di 2 (nelle prove: voce +0,4 dB, base karaoke +0,8 dB)
 • Nuova finestra Account (⇧⌘A): profilo, piano, i tuoi numeri e le app della famiglia LR; le Impostazioni restano per come lavora l'app

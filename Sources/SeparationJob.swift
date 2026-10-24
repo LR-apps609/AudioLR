@@ -48,12 +48,19 @@ struct Stem: Identifiable, Equatable {
         switch key {
         case "vocals": return ("Voce", "music.mic", 0)
         case "drums": return ("Batteria", "metronome.fill", 1)
-        case "bass": return ("Basso", "guitars", 2)
-        case "guitar": return ("Chitarra", "guitars.fill", 3)
-        case "piano": return ("Pianoforte", "pianokeys", 4)
-        case "other": return ("Altri strumenti", "music.quarternote.3", 5)
-        case "instrumental": return ("Base (senza voce)", "headphones", 6)
-        default: return (key.capitalized, "waveform", 7)
+        case "bass": return ("Basso", "guitars", 8)
+        case "guitar": return ("Chitarra", "guitars.fill", 9)
+        case "piano": return ("Pianoforte", "pianokeys", 10)
+        case "other": return ("Altri strumenti", "music.quarternote.3", 11)
+        // Le parti della batteria (DrumSep), subito dopo la batteria
+        case "kick": return ("Cassa", "circle.fill", 2)
+        case "snare": return ("Rullante", "circle.dashed", 3)
+        case "toms": return ("Tom", "circle.circle", 4)
+        case "hh": return ("Charleston", "sparkle", 5)
+        case "ride": return ("Ride", "circle.and.line.horizontal", 6)
+        case "crash": return ("Crash", "burst.fill", 7)
+        case "instrumental": return ("Base (senza voce)", "headphones", 20)
+        default: return (key.capitalized, "waveform", 21)
         }
     }
 }
@@ -96,6 +103,10 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var engineText: String?
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
+    /// La batteria in corso di divisione (0…1), nil se non si sta dividendo.
+    @Published private(set) var drumSplit: Double?
+    /// L'ultimo errore della divisione della batteria.
+    @Published private(set) var drumSplitError: String?
     /// Quanto è durata ogni fase dell'ultima separazione (per capire dove va il tempo).
     @Published private(set) var timings: [Timing] = []
     /// Il file di partenza: nome, formato, frequenza.
@@ -429,6 +440,68 @@ final class SeparationJob: ObservableObject {
         guard phase == .done, self.folder == folder else { return }
         self.stems = stems
         self.duration = duration
+    }
+
+    /// La batteria si può dividere: c'è, e non è già divisa.
+    var canSplitDrums: Bool {
+        phase == .done && drumSplit == nil && stems.contains { $0.key == "drums" } && !stems.contains { DrumSplitter.parts.contains($0.key) }
+    }
+
+    /// Divide la traccia della batteria in cassa, rullante, tom, charleston, ride e crash, accanto alle altre.
+    func splitDrums() {
+        guard canSplitDrums, let drums = stems.first(where: { $0.key == "drums" }), let dir = folder else { return }
+        drumSplit = 0
+        drumSplitError = nil
+        let title = self.title, format = Prefs.format, cancel = Cancel()
+        cancelled = cancel
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let audio = try AudioIO.read(drums.url)
+                func run(_ units: MLComputeUnits) async throws -> (names: [String], parts: [[[Float]]]) {
+                    let model = try await ModelStore.shared.drums(units: units) { p in
+                        Task { @MainActor in self?.drumSplit = p * 0.2 }
+                    }
+                    let parts = try model.separate(audio, progress: { p in Task { @MainActor in self?.drumSplit = 0.2 + 0.75 * p } },
+                                                   isCancelled: { cancel.isSet })
+                    return (model.config.sources, parts)
+                }
+                let unitsKey = DrumSplitter.modelName
+                var res: (names: [String], parts: [[[Float]]])
+                do { res = try await run(EngineChoice.stored(unitsKey)?.units ?? .all) } catch is ImplausibleResult {
+                    res = try await run(.cpuAndGPU)
+                    EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0), for: unitsKey)
+                }
+                let measures = res.parts.map(Stem.measure)
+                let gain = Stem.safeGain(peaks: measures.map(\.peak))
+                var made: [Stem] = []
+                for (k, key) in res.names.enumerated() where DrumSplitter.parts.contains(key) {
+                    let info = Stem.info(key)
+                    let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
+                    try AudioIO.write(res.parts[k], to: url, format: format, gain: gain)
+                    made.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(res.parts[k]),
+                                     share: nil, peakDB: measures[k].peakDB, balance: measures[k].balance,
+                                     gainDB: gain < 1 ? 20 * log10(Double(gain)) : 0))
+                }
+                await self?.drumsSplit(made, folder: dir)
+            } catch is CancellationError {
+                await self?.drumsSplit([], folder: dir)
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                await self?.drumsFailed(msg)
+            }
+        }
+    }
+
+    private func drumsSplit(_ parts: [Stem], folder dir: URL) {
+        drumSplit = nil
+        guard folder == dir, !parts.isEmpty else { return }
+        stems = (stems + parts).sorted { Stem.info($0.key).order < Stem.info($1.key).order }
+        if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
+    }
+
+    private func drumsFailed(_ msg: String) {
+        drumSplit = nil
+        drumSplitError = msg
     }
 
     func forget(_ item: HistoryItem) {

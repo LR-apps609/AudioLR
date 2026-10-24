@@ -8,7 +8,7 @@ final class EndToEndTests: XCTestCase {
     static let fixtureURL = ModelStore.base.appendingPathComponent("HTDemucs-prova.f32")
 
     private func fixture() async throws -> (mix: [[Float]], expected: [[[Float]]]) {
-        let (data, resp) = try await URLSession.shared.data(from: Self.fixtureURL)
+        let (data, resp) = try await Self.fixture("HTDemucs-prova.f32")
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else {
             throw XCTSkip("prova di fedeltà non ancora pubblicata")
         }
@@ -20,6 +20,24 @@ final class EndToEndTests: XCTestCase {
         let mix = [take(), take()]
         let expected = (0..<S).map { _ in [take(), take()] }
         return (mix, expected)
+    }
+
+    /// Un file di prova pubblicato tra i modelli: tre tentativi; se la rete del Mac di GitHub non risponde
+    /// il test si salta invece di fallire (non è un errore dell'app).
+    static func fixture(_ name: String) async throws -> (Data, URLResponse) {
+        let url = ModelStore.base.appendingPathComponent(name)
+        var last: Error?
+        for attempt in 0..<3 {
+            do {
+                var req = URLRequest(url: url)
+                req.timeoutInterval = 120
+                return try await URLSession.shared.data(for: req)
+            } catch {
+                last = error
+                try await Task.sleep(nanoseconds: UInt64(5 + attempt * 10) * 1_000_000_000)
+            }
+        }
+        throw XCTSkip("file di prova \(name) non raggiungibile: \(last?.localizedDescription ?? "rete")")
     }
 
     static func snr(_ ref: [Float], _ est: [Float]) -> Double {
@@ -79,7 +97,7 @@ final class EndToEndTests: XCTestCase {
     // MARK: Prove per passaggi: spettrogramma, ritorno all'onda, un pezzo intero
 
     private static func load(_ name: String) async throws -> [Float] {
-        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent(name))
+        let (data, resp) = try await EndToEndTests.fixture(name)
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 16 else { throw XCTSkip("\(name) non ancora pubblicato") }
         return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
     }
@@ -162,7 +180,7 @@ final class EndToEndTests: XCTestCase {
 
     func testBestQualityMatchesDemucs() async throws {
         executionTimeAllowance = 600
-        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent("HTDemucsFT-prova.f32"))
+        let (data, resp) = try await EndToEndTests.fixture("HTDemucsFT-prova.f32")
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("prova Massima qualità non ancora pubblicata") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         let n = Int(all[0]), S = Int(all[1])

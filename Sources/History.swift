@@ -52,7 +52,7 @@ enum History {
     static func stems(in folder: URL, title: String) -> [(key: String, url: URL)] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         var found: [(key: String, url: URL)] = []
-        for key in ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"] {
+        for key in ["vocals", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"] {
             let name = Stem.info(key).name
             if let f = files.first(where: { $0.deletingPathExtension().lastPathComponent == "\(title) – \(name)" }) {
                 found.append((key, f))
