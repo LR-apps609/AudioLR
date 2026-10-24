@@ -59,6 +59,7 @@ struct AccountView: View {
                         }
                         Text("Account locale · \(NSUserName())@\(Host.current().localizedName ?? "Mac")")
                             .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
                     }
                     Spacer()
                     Button(editing ? "Fine" : "Modifica") { editing.toggle() }

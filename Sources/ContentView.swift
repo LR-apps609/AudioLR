@@ -475,7 +475,7 @@ struct ContentView: View {
                     .onAppear { mixer.tick() }
                     .task(id: Int(mixer.position * (mixer.isLooping ? 25 : 4))) { mixer.tick() }
             }
-            Toggle(isOn: $showPractice) { Image(systemName: "music.note.house") }
+            Toggle(isOn: $showPractice) { Label("Prove", systemImage: "music.note.house") }
                 .toggleStyle(.button).controlSize(.small)
                 .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
                 .accessibilityLabel("Sala prove")
@@ -822,9 +822,11 @@ struct MixerRow: View {
             TimelineView(.animation(minimumInterval: 1 / 30, paused: !mixer.isPlaying)) { _ in
                 GeometryReader { g in
                     let p = mixer.duration > 0 ? mixer.position / mixer.duration : 0
+                    // A riposo, dall'inizio, l'onda è a colori pieni; mentre suona si colora la parte ascoltata
+                    let started = mixer.isPlaying || mixer.position > 0.05
                     WaveformView(peaks: stem.peaks, color: Theme.color(stem.key),
                                  dim: Theme.color(stem.key).opacity(0.35),
-                                 progress: audible ? p : 0, playhead: p)
+                                 progress: audible ? (started ? p : nil) : 0, playhead: started ? p : nil)
                         .opacity(audible ? 1 : 0.35)
                         .contentShape(Rectangle())
                         .onTapGesture(coordinateSpace: .local) { pt in
