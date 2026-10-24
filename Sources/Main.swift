@@ -97,6 +97,15 @@ struct AudioLRCommands: Commands {
             Button("Solo voce") { post(.audiolrPreset, MixState.Preset.voice.rawValue) }
                 .keyboardShortcut("j")
                 .disabled(job.phase != .done)
+            Menu("Senza il mio strumento") {
+                ForEach(MixState.Instrument.allCases) { i in
+                    Button(i.without) { post(.audiolrWithout, i.rawValue) }
+                }
+            }
+            .disabled(job.phase != .done)
+            Button("Senza il mio strumento (l'ultimo scelto)") { post(.audiolrWithout) }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .disabled(job.phase != .done)
             Divider()
             Divider()
             Toggle("Sala prove", isOn: $showPractice)

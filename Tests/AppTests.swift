@@ -180,6 +180,32 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Mix")
     }
 
+    /// «Senza il mio strumento»: la batteria va via anche divisa nei suoi pezzi, il resto suona.
+    func testWithoutMyInstrument() {
+        var m = MixState()
+        m.apply(without: .drums)
+        for k in ["drums", "kick", "snare", "toms", "hh", "ride", "crash"] { XCTAssertEqual(m.effectiveGain(k), 0, k) }
+        for k in ["vocals", "bass", "guitar", "piano", "other"] { XCTAssertEqual(m.effectiveGain(k), 1, k) }
+        XCTAssertEqual(m.without, .drums)
+        XCTAssertNil(m.preset)
+        XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Senza batteria")
+        m.apply(without: .bass)
+        XCTAssertEqual(m.effectiveGain("bass"), 0)
+        XCTAssertEqual(m.effectiveGain("kick"), 1)
+        XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Senza basso")
+        // Un muto in più a mano: non è più «senza basso» e basta
+        m.muted.insert("vocals")
+        XCTAssertNil(m.without)
+        m.apply(.all)
+        XCTAssertNil(m.without)
+        XCTAssertEqual(m.preset, .all)
+        // Il mio strumento si ricorda
+        let old = MixState.Instrument.mine
+        MixState.Instrument.mine = .guitar
+        XCTAssertEqual(MixState.Instrument.mine, .guitar)
+        MixState.Instrument.mine = old
+    }
+
     func testMixSumsWithGains() {
         var m = MixState()
         m.gain["vocals"] = 0.5

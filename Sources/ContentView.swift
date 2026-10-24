@@ -13,6 +13,8 @@ extension Notification.Name {
     static let audiolrOpenSong = Notification.Name("audiolrOpenSong")
     /// Menu Mix: scorciatoia del mixer (l'oggetto è il nome di MixState.Preset).
     static let audiolrPreset = Notification.Name("audiolrPreset")
+    /// Menu Mix: senza uno strumento (l'oggetto è il nome di MixState.Instrument; nessuno = il mio strumento).
+    static let audiolrWithout = Notification.Name("audiolrWithout")
     /// Menu Mix › Suona / pausa.
     static let audiolrPlay = Notification.Name("audiolrPlay")
     /// Menu Mix › Esporta il mix (⌘E).
@@ -61,6 +63,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .audiolrOpenSong)) { _ in choose() }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrPreset)) { n in
             if job.phase == .done, let raw = n.object as? String, let p = MixState.Preset(rawValue: raw) { mixer.state.apply(p) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrWithout)) { n in
+            guard job.phase == .done else { return }
+            if let raw = n.object as? String, let i = MixState.Instrument(rawValue: raw) { without(i); return }
+            // ⇧⌘K: il mio strumento (l'ultimo scelto); se è già tolto, si torna a tutto
+            guard let i = MixState.Instrument.mine ?? available.first else { return }
+            if mixer.state.without == i { mixer.state.apply(.all) } else { without(i) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrPlay)) { _ in
             guard job.phase == .done else { return }
@@ -487,6 +496,7 @@ struct ContentView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: mixer.keys.contains("lead") ? 340 : 250)
+            withoutMenu
             Spacer()
             Button { exportMix() } label: {
                 if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
@@ -593,6 +603,40 @@ struct ContentView: View {
     }
 
     /// Salva il mix che si sente e lo mostra nel Finder.
+    /// Gli strumenti che questa canzone ha davvero (chitarra e piano solo se divisi).
+    private var available: [MixState.Instrument] {
+        MixState.Instrument.allCases.filter { !$0.keys.isDisjoint(with: mixer.keys) }
+    }
+
+    private func without(_ i: MixState.Instrument) {
+        guard available.contains(i) else { return }
+        mixer.state.apply(without: i)
+        MixState.Instrument.mine = i
+    }
+
+    /// «Senza il mio strumento»: per suonare sopra la canzone la propria parte.
+    private var withoutMenu: some View {
+        Menu {
+            ForEach(available) { i in
+                Button { without(i) } label: {
+                    Label(i.without, systemImage: mixer.state.without == i ? "checkmark" : i.symbol)
+                }
+            }
+            if mixer.state.without != nil {
+                Divider()
+                Button("Tutte le tracce") { mixer.state.apply(.all) }
+            }
+        } label: {
+            Label(mixer.state.without?.without ?? "Senza…", systemImage: "music.note.list")
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(available.isEmpty)
+        .help("Togli la tua parte e suonaci sopra (⇧⌘K: l'ultimo strumento scelto)")
+        .accessibilityLabel("Senza il mio strumento")
+    }
+
     private func exportMix() {
         guard job.phase == .done, !mixer.exporting, let f = job.folder else { return }
         Task {

@@ -36,6 +36,43 @@ struct MixState: Equatable {
         }
     }
 
+    /// «Senza il mio strumento»: la propria parte via dal mix, per suonarci sopra.
+    enum Instrument: String, CaseIterable, Identifiable {
+        case drums, bass, guitar, piano
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .drums: return "Batteria"
+            case .bass: return "Basso"
+            case .guitar: return "Chitarra"
+            case .piano: return "Pianoforte"
+            }
+        }
+        /// «Senza batteria», «Senza basso»…
+        var without: String { "Senza " + title.lowercased() }
+        var symbol: String { Stem.info(rawValue).symbol }
+        /// Le tracce di questo strumento (la batteria anche divisa nei suoi pezzi).
+        var keys: Set<String> { self == .drums ? Set(["drums"] + DrumSplitter.parts) : [rawValue] }
+
+        /// L'ultimo scelto: è «il mio strumento» per ⇧⌘K.
+        static let key = "myInstrument"
+        static var mine: Instrument? {
+            get { Instrument(rawValue: UserDefaults.standard.string(forKey: key) ?? "") }
+            set { UserDefaults.standard.set(newValue?.rawValue, forKey: key) }
+        }
+    }
+
+    mutating func apply(without i: Instrument) {
+        muted = i.keys
+        solo = []
+    }
+
+    /// Lo strumento tolto, se il mix è «senza» uno strumento e basta.
+    var without: Instrument? {
+        guard solo.isEmpty, !muted.isEmpty else { return nil }
+        return Instrument.allCases.first { muted == $0.keys }
+    }
+
     /// Tutte le tracce di voce (intera, oppure solista e cori se è stata divisa).
     static let voices: Set<String> = ["vocals", "lead", "backing"]
 
@@ -292,7 +329,9 @@ final class MixPlayer: ObservableObject {
         case .karaoke?: return "\(title) – Karaoke"
         case .voice?: return "\(title) – Solo voce"
         case .backing?: return "\(title) – Karaoke con cori"
-        default: return "\(title) – Mix"
+        default:
+            if let i = state.without { return "\(title) – \(i.without)" }
+            return "\(title) – Mix"
         }
     }
 }

@@ -54,6 +54,8 @@ enum FAQ {
               answer: "Non ancora: oggi non esiste un modello libero abbastanza preciso per archi e fiati. Restano in «Altri strumenti». Appena ce ne sarà uno all'altezza, arriverà con un aggiornamento."),
         Entry(topic: "Mixer ed esportazione", question: "Posso avere le note in MIDI?",
               answer: "Sì: dopo una separazione apri il menu «MIDI» in alto e scegli la traccia (voce, basso, chitarra, pianoforte…). AudioLR trova le note con Basic Pitch di Spotify, direttamente sul Mac, e salva un file .mid accanto alle tracce, al tempo della canzone: trascinalo in GarageBand o Logic. Funziona meglio sulle tracce con una nota per volta, come voce e basso."),
+        Entry(topic: "Mixer ed esportazione", question: "Posso togliere il mio strumento e suonarci sopra?",
+              answer: "Sì: nel mixer apri «Senza…» e scegli batteria, basso, chitarra o pianoforte. La tua parte sparisce e il resto della band suona. AudioLR ricorda l'ultimo strumento scelto: ⇧⌘K lo toglie o lo rimette in un attimo. Con «Esporta il mix» salvi la versione «Senza batteria» (o basso…) per esercitarti anche fuori dall'app. Con la Sala prove puoi anche rallentarla."),
         Entry(topic: "Mixer ed esportazione", question: "Come rallento un passaggio per impararlo?",
               answer: "Apri la Sala prove (⌥⌘P, o il tasto con la casetta nel trasporto). La velocità va dal 50% al 150% senza cambiare il tono; «Tono» sposta di semitoni senza cambiare la velocità. Per ripetere un passaggio premi A all'inizio e B alla fine (⌘[ e ⌘] mentre suona): il mixer torna da solo ad A. Velocità e tono valgono solo per l'ascolto, il mix esportato resta originale."),
         Entry(topic: "Mixer ed esportazione", question: "Posso tenere i cori nel karaoke?",
