@@ -29,6 +29,8 @@ final class ModelStore: @unchecked Sendable {
     /// Un modello pronto per ogni nome e scelta di unità di calcolo.
     private var cores: [String: CoreMLSeparationCore] = [:]
     private var models: [String: MLModel] = [:]
+    /// Aperture che si è smesso di aspettare: quando finiscono, il modello non si tiene.
+    private var abandoned: Set<String> = []
     private let lock = NSLock()
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
@@ -57,13 +59,36 @@ final class ModelStore: @unchecked Sendable {
         if !isReady(name) { try await download(name, progress: progress) }
         let cfg = MLModelConfiguration()
         cfg.computeUnits = units
-        let model: MLModel
-        do { model = try MLModel(contentsOf: Self.compiled(name), configuration: cfg) } catch {
-            // Modello rovinato (scaricamento interrotto, macOS diverso…): la prossima volta si riscarica
-            try? FileManager.default.removeItem(at: Self.compiled(name))
-            throw SeparationError("il modello di IA non si apre: riprova, verrà scaricato di nuovo")
+        let url = Self.compiled(name)
+        let began = Date()
+        AppLog.write("Apro \(name) (\(Self.unitsName(units)))")
+        // L'apertura può durare minuti (la prima volta il Neural Engine adatta il modello): fuori dai thread di Swift
+        let model: MLModel = try await withCheckedThrowingContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do { cont.resume(returning: try MLModel(contentsOf: url, configuration: cfg)) } catch {
+                    AppLog.write("Non si apre \(name) (\(Self.unitsName(units))): \(error.localizedDescription)")
+                    // Il file è sano se si apre almeno sul processore: allora il problema è un altro (es. memoria)
+                    // e il modello non si cancella, così non si riscaricano centinaia di MB per niente
+                    let cpu = MLModelConfiguration()
+                    cpu.computeUnits = .cpuOnly
+                    if units != .cpuOnly, (try? MLModel(contentsOf: url, configuration: cpu)) != nil {
+                        cont.resume(throwing: SeparationError("il modello non si apre su \(Self.unitsName(units)) (memoria quasi piena?): chiudi le altre app e riprova, oppure scegli «Solo grafica» in Impostazioni › Motore"))
+                    } else {
+                        // Modello rovinato (scaricamento interrotto, macOS diverso…): la prossima volta si riscarica
+                        try? FileManager.default.removeItem(at: url)
+                        cont.resume(throwing: SeparationError("il modello di IA era rovinato: riprova, verrà scaricato di nuovo"))
+                    }
+                }
+            }
         }
-        lock.withLock { models[key] = model }
+        AppLog.write(String(format: "Aperto %@ (%@) in %.1f s", name, Self.unitsName(units), Date().timeIntervalSince(began)))
+        // Se nel frattempo si è smesso di aspettarlo (troppo lento), non si tiene in memoria
+        let keep = lock.withLock { () -> Bool in
+            if abandoned.remove(key) != nil { return false }
+            models[key] = model
+            return true
+        }
+        if !keep { AppLog.write("\(name) (\(Self.unitsName(units))) arrivato tardi: non si tiene") }
         return model
     }
 
@@ -112,6 +137,21 @@ final class ModelStore: @unchecked Sendable {
         lock.withLock {
             cores = cores.filter { !$0.key.hasPrefix(name + "#") }
             models = models.filter { !$0.key.hasPrefix(name + "#") }
+        }
+    }
+
+    /// Si smette di aspettare l'apertura di un modello su queste unità.
+    func abandon(_ name: String, units: MLComputeUnits) {
+        _ = lock.withLock { abandoned.insert("\(name)#\(units.rawValue)") }
+    }
+
+    static func unitsName(_ u: MLComputeUnits) -> String {
+        switch u {
+        case .cpuOnly: return "processore"
+        case .cpuAndGPU: return "grafica"
+        case .cpuAndNeuralEngine: return "Neural Engine"
+        case .all: return "tutto"
+        @unknown default: return "altro"
         }
     }
 

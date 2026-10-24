@@ -99,6 +99,10 @@ enum Prefs {
     static let doubleVoiceKey = "studioDoubleVoice"
     static var doubleVoice: Bool { UserDefaults.standard.bool(forKey: doubleVoiceKey) }
 
+    /// «Solo grafica»: niente Neural Engine (se su un Mac apre i modelli troppo lentamente o dà problemi).
+    static let engineModeKey = "engineMode"
+    static var gpuOnly: Bool { UserDefaults.standard.string(forKey: engineModeKey) == "grafica" }
+
     static let dualKey = "dualEngine"
     static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
 

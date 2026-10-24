@@ -143,13 +143,23 @@ enum EngineChoice {
                     ? String(format: "Neural Engine e grafica (verificato: %.0f dB)", agreement)
                     : "Grafica e processore"
             }
-            return agreement > 0
-                ? String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement)
-                : "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
+            if agreement > 0 { return String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement) }
+            if agreement == EngineChoice.chosenGPU { return "Grafica (scelta nelle Impostazioni)" }
+            if agreement == EngineChoice.slowANE { return "Grafica (il Neural Engine era troppo lento ad aprire il modello)" }
+            return "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
         }
     }
 
     static func key(_ model: String) -> String { "engine.\(model)" }
+
+    /// Valori speciali di `agreement`: Neural Engine troppo lento ad aprire il modello; grafica scelta nelle Impostazioni.
+    static let slowANE = -1.0
+    static let chosenGPU = -2.0
+
+    /// La scelta da usare adesso per un modello: quella delle Impostazioni («Solo grafica»), o quella ricordata.
+    static func current(_ model: String) -> Decision? {
+        Prefs.gpuOnly ? Decision(units: .cpuAndGPU, agreement: chosenGPU) : stored(model)
+    }
 
     static func stored(_ model: String, defaults: UserDefaults = .standard) -> Decision? {
         guard let d = defaults.dictionary(forKey: key(model)),

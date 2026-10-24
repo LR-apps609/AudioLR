@@ -85,6 +85,7 @@ struct EngineSettings: View {
     @State private var decisions: [(String, EngineChoice.Decision?)] = EngineSettings.load()
     @State private var confirmDelete = false
     @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
+    @AppStorage(Prefs.engineModeKey) private var engineMode = "auto"
     @AppStorage(Prefs.dualKey) private var dual = true
     @AppStorage(Prefs.doubleVoiceKey) private var doubleVoice = false
 
@@ -118,15 +119,22 @@ struct EngineSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
+                Picker("Dove calcolare", selection: $engineMode) {
+                    Text("Automatico (Neural Engine e grafica)").tag("auto")
+                    Text("Solo grafica").tag("grafica")
+                }
+                .disabled(!SeparationJob.hasNeuralEngine)
                 Picker("Velocità", selection: $speed) {
                     Text("Equilibrio (più pulita)").tag("equilibrio")
                     Text("Rapida (circa un quarto più veloce)").tag("rapida")
                 }
                 Toggle("Neural Engine e grafica insieme", isOn: $dual)
-                    .disabled(!SeparationJob.hasNeuralEngine)
+                    .disabled(!SeparationJob.hasNeuralEngine || engineMode == "grafica" || Prefs.lowMemory)
                 Toggle("Studio: voce da due modelli (più pulita, circa un terzo più lenta)", isOn: $doubleVoice)
             } footer: {
-                Text(SeparationJob.hasNeuralEngine
+                Text(Prefs.lowMemory && SeparationJob.hasNeuralEngine
+                     ? "Questo Mac ha 8 GB di memoria: ogni modello si apre una volta sola (Neural Engine o grafica), perché due copie insieme lo rallenterebbero. «Solo grafica» evita l'attesa del primo adattamento al Neural Engine. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
+                     : SeparationJob.hasNeuralEngine
                      ? "Con i due insieme, i pezzi della canzone si dividono tra Neural Engine e grafica: molto più veloce sui Mac con chip Apple. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
                      : "Questo Mac non ha il Neural Engine: lavora la grafica. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi.")
                     .font(.caption).foregroundStyle(.secondary)

@@ -279,7 +279,10 @@ struct ContentView: View {
                 Text(percentText).font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
                 VStack(alignment: .leading, spacing: 2) {
                     Text(stepText).font(.system(size: 13, weight: .semibold))
-                    Text(detailText).font(.system(size: 11.5)).foregroundStyle(.secondary).monospacedDigit()
+                    // Si aggiorna ogni secondo: il passo in corso e da quanto, così non sembra mai fermo
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(detailText).font(.system(size: 11.5)).foregroundStyle(.secondary).monospacedDigit()
+                    }
                 }
                 Spacer()
                 if !job.queue.isEmpty {
@@ -603,9 +606,13 @@ struct ContentView: View {
         case .downloading: return job.installing
             ? "Scaricato: lo verifico e lo installo sul Mac. Solo la prima volta, qualche decina di secondi."
             : "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
-        case .tuning: return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica. Può richiedere qualche minuto."
-        case .separating(let p): return job.remaining.map(Self.timeLeft)
-            ?? (p == 0 ? "Apro i modelli (dopo un aggiornamento, la prima volta può richiedere qualche minuto)…" : "Calcolo il tempo che manca…")
+        case .tuning, .reading:
+            if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
+            return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica."
+        case .separating(let p):
+            if let r = job.remaining, p > 0 { return Self.timeLeft(r) }
+            if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
+            return "Calcolo il tempo che manca…"
         case .saving: return "\(Prefs.format.title) in \(Prefs.displayName(of: Prefs.folder))"
         default: return " "
         }

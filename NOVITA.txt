@@ -1,4 +1,11 @@
 Novità della 0.15.0 «Due voci»:
+• SISTEMATO il primo uso lento o «bloccato»: dopo lo scaricamento il modello si adattava al Neural Engine due volte, con tre copie in memoria. Ora una volta sola, e sui Mac con 8 GB una sola copia per modello
+• La finestra dice sempre cosa sta facendo e da quanto («Apro il modello degli strumenti sul Neural Engine… · 1:12»), invece di restare a 0%
+• Se il Neural Engine non apre un modello entro 4 minuti, AudioLR continua con la grafica e lo dice
+• Annulla funziona subito, anche mentre un modello si sta aprendo
+• Nuova impostazione «Dove calcolare» (Impostazioni › Motore): Automatico o Solo grafica
+• Se un modello non si apre per memoria, non viene più cancellato e riscaricato
+• Registro dei passi (~/Library/Logs/AudioLR): le segnalazioni di problemi includono gli ultimi passi, così si vede dove si è fermata
 • Più veloce sui Mac con 8 GB di memoria: ogni modello si libera appena ha finito il suo passaggio, e la prova del motore non apre più una copia in più. Così macOS non deve usare il disco come memoria, che rallentava molto Massima e soprattutto Studio
 • Studio può ricavare la voce da due modelli (BS-RoFormer viperx e Mel-RoFormer) e farne la media: più pulita di ognuno dei due (12,15 dB contro 11,93 sulle 50 canzoni di prova MUSDB). Si attiva in Impostazioni › Motore; Studio diventa circa un terzo più lento
 • Se il secondo modello non si può usare, Studio continua con la voce di viperx

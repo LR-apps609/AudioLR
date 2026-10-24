@@ -111,6 +111,9 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var qualityNote: String?
     /// Durante lo scaricamento: il file è arrivato e il modello si sta verificando e installando.
     @Published private(set) var installing = false
+    /// Il passo preciso in corso («Apro il modello sul Neural Engine…») e da quando: la finestra lo mostra col tempo.
+    @Published private(set) var stepDetail: String?
+    @Published private(set) var stepStarted = Date()
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
     /// La traccia di cui si stanno cercando le note (MIDI), e i file MIDI già creati per questa canzone.
@@ -295,6 +298,7 @@ final class SeparationJob: ObservableObject {
         engineText = nil
         qualityNote = nil
         installing = false
+        stepDetail = nil
         analysis = nil
         timings = []
         sourceInfo = AudioIO.describe(url)
@@ -317,6 +321,11 @@ final class SeparationJob: ObservableObject {
                 if d >= 0.05 { times.append(Timing(name: name, seconds: d)) }
                 clock = now
             }
+            /// Il passo preciso in corso: nella finestra (con il tempo che passa) e nel registro.
+            func say(_ text: String) async {
+                AppLog.write(text)
+                await self?.note(cancel, text)
+            }
             /// Con poca memoria, un modello che ha finito il suo passaggio si libera subito.
             func done(_ names: String?...) {
                 guard Prefs.lowMemory else { return }
@@ -333,6 +342,9 @@ final class SeparationJob: ObservableObject {
                 var bassApplied = false
                 var secondApplied = false
                 for (k, name) in downloads.enumerated() {
+                    if !ModelStore.shared.isReady(name) {
+                        await say("Scarico il modello \(k + 1) di \(downloads.count) (\(name))…")
+                    }
                     do {
                         try await ModelStore.shared.prepare(name) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
@@ -378,11 +390,12 @@ final class SeparationJob: ObservableObject {
                     if cancel.isSet { throw CancellationError() }
                 }
                 lap("Preparazione dei modelli")
-                await self?.set(.reading)
+                await self?.set(cancel, .reading)
+                await say("Leggo la canzone…")
                 var mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
                 let seconds = Double(mix[0].count) / AudioIO.sampleRate
-                await self?.loaded(peaks: Peaks.of(mix), duration: seconds)
+                await self?.loaded(cancel, peaks: Peaks.of(mix), duration: seconds)
                 lap("Lettura della canzone")
 
                 // Con il modello voce a parte, il Demucs specializzato nella voce non serve: un passaggio in meno
@@ -392,8 +405,9 @@ final class SeparationJob: ObservableObject {
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
                 for name in instrumentModels {
-                    if let d = EngineChoice.stored(name) { decisions[name] = d; continue }
-                    await self?.set(.tuning)
+                    if let d = EngineChoice.current(name) { decisions[name] = d; continue }
+                    await self?.set(cancel, .tuning)
+                    await say("Prova del motore: modello \(name)…")
                     let d = try await SeparationJob.tune(name, mix: mix)
                     EngineChoice.store(d, for: name)
                     decisions[name] = d
@@ -401,10 +415,10 @@ final class SeparationJob: ObservableObject {
                 }
                 // Il basso di Studio è un di più: se la prova del motore non riesce, resta il basso di SW
                 if swName != nil, let b = bassName {
-                    if let d = EngineChoice.stored(b) {
+                    if let d = EngineChoice.current(b) {
                         decisions[b] = d
                     } else {
-                        await self?.set(.tuning)
+                        await self?.set(cancel, .tuning)
                         do {
                             let d = try await SeparationJob.tune(b, mix: mix)
                             EngineChoice.store(d, for: b)
@@ -416,16 +430,16 @@ final class SeparationJob: ObservableObject {
                     }
                     if cancel.isSet { throw CancellationError() }
                 }
-                for v in [voiceName, swName].compactMap({ $0 }) where EngineChoice.stored(v) == nil {
-                    await self?.set(.tuning)
-                    EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix), for: v)
+                for v in [voiceName, swName].compactMap({ $0 }) where EngineChoice.current(v) == nil {
+                    await self?.set(cancel, .tuning)
+                    EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix, label: v == swName ? "degli strumenti" : "della voce", say: say), for: v)
                     if cancel.isSet { throw CancellationError() }
                 }
                 // La seconda voce: se è già quella di riserva in uso, o la prova del motore non riesce, si fa senza
                 if secondName == voiceName { secondName = nil }
-                if let s = secondName, EngineChoice.stored(s) == nil {
-                    await self?.set(.tuning)
-                    do { EngineChoice.store(try await SeparationJob.tuneRoFormer(s, mix: mix), for: s) } catch {
+                if let s = secondName, EngineChoice.current(s) == nil {
+                    await self?.set(cancel, .tuning)
+                    do { EngineChoice.store(try await SeparationJob.tuneRoFormer(s, mix: mix, label: "della seconda voce", say: say), for: s) } catch {
                         if cancel.isSet { throw CancellationError() }
                         secondName = nil
                     }
@@ -433,7 +447,7 @@ final class SeparationJob: ObservableObject {
                 lap("Prova del motore")
 
                 // 3. La voce, con il suo modello (se questa qualità ne ha uno)
-                await self?.set(.separating(0))
+                await self?.set(cancel, .separating(0))
                 let began = Date()
                 // Quanta parte della barra spetta alla voce
                 let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : secondName == nil ? 0.45 : 0.6
@@ -444,7 +458,7 @@ final class SeparationJob: ObservableObject {
                     let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
                     Task { @MainActor in
                         // Un aggiornamento in ritardo non deve riaprire una separazione già finita o annullata
-                        guard case .separating = self?.phase else { return }
+                        guard case .separating = self?.phase, self?.cancelled === cancel else { return }
                         self?.phase = .separating(total)
                         self?.remaining = left
                     }
@@ -452,19 +466,20 @@ final class SeparationJob: ObservableObject {
                 var voiceOut: [[Float]]?
                 var instrumentsInput = mix
                 if let v = voiceName {
-                    var d = EngineChoice.stored(v) ?? EngineChoice.decide(agreement: 99)
+                    var d = EngineChoice.current(v) ?? EngineChoice.decide(agreement: 99)
                     // Il modello voce davvero usato: se quello scelto non riesce si passa al più leggero
                     var used = v
                     func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
                         do {
-                            let (voice, helpers) = try await SeparationJob.workers(used, units: units)
+                            let (voice, helpers) = try await SeparationJob.workers(used, units: units, label: "della voce", say: say)
+                            await say("Separo la voce: primo pezzo della canzone…")
                             voice.overlap = Prefs.voiceOverlapValue
                             return try voice.separate(mix, helpers: helpers, progress: { report($0 * voiceShare * firstShare) }, isCancelled: { cancel.isSet })
                         } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && !cancel.isSet
                                     && Quality.fallbackVoice(for: used) != nil {
                             // Il modello voce non riesce (memoria, Mac più vecchio): si usa quello più leggero
                             used = Quality.fallbackVoice(for: used)!
-                            if let stored = EngineChoice.stored(used) { d = stored }
+                            if let stored = EngineChoice.current(used) { d = stored }
                             return try await runVoice(d.units)
                         }
                     }
@@ -483,9 +498,10 @@ final class SeparationJob: ObservableObject {
                     lap("Voce (RoFormer)")
                     var vo2 = vo
                     // La seconda voce (Studio): la media dei due modelli è più pulita di ognuno
-                    if let s = secondName, s != used, let sd = EngineChoice.stored(s) {
+                    if let s = secondName, s != used, let sd = EngineChoice.current(s) {
                         do {
-                            let (second, helpers) = try await SeparationJob.workers(s, units: sd.units)
+                            let (second, helpers) = try await SeparationJob.workers(s, units: sd.units, label: "della seconda voce", say: say)
+                            await say("Seconda voce: primo pezzo della canzone…")
                             second.overlap = Prefs.voiceOverlapValue
                             let other = try second.separate(mix, helpers: helpers, progress: { report(voiceShare * (firstShare + (1 - firstShare) * $0)) },
                                                             isCancelled: { cancel.isSet })
@@ -515,10 +531,11 @@ final class SeparationJob: ObservableObject {
                 // Quanta parte della barra degli strumenti spetta a SW (il resto al basso di Demucs, se c'è)
                 let swShare = bassName == nil ? 1.0 : 0.85
                 if let w = swName {
-                    var d = EngineChoice.stored(w) ?? EngineChoice.decide(agreement: 99)
+                    var d = EngineChoice.current(w) ?? EngineChoice.decide(agreement: 99)
                     let input = instrumentsInput
                     func runSW(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
-                        let (model, helpers) = try await SeparationJob.workers(w, units: units)
+                        let (model, helpers) = try await SeparationJob.workers(w, units: units, label: "degli strumenti", say: say)
+                        await say("Separo gli strumenti: primo pezzo della canzone…")
                         model.overlap = Prefs.instrumentOverlap
                         let audio = try model.separateAll(input, helpers: helpers, progress: { report(voiceShare + (1 - voiceShare) * swShare * $0) },
                                                           isCancelled: { cancel.isSet })
@@ -539,6 +556,7 @@ final class SeparationJob: ObservableObject {
 
                     // In Studio il basso dal Demucs specializzato, sulla stessa base: più pieno e più pulito di quello di SW
                     if let b = bassName, let i = sources.firstIndex(of: "bass"), let d = decisions[b] {
+                        await say("Basso: secondo modello (Demucs) sulla base…")
                         func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
                             try Separator(core: core).separate(input, progress: { p in
                                 report(voiceShare + (1 - voiceShare) * (swShare + (1 - swShare) * p))
@@ -610,7 +628,8 @@ final class SeparationJob: ObservableObject {
                 }
                 let took = Date().timeIntervalSince(began)
 
-                await self?.set(.saving)
+                await self?.set(cancel, .saving)
+                await say("Salvo le tracce…")
                 // La base è esattamente la canzone meno la voce: con la voce a parte è già pronta;
                 // con SW da solo (Massima) si toglie dalla canzone la voce di SW
                 var base: [[Float]]? = voiceOut == nil ? nil : instrumentsInput
@@ -638,13 +657,13 @@ final class SeparationJob: ObservableObject {
                 if quality.bassModel != nil && swName != nil && !bassApplied { reduced.append("basso da un solo modello") }
                 if quality.secondVoice != nil && voiceUsed == wantedVoice && !secondApplied { reduced.append("voce da un solo modello") }
                 let note = reduced.isEmpty ? nil : "Qualità ridotta su questo Mac: " + reduced.joined(separator: ", ")
-                await self?.finish(dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis, note: note)
+                await self?.finish(cancel, dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis, note: note)
             } catch is CancellationError {
-                await self?.stopped(clearing: true)
+                await self?.stopped(cancel, clearing: true)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                await self?.set(.failed(msg))
-                await self?.afterFailure()
+                await self?.set(cancel, .failed(msg))
+                await self?.afterFailure(cancel)
             }
         }
     }
@@ -656,27 +675,62 @@ final class SeparationJob: ObservableObject {
 
     /// Le copie di un modello RoFormer che lavorano insieme sui pezzi della canzone: una sul Neural Engine
     /// e una sulla grafica, se il Neural Engine è affidabile su questo Mac; altrimenti una sola, dove deciso.
-    nonisolated static func workers(_ name: String, units: MLComputeUnits) async throws -> (RoFormer, [RoFormer]) {
-        if units == .all && hasNeuralEngine && Prefs.dualEngine {
-            let ane = try await ModelStore.shared.roformer(name, units: .cpuAndNeuralEngine) { _ in }
-            let gpu = try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }
-            return (ane, [gpu])
+    /// Quanto si aspetta che il Neural Engine apra un modello (la prima volta lo adatta a questo Mac)
+    /// prima di continuare con la sola grafica.
+    nonisolated static let aneLimit: Double = 240
+
+    /// Neural Engine e grafica insieme (due copie di ogni modello): solo con abbastanza memoria.
+    /// Con 8 GB due copie da centinaia di MB fanno usare il disco come memoria e tutto rallenta.
+    nonisolated static var useDual: Bool { hasNeuralEngine && Prefs.dualEngine && !Prefs.lowMemory }
+
+    nonisolated static func workers(_ name: String, units: MLComputeUnits, label: String = "",
+                                    say: @escaping (String) async -> Void = { _ in }) async throws -> (RoFormer, [RoFormer]) {
+        let what = label.isEmpty ? "il modello" : "il modello \(label)"
+        // Senza Neural Engine (Mac Intel) o se è stata scelta la grafica: una copia sola, sulla grafica
+        if !hasNeuralEngine || Prefs.gpuOnly || units == .cpuAndGPU {
+            let u: MLComputeUnits = hasNeuralEngine ? .cpuAndGPU : units
+            await say("Apro \(what) sulla grafica…")
+            return (try await ModelStore.shared.roformer(name, units: u) { _ in }, [])
         }
-        return (try await ModelStore.shared.roformer(name, units: units) { _ in }, [])
+        let aneUnits: MLComputeUnits = useDual ? .cpuAndNeuralEngine : .all
+        await say("Apro \(what) sul Neural Engine (la prima volta il Mac lo adatta: fino a \(Int(aneLimit / 60)) minuti)…")
+        guard let ane = try await withTimeout(aneLimit, { try await ModelStore.shared.roformer(name, units: aneUnits) { _ in } }) else {
+            // Troppo lento: si continua con la grafica e lo si ricorda (si riprova solo rifacendo la prova del motore)
+            ModelStore.shared.abandon(name, units: aneUnits)
+            EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: EngineChoice.slowANE), for: name)
+            await say("Il Neural Engine non ha aperto \(what) in \(Int(aneLimit / 60)) minuti: continuo con la grafica…")
+            return (try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }, [])
+        }
+        guard useDual else { return (ane, []) }
+        await say("Apro \(what) anche sulla grafica, per lavorare con tutti e due…")
+        return (ane, [try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }])
     }
 
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
-    nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
+    nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]], label: String = "",
+                                         say: @escaping (String) async -> Void = { _ in }) async throws -> EngineChoice.Decision {
+        let what = label.isEmpty ? "il modello" : "il modello \(label)"
         // La stessa copia che poi lavorerà sul Neural Engine (con i due motori insieme): una copia in meno in memoria
-        let aneUnits: MLComputeUnits = hasNeuralEngine && Prefs.dualEngine ? .cpuAndNeuralEngine : .all
-        let ane = try await ModelStore.shared.roformer(name, units: aneUnits) { _ in }
+        let aneUnits: MLComputeUnits = useDual ? .cpuAndNeuralEngine : .all
+        await say(hasNeuralEngine
+                  ? "Prova del motore: apro \(what) sul Neural Engine (la prima volta il Mac lo adatta: fino a \(Int(aneLimit / 60)) minuti)…"
+                  : "Prova del motore: apro \(what)…")
+        guard let ane = try await withTimeout(aneLimit, { try await ModelStore.shared.roformer(name, units: aneUnits) { _ in } }) else {
+            ModelStore.shared.abandon(name, units: aneUnits)
+            await say("Il Neural Engine non ha aperto \(what) in \(Int(aneLimit / 60)) minuti: userò la grafica…")
+            return EngineChoice.Decision(units: .cpuAndGPU, agreement: EngineChoice.slowANE)
+        }
+        await say("Prova del motore: apro \(what) sulla grafica…")
         let gpu = try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }
+        await say("Prova del motore: confronto Neural Engine e grafica su un pezzo della canzone…")
         let chunk = ane.config.chunk
         let start = max(0, (mix[0].count - chunk) / 2)
         let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
         let a = try ane.runChunkAll(piece), b = try gpu.runChunkAll(piece)
         guard RoFormer.plausible(piece: piece, stems: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
-        return EngineChoice.decide(agreement: Separator.agreement(b, a))
+        let d = EngineChoice.decide(agreement: Separator.agreement(b, a))
+        AppLog.write("Prova del motore \(name): \(d.text)")
+        return d
     }
 
     /// Le tracce finali dagli strumenti di SW: la voce dal suo modello (se c'è), chitarra e pianoforte
@@ -792,7 +846,7 @@ final class SeparationJob: ObservableObject {
                                        isCancelled: { cancel.isSet })
                 }
                 var res: (names: [String], parts: [[[Float]]])
-                do { res = try await run(EngineChoice.stored(kind.modelName)?.units ?? .all) } catch is ImplausibleResult {
+                do { res = try await run(EngineChoice.current(kind.modelName)?.units ?? .all) } catch is ImplausibleResult {
                     res = try await run(.cpuAndGPU)
                     EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0), for: kind.modelName)
                 }
@@ -844,9 +898,19 @@ final class SeparationJob: ObservableObject {
         history = History.all()
     }
 
+    /// Annulla subito: la finestra torna libera all'istante, anche se in sottofondo un modello si sta ancora aprendo
+    /// (il sistema non permette di interromperlo: quando finisce, il lavoro vede l'annullamento e si ferma da solo).
     func cancel() {
         cancelled.set()
         task?.cancel()
+        AppLog.write("Annullato dall'utente (fase: \(phase))")
+        guard isBusy else { return }
+        queue = []
+        queuedQuality = [:]
+        phase = .idle
+        remaining = nil
+        stepDetail = nil
+        history = History.all()
     }
 
     /// Finita una canzone (o andata male), si passa alla prossima in coda.
@@ -871,7 +935,21 @@ final class SeparationJob: ObservableObject {
         duration = 0
     }
 
-    private func set(_ p: Phase) { phase = p }
+    /// Un lavoro in sottofondo cambia la finestra solo se è ancora quello in corso e non è stato annullato:
+    /// dopo «Annulla» la finestra è già libera, e un lavoro rimasto indietro (es. un modello che si apre) non la tocca più.
+    private func current(_ token: Cancel) -> Bool { token === cancelled && !token.isSet }
+
+    private func note(_ token: Cancel, _ text: String) {
+        guard current(token) else { return }
+        stepDetail = text
+        stepStarted = Date()
+    }
+
+    private func set(_ token: Cancel, _ p: Phase) {
+        guard current(token) else { return }
+        phase = p
+        stepStarted = Date()
+    }
 
     /// Per le schermate di prova (ScreenshotTests): mostra una separazione finita senza farla davvero.
     func showcase(title: String, stems: [Stem], folder: URL, quality: Quality, duration: Double,
@@ -889,21 +967,28 @@ final class SeparationJob: ObservableObject {
     }
 
     /// Annullare ferma anche la coda.
-    private func stopped(clearing: Bool) {
+    private func stopped(_ token: Cancel, clearing: Bool) {
+        // Dopo «Annulla» la finestra è già stata liberata da cancel()
+        guard token === cancelled, phase != .idle else { return }
         if clearing { queue = [] }
         phase = .idle
         history = History.all()
     }
 
     /// Una canzone non riuscita non blocca le altre.
-    private func afterFailure() { startNextInQueue() }
+    private func afterFailure(_ token: Cancel) {
+        guard token === cancelled else { return }
+        startNextInQueue()
+    }
 
-    private func loaded(peaks: [Float], duration: Double) {
+    private func loaded(_ token: Cancel, peaks: [Float], duration: Double) {
+        guard current(token) else { return }
         mixPeaks = peaks
         self.duration = duration
     }
 
-    private func finish(dir: URL, stems: [Stem], engine: String, took: Double, timings: [Timing], analysis: SongAnalysis?, note: String? = nil) {
+    private func finish(_ token: Cancel, dir: URL, stems: [Stem], engine: String, took: Double, timings: [Timing], analysis: SongAnalysis?, note: String? = nil) {
+        guard current(token) else { return }
         self.analysis = analysis
         engineText = engine
         qualityNote = note
