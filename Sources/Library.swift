@@ -80,7 +80,7 @@ struct LibraryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(.system(size: 12.5, weight: open ? .semibold : .medium)).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 4) {
-                    Image(systemName: item.quality == Quality.best.rawValue ? "sparkles" : "hare.fill").font(.system(size: 9))
+                    Image(systemName: (Quality(rawValue: item.quality) ?? .best).symbol).font(.system(size: 9))
                     Text([History.when(item.date), item.duration.map(formatTime)].compactMap { $0 }.joined(separator: " · "))
                 }
                 .font(.system(size: 10.5)).foregroundStyle(.secondary)
@@ -107,7 +107,7 @@ struct GuideView: View {
     var openFAQ: () -> Void = {}
     private let tips: [(String, String, String)] = [
         ("square.and.arrow.down", "Trascina una o più canzoni", "Anche un album intero: AudioLR le separa una dopo l'altra."),
-        ("sparkles", "Massima o Veloce", "Massima ha la voce più pulita; Veloce è circa 4 volte più rapida."),
+        ("sparkles", "Veloce, Massima o Studio", "Massima separa anche chitarra e piano; Studio ha la voce più pulita; Veloce è la più rapida."),
         ("slider.horizontal.3", "Il mixer", "Muto (M), solo (S) e volume per ogni traccia; Karaoke e Solo voce in un clic."),
         ("square.and.arrow.up", "Esporta il mix", "Salva quello che senti, accanto alle tracce."),
         ("hand.draw", "Trascina le tracce", "Direttamente in GarageBand, Logic o nel Finder."),
@@ -115,7 +115,7 @@ struct GuideView: View {
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
         ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
-        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⌘L", "Libreria"), ("⌥⌘1 / ⌥⌘2", "Massima / Veloce"),
+        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⌘L", "Libreria"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
         ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]

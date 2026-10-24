@@ -36,8 +36,10 @@ enum FAQ {
               answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla). Un clic riapre la separazione con il mixer, senza rifarla."),
         Entry(topic: "Qualità", question: "Che differenza c'è tra Massima e Veloce?",
               answer: "Massima usa un modello dedicato alla voce (Mel-Band RoFormer) e uno per gli strumenti (BS-RoFormer SW), che separa anche chitarra e pianoforte: è il risultato più pulito, ma richiede più tempo. Veloce usa un solo modello ed è circa 4 volte più rapida. Puoi cambiare con ⌥⌘1 e ⌥⌘2."),
+        Entry(topic: "Qualità", question: "Che cos'è la qualità Studio?",
+              answer: "Studio usa per la voce il modello più pulito che abbiamo provato (BS-RoFormer): meno strumenti nella voce e una base karaoke più piena. Gli strumenti sono quelli di Massima. È circa 2 volte più lenta di Massima: conviene quando la voce deve essere perfetta, per esempio per un remix. ⌥⌘3 per sceglierla."),
         Entry(topic: "Qualità", question: "Nella voce si sente ancora un po' di musica: posso migliorarla?",
-              answer: "Usa Massima. In Impostazioni › Generale puoi anche scegliere «Precisione» per la voce: ogni punto della canzone passa più volte nel modello, con passaggi più morbidi (circa 2 volte più lento). Le canzoni molto riverberate o con cori fitti restano le più difficili per qualsiasi app."),
+              answer: "Usa Massima o, meglio ancora, Studio. In Impostazioni › Generale puoi anche scegliere «Precisione» per la voce: ogni punto della canzone passa più volte nel modello, con passaggi più morbidi (circa 2 volte più lento). Le canzoni molto riverberate o con cori fitti restano le più difficili per qualsiasi app."),
         Entry(topic: "Qualità", question: "La base karaoke suona un po' scura: è normale?",
               answer: "La base è la canzone meno la voce: dove voce e strumenti suonano le stesse frequenze, togliere la voce toglie anche un po' di brillantezza. Le prossime versioni migliorano proprio questo punto."),
         Entry(topic: "Qualità", question: "Sento un suono distorto o «fritto»: cosa faccio?",
@@ -231,7 +233,7 @@ struct BugReport {
             String(format: "Memoria: %.0f GB · processori: %d", Double(p.physicalMemory) / 1_073_741_824, p.activeProcessorCount),
             "Qualità: \(Quality.current.title) · formato: \(Prefs.format.title) · voce: \(Prefs.voiceOverlap == 4 ? "precisione" : "equilibrio")",
         ]
-        for name in [ModelStore.name, Quality.best.voiceModel ?? ""] + Quality.best.models {
+        for name in [ModelStore.name] + Quality.studio.everyModel + Quality.best.everyModel {
             if let d = EngineChoice.stored(name) { lines.append("Motore \(name): \(d.text)") }
         }
         if case .failed(let msg) = job.phase { lines.append("Ultimo errore: \(msg)") }

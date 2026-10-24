@@ -194,8 +194,14 @@ final class SeparationJob: ObservableObject {
                         }
                         if name == wantedVoice || name == wantedInstruments { _ = try await ModelStore.shared.config(name) }
                     } catch _ where name == wantedVoice {
-                        // Il modello voce non è ancora disponibile: si separa lo stesso, con i soli modelli Demucs
+                        // Il modello voce non è disponibile: si prova quello più leggero, altrimenti si separa senza
                         voiceName = nil
+                        var next = Quality.fallbackVoice(for: name)
+                        while let n = next, voiceName == nil {
+                            if (try? await ModelStore.shared.mlModel(n) { _ in }) != nil,
+                               (try? await ModelStore.shared.config(n)) != nil { voiceName = n }
+                            next = Quality.fallbackVoice(for: n)
+                        }
                     } catch _ where name == wantedInstruments {
                         // Il modello strumenti non è disponibile: si usano i modelli Demucs di riserva
                         swName = nil
@@ -252,9 +258,9 @@ final class SeparationJob: ObservableObject {
                             let voice = try await ModelStore.shared.voice(v, units: units) { _ in }
                             voice.overlap = Prefs.voiceOverlap
                             return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
-                        } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && v != Quality.lightVoice {
-                            // Il modello da 8 s non riesce (memoria, Mac più vecchio): si usa quello leggero da 2 s
-                            let voice = try await ModelStore.shared.voice(Quality.lightVoice, units: units) { _ in }
+                        } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && Quality.fallbackVoice(for: v) != nil {
+                            // Il modello voce non riesce (memoria, Mac più vecchio): si usa quello più leggero
+                            let voice = try await ModelStore.shared.voice(Quality.fallbackVoice(for: v)!, units: units) { _ in }
                             voice.overlap = Prefs.voiceOverlap
                             return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
                         }
