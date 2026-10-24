@@ -74,8 +74,13 @@ final class ModelStore: @unchecked Sendable {
     /// Il modello voce RoFormer, pronto (scaricato e preparato se serve).
     func voice(_ name: String = Quality.best.voiceModel ?? "VoceRoFormer8", units: MLComputeUnits = .all,
                progress: @escaping (Double) -> Void) async throws -> VoiceRoFormer {
+        try await roformer(name, units: units, progress: progress)
+    }
+
+    /// Un modello RoFormer qualsiasi (voce o a più strumenti) con la sua descrizione.
+    func roformer(_ name: String, units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> RoFormer {
         let cfg = try JSONDecoder().decode(RoFormerConfig.self, from: try await config(name))
-        return VoiceRoFormer(model: try await mlModel(name, units: units, progress: progress), config: cfg)
+        return RoFormer(model: try await mlModel(name, units: units, progress: progress), config: cfg)
     }
 
     /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).

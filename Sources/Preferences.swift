@@ -93,6 +93,9 @@ enum Prefs {
         return v == 0 ? 2 : v
     }
 
+    /// Massima qualità: chitarra e pianoforte in tracce proprie (altrimenti restano in «Altri strumenti»).
+    static let splitKey = "splitGuitarPiano"
+    static var splitGuitarPiano: Bool { UserDefaults.standard.object(forKey: splitKey) as? Bool ?? true }
     static var makeInstrumental: Bool { UserDefaults.standard.object(forKey: instrumentalKey) as? Bool ?? true }
     static var revealWhenDone: Bool { UserDefaults.standard.bool(forKey: revealKey) }
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }

@@ -4,8 +4,9 @@ import CoreML
 // ════════════════════════════════════════════════════════════════════
 //  Qualità e motore.
 //  • Veloce: htdemucs, un modello per tutti gli strumenti.
-//  • Massima: htdemucs_ft, quattro modelli, ognuno specializzato in uno
-//    strumento (più pulito, circa 4 volte più lento). È quella di serie.
+//  • Massima: la voce con Mel-Band RoFormer, poi gli strumenti dalla base
+//    con BS-RoFormer «SW» (batteria, basso, chitarra, pianoforte, altro).
+//    Se SW non si può usare, i quattro modelli htdemucs_ft. È quella di serie.
 //  • Il motore: al primo uso di ogni modello AudioLR prova un pezzo della
 //    canzone sia con il Neural Engine sia con la grafica. Se i due risultati
 //    non coincidono, il Neural Engine di questo Mac è impreciso con quel
@@ -37,14 +38,29 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Il modello per gli strumenti, se questa qualità ne usa uno a parte (BS-RoFormer a sei strumenti).
+    /// Senza (o se non riesce), si usano i modelli Demucs di `models`.
+    var instrumentModel: String? {
+        switch self {
+        case .fast: return nil
+        case .best: return "StrumentiSW"
+        }
+    }
+
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
 
     /// Il modello voce di riserva (pezzi da 2 s): più leggero, se quello da 8 s non riesce su questo Mac.
     static let lightVoice = "VoceRoFormer"
 
-    /// Tutto quello che va scaricato per questa qualità.
-    var allModels: [String] { (voiceModel.map { [$0] } ?? []) + models }
+    /// Tutto quello che va scaricato per questa qualità (i modelli Demucs di riserva solo se servono).
+    var allModels: [String] {
+        let extra = [voiceModel, instrumentModel].compactMap { $0 }
+        return instrumentModel == nil ? extra + models : extra
+    }
+
+    /// Tutti i modelli che questa qualità può usare, compresi quelli di riserva.
+    var everyModel: [String] { [voiceModel, instrumentModel].compactMap { $0 } + models + (self == .best ? [Quality.lightVoice] : []) }
 
     var title: String {
         switch self {
@@ -56,7 +72,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
-        case .best: return "Voce RoFormer e un modello per strumento · più lenta, molto più pulita"
+        case .best: return "Voce RoFormer e strumenti SW, con chitarra e piano · più lenta, molto più pulita"
         }
     }
 
@@ -64,7 +80,7 @@ enum Quality: String, CaseIterable, Identifiable {
     var downloadSize: String {
         switch self {
         case .fast: return "circa 80 MB"
-        case .best: return "circa 520 MB"
+        case .best: return "circa 400 MB"
         }
     }
 }
@@ -105,6 +121,6 @@ enum EngineChoice {
 
     /// Dimentica le scelte: alla prossima separazione si riprova.
     static func reset(defaults: UserDefaults = .standard) {
-        for q in Quality.allCases { for m in q.allModels { defaults.removeObject(forKey: key(m)) } }
+        for q in Quality.allCases { for m in q.everyModel { defaults.removeObject(forKey: key(m)) } }
     }
 }

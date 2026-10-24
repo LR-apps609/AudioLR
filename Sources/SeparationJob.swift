@@ -155,6 +155,8 @@ final class SeparationJob: ObservableObject {
         self.quality = quality
         let models = quality.models
         let wantedVoice = quality.voiceModel
+        let wantedInstruments = quality.instrumentModel
+        let split = Prefs.splitGuitarPiano
         let downloads = quality.allModels
         phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
@@ -172,16 +174,20 @@ final class SeparationJob: ObservableObject {
             do {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
                 var voiceName = wantedVoice
+                var swName = wantedInstruments
                 for (k, name) in downloads.enumerated() {
                     do {
                         _ = try await ModelStore.shared.mlModel(name) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
                             Task { @MainActor in self?.phase = .downloading(total) }
                         }
-                        if name == wantedVoice { _ = try await ModelStore.shared.config(name) }
+                        if name == wantedVoice || name == wantedInstruments { _ = try await ModelStore.shared.config(name) }
                     } catch _ where name == wantedVoice {
                         // Il modello voce non è ancora disponibile: si separa lo stesso, con i soli modelli Demucs
                         voiceName = nil
+                    } catch _ where name == wantedInstruments {
+                        // Il modello strumenti non è disponibile: si usano i modelli Demucs di riserva
+                        swName = nil
                     }
                 }
                 lap("Preparazione dei modelli")
@@ -193,7 +199,8 @@ final class SeparationJob: ObservableObject {
                 lap("Lettura della canzone")
 
                 // Con il modello voce a parte, il Demucs specializzato nella voce non serve: un passaggio in meno
-                let instrumentModels = voiceName == nil ? models : models.filter { $0 != Quality.voiceSpecialist }
+                // Con il modello strumenti SW i modelli Demucs non servono affatto
+                let instrumentModels = swName != nil ? [] : voiceName == nil ? models : models.filter { $0 != Quality.voiceSpecialist }
 
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
@@ -205,9 +212,10 @@ final class SeparationJob: ObservableObject {
                     decisions[name] = d
                     if cancel.isSet { throw CancellationError() }
                 }
-                if let v = voiceName, EngineChoice.stored(v) == nil {
+                for v in [voiceName, swName].compactMap({ $0 }) where EngineChoice.stored(v) == nil {
                     await self?.set(.tuning)
-                    EngineChoice.store(try await SeparationJob.tuneVoice(v, mix: mix), for: v)
+                    EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix), for: v)
+                    if cancel.isSet { throw CancellationError() }
                 }
                 lap("Prova del motore")
 
@@ -215,7 +223,7 @@ final class SeparationJob: ObservableObject {
                 await self?.set(.separating(0))
                 let began = Date()
                 // Quanta parte della barra spetta alla voce
-                let voiceShare = voiceName == nil ? 0.0 : 0.35
+                let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : 0.45
                 func report(_ total: Double) {
                     let elapsed = Date().timeIntervalSince(began)
                     let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
@@ -255,9 +263,30 @@ final class SeparationJob: ObservableObject {
                     lap("Voce (RoFormer)")
                 }
 
-                // 4. Gli strumenti: con htdemucs_ft ogni modello dà il suo strumento
+                // 4. Gli strumenti: con SW un modello solo per tutti; con htdemucs_ft ogni modello dà il suo strumento
                 var out: [[[Float]]] = []
                 var sources: [String] = []
+                if let w = swName {
+                    var d = EngineChoice.stored(w) ?? EngineChoice.decide(agreement: 99)
+                    let input = instrumentsInput
+                    func runSW(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
+                        let model = try await ModelStore.shared.roformer(w, units: units) { _ in }
+                        let audio = try model.separateAll(input, progress: { report(voiceShare + (1 - voiceShare) * $0) },
+                                                          isCancelled: { cancel.isSet })
+                        return (model.config.sources, audio)
+                    }
+                    var res: (names: [String], audio: [[[Float]]])
+                    do { res = try await runSW(d.units) } catch is ImplausibleResult {
+                        do { res = try await runSW(.cpuAndGPU) } catch is ImplausibleResult {
+                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                        }
+                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: d.agreement)
+                        EngineChoice.store(d, for: w)
+                    }
+                    decisions[w] = d
+                    (sources, out) = SeparationJob.arrange(res.names, res.audio, voice: voiceOut, split: split)
+                    lap("Strumenti (BS-RoFormer SW)")
+                }
                 for (k, name) in instrumentModels.enumerated() {
                     let span = (Double(k), Double(k + 1))
                     let input = instrumentsInput
@@ -283,8 +312,10 @@ final class SeparationJob: ObservableObject {
                     if sources.isEmpty { sources = core.sources }
                     Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
                 }
-                if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
-                lap(instrumentModels.count > 1 ? "Strumenti (\(instrumentModels.count) modelli Demucs)" : "Separazione (Demucs)")
+                if !instrumentModels.isEmpty {
+                    if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
+                    lap(instrumentModels.count > 1 ? "Strumenti (\(instrumentModels.count) modelli Demucs)" : "Separazione (Demucs)")
+                }
                 let took = Date().timeIntervalSince(began)
 
                 await self?.set(.saving)
@@ -306,16 +337,39 @@ final class SeparationJob: ObservableObject {
         }
     }
 
-    /// Come `tune`, per il modello voce: un pezzo dal centro della canzone su Neural Engine e su grafica.
-    nonisolated static func tuneVoice(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
-        let ane = try await ModelStore.shared.voice(name, units: .all) { _ in }
-        let gpu = try await ModelStore.shared.voice(name, units: .cpuAndGPU) { _ in }
+    /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
+    nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
+        let ane = try await ModelStore.shared.roformer(name, units: .all) { _ in }
+        let gpu = try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }
         let chunk = ane.config.chunk
         let start = max(0, (mix[0].count - chunk) / 2)
         let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
-        let a = try ane.runChunk(piece), b = try gpu.runChunk(piece)
-        guard VoiceRoFormer.plausible(piece: piece, voice: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
-        return EngineChoice.decide(agreement: Separator.agreement([b], [a]))
+        let a = try ane.runChunkAll(piece), b = try gpu.runChunkAll(piece)
+        guard RoFormer.plausible(piece: piece, stems: b) else { return EngineChoice.Decision(units: .all, agreement: 0) }
+        return EngineChoice.decide(agreement: Separator.agreement(b, a))
+    }
+
+    /// Le tracce finali dagli strumenti di SW: la voce dal suo modello (se c'è), chitarra e pianoforte
+    /// in tracce proprie oppure dentro «Altri strumenti». La voce che SW trova nella base (residui) si scarta.
+    nonisolated static func arrange(_ names: [String], _ audio: [[[Float]]], voice: [[Float]]?, split: Bool) -> ([String], [[[Float]]]) {
+        func get(_ k: String) -> [[Float]]? { names.firstIndex(of: k).map { audio[$0] } }
+        func sum(_ parts: [[[Float]]]) -> [[Float]] {
+            var o = parts[0]
+            for p in parts.dropFirst() { for c in 0..<2 { for i in o[c].indices { o[c][i] += p[c][i] } } }
+            return o
+        }
+        var keys: [String] = [], out: [[[Float]]] = []
+        if let v = voice ?? get("vocals") { keys.append("vocals"); out.append(v) }
+        for k in ["drums", "bass"] { if let a = get(k) { keys.append(k); out.append(a) } }
+        let extras = ["guitar", "piano"].filter { get($0) != nil }
+        if split {
+            for k in extras { keys.append(k); out.append(get(k)!) }
+            if let o = get("other") { keys.append("other"); out.append(o) }
+        } else {
+            let parts = (["other"] + extras).compactMap(get)
+            if !parts.isEmpty { keys.append("other"); out.append(sum(parts)) }
+        }
+        return (keys, out)
     }
 
     /// Prova Neural Engine e grafica sul pezzo centrale della canzone e decide dove lavorare.

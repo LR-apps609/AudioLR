@@ -44,6 +44,11 @@ enum Theme {
     /// I quattro strumenti nell'ordine dell'icona, dall'alto: voce, batteria, basso, altri strumenti.
     static let stemOrder = ["vocals", "drums", "bass", "other"]
 
+    /// Le tracce che darà una separazione: in Massima anche chitarra e pianoforte (se non sono stati riuniti).
+    static func stems(for q: Quality, split: Bool = Prefs.splitGuitarPiano) -> [String] {
+        q.instrumentModel != nil && split ? ["vocals", "drums", "bass", "guitar", "piano", "other"] : stemOrder
+    }
+
     /// Un colore per strumento: più carico di giorno, più luminoso di notte.
     static func color(_ stem: String) -> Color {
         switch stem {

@@ -175,7 +175,7 @@ struct ContentView: View {
                 VStack(spacing: 8) {
                     Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
                     HStack(spacing: 8) {
-                        ForEach(Theme.stemOrder + ["instrumental"], id: \.self) { key in
+                        ForEach(Theme.stems(for: quality) + ["instrumental"], id: \.self) { key in
                             let info = Stem.info(key)
                             Chip(text: info.name, symbol: info.symbol, tint: Theme.color(key))
                         }
@@ -223,7 +223,7 @@ struct ContentView: View {
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
             // Le quattro tracce che stanno nascendo
             VStack(spacing: 8) {
-                ForEach(Theme.stemOrder, id: \.self) { key in
+                ForEach(Theme.stems(for: job.quality), id: \.self) { key in
                     let info = Stem.info(key)
                     HStack(spacing: 10) {
                         StemBadge(key: key, symbol: info.symbol, size: 24)

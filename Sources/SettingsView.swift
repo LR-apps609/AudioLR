@@ -27,6 +27,7 @@ struct TracksSettings: View {
     @AppStorage(Prefs.formatKey) private var format = OutputFormat.wav24.rawValue
     @AppStorage(Prefs.folderKey) private var folder = ""
     @AppStorage(Prefs.instrumentalKey) private var instrumental = true
+    @AppStorage(Prefs.splitKey) private var split = true
     @AppStorage(Prefs.revealKey) private var reveal = false
     @AppStorage(Prefs.soundKey) private var sound = true
 
@@ -54,6 +55,7 @@ struct TracksSettings: View {
                     }
                 }
                 Toggle("Crea anche la base senza voce (karaoke)", isOn: $instrumental)
+                Toggle("Chitarra e pianoforte in tracce proprie (Massima)", isOn: $split)
             }
             Section {
                 Toggle("Suono quando ha finito", isOn: $sound)
@@ -82,10 +84,11 @@ struct EngineSettings: View {
     @State private var confirmDelete = false
 
     static func load() -> [(String, EngineChoice.Decision?)] {
-        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? ""))] +
+        [("Veloce", EngineChoice.stored(ModelStore.name)), ("Massima · Voce RoFormer", EngineChoice.stored(Quality.best.voiceModel ?? "")),
+         ("Massima · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? ""))] +
         Quality.best.models.enumerated().map { (i, m) in
-            ("Massima · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
-        }
+            ("Riserva · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
+        }.filter { $0.1 != nil }
     }
 
     var body: some View {
@@ -196,10 +199,10 @@ struct AboutSettings: View {
     private let models: [(String, String, String)] = [
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
         ("VoceRoFormer8", "Massima · voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
-        ("HTDemucsFT-0", "Massima · batteria", "Demucs v4 fine-tuned · MIT"),
-        ("HTDemucsFT-1", "Massima · basso", "Demucs v4 fine-tuned · MIT"),
-        ("HTDemucsFT-2", "Massima · altri strumenti", "Demucs v4 fine-tuned · MIT"),
-        ("HTDemucsFT-3", "Massima · voce di riserva", "Demucs v4 fine-tuned · MIT"),
+        ("StrumentiSW", "Massima · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
+        ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
+        ("HTDemucsFT-1", "Riserva · basso", "Demucs v4 fine-tuned · MIT"),
+        ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),
     ]
 
     var body: some View {

@@ -83,7 +83,87 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(w[2], 1, accuracy: 1e-6)
     }
 
+    // MARK: Più strumenti (BS-RoFormer SW)
+
+    func testSeveralStemsFromOneModel() throws {
+        // Due strumenti finti: il primo prende tutto (maschera 1), il secondo niente
+        let F = 1025, chunk = 8820
+        let cfg = RoFormerConfig(n_fft: 2048, hop: 441, chunk: chunk, frames: chunk / 441 + 1,
+                                 freq_indices: Array(0..<(2 * F)), num_bands_per_freq: [Double](repeating: 1, count: F),
+                                 sources: ["other", "vocals"])
+        let v = RoFormer(model: nil, config: cfg)
+        v.fakeNetwork = { x in
+            var m = [Float](repeating: 0, count: x.count * 2)
+            for i in stride(from: 0, to: x.count, by: 2) { m[i] = 1 }
+            return m
+        }
+        XCTAssertEqual(v.stemCount, 2)
+        XCTAssertEqual(v.primary, 1, "runChunk/separate restituiscono la voce")
+        let mix = tones(20_000)
+        let all = try v.separateAll(mix)
+        XCTAssertEqual(all.count, 2)
+        var err: Float = 0, rest: Float = 0
+        for c in 0..<2 { for i in 0..<20_000 { err = max(err, abs(all[0][c][i] - mix[c][i])); rest = max(rest, abs(all[1][c][i])) } }
+        XCTAssertLessThan(err, 1e-3)
+        XCTAssertLessThan(rest, 1e-6)
+        XCTAssertEqual(try v.separate(mix)[0], all[1][0])
+    }
+
+    func testArrangeSWStems() {
+        let one = [[Float]](repeating: [1, 1], count: 2)
+        let names = ["bass", "drums", "other", "vocals", "guitar", "piano"]
+        let audio = names.map { _ in one }
+        let voice = [[Float]](repeating: [5, 5], count: 2)
+        let (k1, a1) = SeparationJob.arrange(names, audio, voice: voice, split: true)
+        XCTAssertEqual(k1, ["vocals", "drums", "bass", "guitar", "piano", "other"])
+        XCTAssertEqual(a1[0], voice, "la voce viene dal modello voce, non da SW")
+        let (k2, a2) = SeparationJob.arrange(names, audio, voice: voice, split: false)
+        XCTAssertEqual(k2, ["vocals", "drums", "bass", "other"])
+        XCTAssertEqual(a2[3][0], [3, 3], "chitarra e piano finiscono in «Altri strumenti»")
+        let (k3, _) = SeparationJob.arrange(names, audio, voice: nil, split: true)
+        XCTAssertEqual(k3.first, "vocals", "senza modello voce si usa la voce di SW")
+    }
+
+    func testStemsShownForQuality() {
+        XCTAssertEqual(Theme.stems(for: .fast, split: true), ["vocals", "drums", "bass", "other"])
+        XCTAssertEqual(Theme.stems(for: .best, split: true).count, 6)
+        XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
+        XCTAssertEqual(Quality.best.allModels, ["VoceRoFormer8", "StrumentiSW"])
+        XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
+    }
+
     // MARK: Con il modello vero
+
+    func testInstrumentsMatchSW() async throws {
+        executionTimeAllowance = 900
+        let (data, resp) = try await URLSession.shared.data(from: ModelStore.base.appendingPathComponent("StrumentiSW-prova.f32"))
+        guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("modello strumenti non ancora pubblicato") }
+        let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        let n = Int(all[0]), S = Int(all[1])
+        let mix = [Array(all[2..<(2 + n)]), Array(all[(2 + n)..<(2 + 2 * n)])]
+        let model: RoFormer
+        do { model = try await ModelStore.shared.roformer("StrumentiSW") { _ in } } catch { throw XCTSkip("modello strumenti non disponibile") }
+        XCTAssertEqual(model.config.chunk, n)
+        XCTAssertEqual(model.stemCount, S)
+        let start = Date()
+        let out = try model.runChunkAll(mix)
+        var ref: [Float] = [], est: [Float] = []
+        for k in 0..<S {
+            for c in 0..<2 {
+                let o = 2 + 2 * n + (k * 2 + c) * n
+                ref += all[o..<(o + n)]
+                est += out[k][c]
+            }
+        }
+        let q = EndToEndTests.snr(ref, est)
+        let line = String(format: "Strumenti SW: %.1f dB dal modello originale, pezzo da %.1f s in %.1f s",
+                          q, Double(n) / 44_100, Date().timeIntervalSince(start))
+        print(line)
+        let path = "/tmp/audiolr-passi.txt"
+        let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+        XCTAssertGreaterThan(q, 25, "gli strumenti dell'app sono diversi da quelli di SW originale")
+    }
 
     func testVoiceMatchesRoFormer() async throws {
         executionTimeAllowance = 600
