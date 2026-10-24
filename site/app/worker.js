@@ -23,12 +23,11 @@ async function fetchModel(onProgress) {
   const total = config.bytes || 1;
   for (const name of config.parts) {
     const url = new URL("../models/" + name, self.location).href;
-    let res = cache ? await cache.match(url) : undefined;
-    if (!res) {
-      res = await fetch(url);
-      if (!res.ok) throw new Error("modello non disponibile (" + res.status + ")");
-      if (cache) await cache.put(url, res.clone());
-    }
+    const cached = cache ? await cache.match(url) : undefined;
+    const res = cached || await fetch(url);
+    if (!res.ok) throw new Error("modello non disponibile (" + res.status + ")");
+    // Si legge il pezzo una volta sola, con la barra; poi, se è nuovo, si mette nella cache.
+    // (Leggere e mettere in cache lo stesso flusso insieme può bloccarsi in Safari.)
     const reader = res.body.getReader();
     const chunks = [];
     for (;;) {
@@ -37,6 +36,9 @@ async function fetchModel(onProgress) {
       chunks.push(value);
       done += value.length;
       onProgress(Math.min(1, done / total));
+    }
+    if (cache && !cached) {
+      try { await cache.put(url, new Response(new Blob(chunks))); } catch (e) { /* senza cache si riscarica la prossima volta */ }
     }
     parts.push(...chunks);
   }

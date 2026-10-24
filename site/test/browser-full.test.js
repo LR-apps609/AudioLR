@@ -71,11 +71,21 @@ const log = (...a) => console.log(`[${NAME}]`, ...a);
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   const problems = [], requests = [];
-  page.on("console", (m) => { if (m.type() === "error") problems.push(m.text()); });
+  page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") problems.push(m.text()); });
+  page.on("worker", (w) => { w.on("close", () => problems.push("lavoratore chiuso")); });
+  page.on("requestfailed", (r) => problems.push("richiesta fallita: " + r.url() + " " + (r.failure() || {}).errorText));
+  globalThis.__diag = async () => {
+    const state = await page.evaluate(() => ({
+      step: document.getElementById("step").textContent, percent: document.getElementById("percent").textContent,
+      error: document.getElementById("error").textContent, backend: document.getElementById("backend").textContent,
+      gpu: "gpu" in navigator, isolated: self.crossOriginIsolated, caches: "caches" in self,
+    })).catch((e) => String(e));
+    return JSON.stringify(state) + " | console: " + problems.slice(-8).join(" | ");
+  };
   page.on("pageerror", (e) => problems.push(String(e)));
   page.on("request", (r) => requests.push(r.url()));
   const visible = (sel) => page.isVisible(sel);
-  const results = () => page.waitForSelector("#results:not([hidden])", { timeout: 20 * MIN });
+  const results = () => page.waitForSelector("#results:not([hidden])", { timeout: (NAME === "chromium" ? 20 : 12) * MIN });
   const errorShown = async (re) => {
     await page.waitForSelector("#error:not([hidden])", { timeout: 2 * MIN });
     const t = await page.textContent("#error");
@@ -156,7 +166,11 @@ const log = (...a) => console.log(`[${NAME}]`, ...a);
   step = "annulla";
   await page.click("#again");
   await page.setInputFiles("#file", wav({ seconds: 30, file: "Da annullare.wav" }));
-  await page.waitForFunction(() => parseInt(document.getElementById("percent").textContent) > 0, null, { timeout: 10 * MIN });
+  // Senza waitForFunction: la regola di sicurezza del sito (giustamente) vieta eval
+  for (const end = Date.now() + 10 * MIN; parseInt(await page.textContent("#percent")) === 0; ) {
+    check(Date.now() < end, "la barra non si muove");
+    await page.waitForTimeout(300);
+  }
   await page.click("#cancel");
   await page.waitForSelector("#drop:not([hidden])", { timeout: 5 * MIN });
   check(!(await visible("#error")), "annullare non deve mostrare un errore");
@@ -195,4 +209,8 @@ const log = (...a) => console.log(`[${NAME}]`, ...a);
   log(`Nessuna richiesta fuori dal sito (${requests.length} richieste in tutto)`);
   await browser.close();
   log("TUTTO OK");
-})().catch((e) => { console.error(`[${NAME}] NON RIUSCITA («${step}»): ${String(e)}`); process.exit(1); });
+})().catch(async (e) => {
+  console.error(`[${NAME}] NON RIUSCITA («${step}»): ${String(e).split("\n")[0]}`);
+  if (globalThis.__diag) console.error(`[${NAME}] Stato: ${await globalThis.__diag()}`);
+  process.exit(1);
+});

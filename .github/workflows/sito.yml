@@ -134,7 +134,7 @@ jobs:
           cat full.log
           # Ogni riga della prova nel riepilogo; se è fallita, l'errore come annotazione e il passo fallisce
           grep -E "^\[" full.log | while IFS= read -r l; do echo "::notice::$l"; done
-          if [ $code -ne 0 ]; then echo "::error::$(grep -A4 'NON RIUSCITA' full.log | tr '\n' ' ' | cut -c1-900)"; fi
+          if [ $code -ne 0 ]; then echo "::error::$(grep -A4 'NON RIUSCITA' full.log | tr '\n' ' ' | cut -c1-900)"; echo "::error::$(grep 'Stato:' full.log | cut -c1-1500)"; fi
           exit $code
       - uses: actions/upload-artifact@v6
         if: always()
