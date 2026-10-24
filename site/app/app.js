@@ -80,11 +80,13 @@
       audio = await ctx.decodeAudioData(await file.arrayBuffer());
       ctx.close();
     } catch { return fail("Questo file non si apre: prova con un MP3, M4A, WAV o FLAC."); }
-    if (audio.duration > MAX_SECONDS) return fail("Nel browser fino a 10 minuti: per le canzoni più lunghe usa l'app.");
+    if (audio.duration > MAX_SECONDS) return fail(DESKTOP ? "Per ora fino a 30 minuti a canzone." : "Nel browser fino a 10 minuti: per le canzoni più lunghe usa l'app.");
     if (audio.duration < 1) return fail("La canzone è troppo corta (almeno 1 secondo).");
     const left = new Float32Array(audio.getChannelData(0));
     const right = new Float32Array(audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0));
-    try { await startWorker(); } catch (e) { return; }
+    const job = startWorker();
+    try { await job; } catch (e) { return; }
+    if (!worker || ready !== job) return; // annullata mentre si preparava il modello
     $("step").textContent = "Separo voce e strumenti…";
     setProgress(0);
     started = performance.now();
@@ -96,7 +98,13 @@
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
   drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); handle(e.dataTransfer.files[0]); });
-  $("cancel").addEventListener("click", () => worker && worker.postMessage({ type: "cancel" }));
+  // Annulla subito: il lavoratore è occupato nel calcolo e leggerebbe il messaggio solo alla fine,
+  // quindi lo si chiude. La canzone dopo ne apre uno nuovo (il modello è già nella cache del browser)
+  $("cancel").addEventListener("click", () => {
+    if (worker) { worker.terminate(); worker = null; }
+    ready = null;
+    show("drop");
+  });
   $("again").addEventListener("click", () => { stop(); show("drop"); });
 
   // ── Il mixer ────────────────────────────────────────────────────────
@@ -119,7 +127,8 @@
       const L = m.channels[i * 2], R = m.channels[i * 2 + 1];
       const buf = ctx.createBuffer(2, n, 44100);
       buf.copyToChannel(L, 0); buf.copyToChannel(R, 1);
-      tracks.push({ key, buf, L, R, gain: null });
+      // Si tengono solo i canali dentro il buffer: una copia sola in memoria (le canzoni lunghe pesano)
+      tracks.push({ key, buf, L: buf.getChannelData(0), R: buf.getChannelData(1), gain: null });
     });
     tracks.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
     state.muted.clear(); state.solo.clear(); offset = 0;
@@ -128,7 +137,7 @@
     renderStems();
     setPreset("all");
     show("results");
-    tick();
+    clock(); drawAll();
   }
 
   function renderStems() {
@@ -209,19 +218,25 @@
       return src;
     });
     playing = true;
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
     $("play").textContent = "❚❚"; $("play").setAttribute("aria-label", "Pausa");
   }
-  function pause() { offset = position(); stopSources(); playing = false; $("play").textContent = "▶"; $("play").setAttribute("aria-label", "Suona"); }
+  function pause() { offset = position(); stopSources(); playing = false; cancelAnimationFrame(raf); clock(); drawAll(); $("play").textContent = "▶"; $("play").setAttribute("aria-label", "Suona"); }
   function stop() { stopSources(); playing = false; offset = 0; cancelAnimationFrame(raf); if ($("play")) $("play").textContent = "▶"; }
   function stopSources() { for (const s of sources) { try { s.stop(); } catch {} } sources = []; }
   function seek(t) { playing ? play(t) : (offset = t, drawAll(), clock()); }
   function applyGains() { for (const t of tracks) if (t.gain) t.gain.gain.setTargetAtTime(gainOf(t.key), ctx.currentTime, 0.015); drawAll(); }
   function clock() { $("clock").textContent = `${fmt(position())} / ${fmt(duration)}`; }
+  // Si ridisegna solo mentre suona: a mixer fermo la pagina non consuma niente
   function tick() {
-    if (playing && position() >= duration - 0.02) pause(), offset = 0;
+    if (!playing) return;
+    if (position() >= duration - 0.02) { pause(); offset = 0; clock(); drawAll(); return; }
     clock(); drawAll();
     raf = requestAnimationFrame(tick);
   }
+  window.addEventListener("resize", () => { if (!$("results").hidden) drawAll(); });
+  // Chiaro/scuro cambiato a mixer fermo: i colori delle onde si aggiornano
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (!$("results").hidden) drawAll(); });
 
   $("play").addEventListener("click", () => (playing ? pause() : play(offset >= duration - 0.05 ? 0 : offset)));
   document.addEventListener("keydown", (e) => {

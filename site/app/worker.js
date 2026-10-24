@@ -87,10 +87,11 @@ self.onmessage = async (e) => {
         onProgress: (p) => post("progress", { progress: p }),
         isCancelled: () => cancelled,
       });
-      // La base senza voce: tutto tranne la voce
+      // La base senza voce è esattamente la canzone meno la voce, come nell'app: più piena e fedele
+      // della somma degli strumenti, e voce + base ridanno la canzone
       const v = config.sources.indexOf("vocals");
-      const n = m.left.length, base = [new Float32Array(n), new Float32Array(n)];
-      config.sources.forEach((s, i) => { if (i !== v) for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] += stems[i][c][k]; });
+      const n = m.left.length, mix = [m.left, m.right], base = [new Float32Array(n), new Float32Array(n)];
+      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = mix[c][k] - stems[v][c][k];
       const all = [...stems, base];
       const gain = AudioLREngine.safeGain(all);
       const buffers = all.flat().map((a) => { if (gain !== 1) for (let k = 0; k < a.length; k++) a[k] *= gain; return a; });
