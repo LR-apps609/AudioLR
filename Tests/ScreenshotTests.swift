@@ -8,6 +8,15 @@ import AppKit
 final class ScreenshotTests: XCTestCase {
     let out = URL(fileURLWithPath: "/tmp/audiolr-schermate", isDirectory: true)
 
+    /// Le finestre con logo e onde animate (disegnate con la grafica) fanno chiudere i test sulle macchine
+    /// virtuali di GitHub, dentro Metal: lì si saltano finché non c'è un disegno alternativo.
+    private func skipOnVirtualMac() throws {
+        let env = ProcessInfo.processInfo.environment
+        if env["AUDIOLR_CI"] == "1" || env["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("disegno con Metal non disponibile sulla macchina virtuale di GitHub")
+        }
+    }
+
     override func setUp() async throws {
         // I test girano senza l'app: le finestre hanno bisogno di un'applicazione attiva
         _ = NSApplication.shared
@@ -69,10 +78,12 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testShotStart() throws {
+        try skipOnVirtualMac()
         try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio", width: 1020, height: 680)
     }
 
     func testShotResults() throws {
+        try skipOnVirtualMac()
         let job = SeparationJob.shared
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.reset() }
@@ -86,12 +97,13 @@ final class ScreenshotTests: XCTestCase {
 
     func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 520, height: 470) }
     func testShotAccount() throws { try shot(AccountView().environmentObject(SeparationJob.shared), "5-account", width: 480, height: 600) }
-    func testShotFAQ() throws { try shot(FAQView(), "6-domande", width: 620, height: 620) }
+    func testShotFAQ() throws { try skipOnVirtualMac(); try shot(FAQView(), "6-domande", width: 620, height: 620) }
     func testShotBugReport() throws { try shot(BugReportView(), "7-segnala", width: 520, height: 600) }
-    func testShotGuide() throws { try shot(GuideView(), "8-guida", width: 330, height: 640) }
+    func testShotGuide() throws { try skipOnVirtualMac(); try shot(GuideView(), "8-guida", width: 330, height: 640) }
     func testShotHistory() throws { try shot(HistoryView().environmentObject(SeparationJob.shared), "9-cronologia", width: 860, height: 520) }
     /// La finestra alla misura minima, con la libreria aperta: niente parole spezzate
     func testShotStartNarrow() throws {
+        try skipOnVirtualMac()
         try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 860, height: 600)
     }
 }

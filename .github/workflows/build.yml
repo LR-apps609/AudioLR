@@ -82,7 +82,8 @@ jobs:
           status=0
           # Ogni test ha al massimo 3 minuti: uno bloccato fallisce con il suo nome, invece di fermare tutto
           # perl alarm: se tutto si blocca, dopo 110 minuti si ferma e si vede dove
-          perl -e 'alarm shift; exec @ARGV' 6600 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+          # TEST_RUNNER_AUDIOLR_CI arriva ai test come AUDIOLR_CI (xcodebuild passa così le variabili ai test)
+          TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 6600 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 2400 \
             -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             > test.log 2>&1 || status=$?
@@ -182,6 +183,7 @@ jobs:
         if: always() && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           ls /tmp/audiolr-schermate/*.png >/dev/null 2>&1 || { echo "Nessuna schermata"; exit 0; }
           gh release view schermate >/dev/null 2>&1 || gh release create schermate --prerelease \
