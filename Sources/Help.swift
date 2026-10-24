@@ -33,7 +33,7 @@ enum FAQ {
         Entry(topic: "Primi passi", question: "Perché la prima volta ci mette di più?",
               answer: "Al primo uso AudioLR scarica i modelli di IA (circa 530 MB per Massima, 390 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
         Entry(topic: "Primi passi", question: "Dove ritrovo le canzoni già separate?",
-              answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla). Un clic riapre la separazione con il mixer, senza rifarla."),
+              answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla): un clic riapre la separazione con il mixer, senza rifarla. Nella Cronologia (⌘Y, o il tasto con l'orologio in alto) trovi tutte le separazioni con data, qualità, durata, tempo impiegato, BPM e tonalità; doppio clic per riaprirne una."),
         Entry(topic: "Qualità", question: "Che differenza c'è tra Massima e Veloce?",
               answer: "Massima usa un modello dedicato alla voce (Mel-Band RoFormer) e uno per gli strumenti (BS-RoFormer SW), che separa anche chitarra e pianoforte: è il risultato più pulito, ma richiede più tempo. Veloce usa un solo modello ed è circa 4 volte più rapida. Puoi cambiare con ⌥⌘1 e ⌥⌘2."),
         Entry(topic: "Qualità", question: "Che cos'è la qualità Studio?",

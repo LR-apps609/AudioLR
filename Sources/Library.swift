@@ -39,6 +39,8 @@ struct LibraryView: View {
                 .focused($searchFocused)
                 .onChange(of: searchFocused) { _, f in TypingFocus.shared.typing = f }
                 .onExitCommand { searchFocused = false }
+                // All'apertura la ricerca non deve prendersi il cursore (e il riquadro acceso)
+                .onAppear { DispatchQueue.main.async { searchFocused = false; NSApp.keyWindow?.makeFirstResponder(nil) } }
             if items.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "music.note.list").font(.system(size: 26)).foregroundStyle(.tertiary)
@@ -125,7 +127,7 @@ struct GuideView: View {
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
         ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
-        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
+        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌘Y", "Cronologia"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
         ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]

@@ -24,7 +24,7 @@ struct HistoryItem: Codable, Identifiable, Equatable {
 
 enum History {
     static let key = "history"
-    static let limit = 30
+    static let limit = 500
 
     /// Le separazioni ancora presenti sul disco, dalla più recente.
     static func all(defaults: UserDefaults = .standard) -> [HistoryItem] {
@@ -40,6 +40,10 @@ enum History {
         items.insert(HistoryItem(title: title, folder: folder.path, date: Date(), quality: quality.rawValue,
                                  duration: duration, seconds: seconds, engine: engine, analysis: analysis), at: 0)
         save(Array(items.prefix(limit)), defaults: defaults)
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 
     static func remove(_ item: HistoryItem, defaults: UserDefaults = .standard) {

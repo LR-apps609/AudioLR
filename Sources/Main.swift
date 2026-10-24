@@ -27,6 +27,11 @@ struct AudioLRApp: App {
         }
         .windowResizability(.contentSize)
 
+        Window("Cronologia", id: "history") {
+            HistoryView().environmentObject(job)
+        }
+        .defaultSize(width: 860, height: 560)
+
         Window("Domande frequenti", id: "faq") {
             FAQView()
         }
@@ -62,6 +67,8 @@ struct AudioLRCommands: Commands {
         CommandGroup(before: .toolbar) {
             Button(showLibrary ? "Nascondi la libreria" : "Mostra la libreria") { showLibrary.toggle() }
                 .keyboardShortcut("l")
+            Button("Cronologia") { openWindow(id: "history") }
+                .keyboardShortcut("y")
             Button("Dettagli della separazione") { post(.audiolrDetails) }
                 .keyboardShortcut("i")
                 .disabled(job.phase != .done)

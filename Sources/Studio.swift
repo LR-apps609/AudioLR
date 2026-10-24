@@ -178,11 +178,60 @@ struct Chip: View {
         HStack(spacing: 5) {
             if let s = symbol { Image(systemName: s).font(.system(size: 10, weight: .bold)) }
             Text(text).font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
         }
+        // Un'etichetta non si spezza mai a metà parola: se non c'è posto, va a capo intera (FlowLayout)
+        .fixedSize()
         .foregroundStyle(tint)
         .padding(.horizontal, 9).padding(.vertical, 4)
         .background(Capsule().fill(tint.opacity(0.12)))
         .overlay(Capsule().strokeBorder(tint.opacity(0.25), lineWidth: 1))
+    }
+}
+
+/// Mette gli elementi uno dopo l'altro e va a capo quando non c'è più posto, centrando ogni riga.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+    /// Righe centrate (di serie) o allineate a sinistra.
+    var centered = true
+
+    private func lines(_ subviews: Subviews, width: CGFloat) -> [[(index: Int, size: CGSize)]] {
+        var rows: [[(index: Int, size: CGSize)]] = [[]]
+        var x: CGFloat = 0
+        for (i, s) in subviews.enumerated() {
+            let size = s.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                rows.append([])
+                x = 0
+            }
+            rows[rows.count - 1].append((i, size))
+            x += size.width + spacing
+        }
+        return rows
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        let rows = lines(subviews, width: width)
+        let widest = rows.map { r in r.reduce(0) { $0 + $1.size.width } + spacing * CGFloat(max(0, r.count - 1)) }.max() ?? 0
+        let height = rows.map { r in r.map(\.size.height).max() ?? 0 }.reduce(0, +) + lineSpacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: min(widest, width), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in lines(subviews, width: bounds.width) {
+            let rowWidth = row.reduce(0) { $0 + $1.size.width } + spacing * CGFloat(max(0, row.count - 1))
+            let rowHeight = row.map(\.size.height).max() ?? 0
+            var x = bounds.minX + (centered ? (bounds.width - rowWidth) / 2 : 0)
+            for item in row {
+                subviews[item.index].place(at: CGPoint(x: x, y: y + (rowHeight - item.size.height) / 2),
+                                           proposal: ProposedViewSize(item.size))
+                x += item.size.width + spacing
+            }
+            y += rowHeight + lineSpacing
+        }
     }
 }
 

@@ -617,6 +617,12 @@ final class SeparationJob: ObservableObject {
         splitErrors[kind] = msg
     }
 
+    /// Svuota la cronologia (i file restano nella cartella delle tracce).
+    func clearHistory() {
+        History.clear()
+        history = []
+    }
+
     func forget(_ item: HistoryItem) {
         History.remove(item)
         history = History.all()

@@ -111,7 +111,12 @@ struct ContentView: View {
             LogoMark(size: 38, animated: job.isBusy)
             VStack(alignment: .leading, spacing: 1) {
                 Text("AudioLR").font(.system(size: 22, weight: .bold, design: .rounded))
-                Text("Separa voce e strumenti di qualsiasi canzone").font(.system(size: 12)).foregroundStyle(.secondary)
+                // Se lo spazio non basta (libreria aperta, finestra stretta) si accorcia invece di andare a capo
+                ViewThatFits(in: .horizontal) {
+                    Text("Separa voce e strumenti di qualsiasi canzone")
+                    Text("Voce e strumenti separati")
+                }
+                .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
@@ -124,6 +129,7 @@ struct ContentView: View {
                     .popover(isPresented: $showGuide, arrowEdge: .bottom) {
                         GuideView { showGuide = false; openWindow(id: "faq") }
                     }
+                toolButton("clock.arrow.circlepath", help: "Cronologia (⌘Y)") { openWindow(id: "history") }
                 toolButton("person.crop.circle", help: "Account (⇧⌘A)") { openWindow(id: "account") }
                 SettingsLink {
                     Image(systemName: "gearshape").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 28)
@@ -183,12 +189,13 @@ struct ContentView: View {
             if job.history.isEmpty || showLibrary {
                 VStack(spacing: 8) {
                     Text("RICEVERAI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
-                    HStack(spacing: 8) {
+                    FlowLayout(spacing: 8, lineSpacing: 8) {
                         ForEach(Theme.stems(for: quality) + ["instrumental"], id: \.self) { key in
                             let info = Stem.info(key)
                             Chip(text: info.name, symbol: info.symbol, tint: Theme.color(key))
                         }
                     }
+                    .frame(maxWidth: 560)
                 }
                 .padding(.bottom, 6)
             } else {
@@ -344,7 +351,7 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 4)
             }
-            HStack(spacing: 6) {
+            FlowLayout(spacing: 6, lineSpacing: 6, centered: false) {
                 Chip(text: job.quality.title, symbol: job.quality.symbol, tint: Theme.brass)
                 if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
                 if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
@@ -354,8 +361,8 @@ struct ContentView: View {
                     Chip(text: a.keyName, symbol: "music.note", tint: Theme.color("piano"))
                         .help("Tonalità \(a.keyShort) · Camelot \(a.camelot)\(a.keyConfidence < 0.5 ? " · incerta: la canzone cambia tonalità o è poco tonale" : "")")
                 }
-                Spacer()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Text("Trascina una traccia in GarageBand, Logic o nel Finder. Clic sull'onda per ascoltare da quel punto.")
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
         }

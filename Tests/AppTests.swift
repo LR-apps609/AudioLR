@@ -208,6 +208,18 @@ final class AppTests: XCTestCase {
         XCTAssertTrue(History.all(defaults: defaults).isEmpty)
     }
 
+    func testHistoryClear() throws {
+        let defaults = UserDefaults(suiteName: "svuota-\(UUID().uuidString)")!
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("svuota-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        History.add(song: URL(fileURLWithPath: "/x/Una.mp3"), folder: dir, quality: .best, defaults: defaults)
+        XCTAssertEqual(History.all(defaults: defaults).count, 1)
+        History.clear(defaults: defaults)
+        XCTAssertTrue(History.all(defaults: defaults).isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "svuotare la cronologia non cancella le tracce")
+    }
+
     func testHistoryFindsStemsByName() throws {
         let d = try tempDir()
         for name in ["Brano – Voce.wav", "Brano – Batteria.flac", "Brano – Base (senza voce).m4a", "altro.txt"] {

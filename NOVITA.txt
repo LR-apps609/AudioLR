@@ -1,6 +1,9 @@
 Novità della 0.12.0 «Note»:
 • MIDI da ogni traccia: menu «MIDI» in alto, scegli voce, basso, chitarra, pianoforte o altro; le note diventano un file .mid al tempo della canzone, pronto per GarageBand e Logic
 • Le note le trova Basic Pitch di Spotify, incluso nell'app: niente da scaricare, tutto sul Mac
+• Nuova Cronologia (⌘Y, o l'orologio in alto): tutte le separazioni con data, qualità, durata, tempo impiegato, BPM e tonalità; doppio clic per riaprire
+• Grafica più pulita: le etichette non si spezzano più a metà parola, vanno a capo intere; il sottotitolo si accorcia invece di andare su due righe
+• La ricerca della libreria non si accende più da sola all'apertura
 
 Novità della 0.11.0 «Sala prove»:
 • Sala prove (⌥⌘P): rallenta fino al 50% senza cambiare il tono, oppure accelera fino al 150%

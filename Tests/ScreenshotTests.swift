@@ -82,4 +82,9 @@ final class ScreenshotTests: XCTestCase {
     func testShotFAQ() throws { try shot(FAQView(), "6-domande", width: 620, height: 620) }
     func testShotBugReport() throws { try shot(BugReportView(), "7-segnala", width: 520, height: 600) }
     func testShotGuide() throws { try shot(GuideView(), "8-guida", width: 330, height: 640) }
+    func testShotHistory() throws { try shot(HistoryView().environmentObject(SeparationJob.shared), "9-cronologia", width: 860, height: 520) }
+    /// La finestra alla misura minima, con la libreria aperta: niente parole spezzate
+    func testShotStartNarrow() throws {
+        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 860, height: 600)
+    }
 }
