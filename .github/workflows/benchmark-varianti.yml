@@ -1,0 +1,83 @@
+# Banco di prova delle combinazioni per Massima e Studio (Tools/benchmark_varianti.py):
+# le 50 canzoni di prova di MUSDB18 divise in 5 parti in parallelo, poi una tabella per ogni traccia.
+# Risultati: in questa pagina e nella release «banco-di-prova» (varianti.md, varianti.json).
+name: Banco delle combinazioni
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/benchmark_varianti.py, .github/workflows/benchmark-varianti.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  misura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" musdb soundfile
+          pip install -q --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install -q dora-search einops julius omegaconf pyyaml tqdm
+      - name: Separazione e misura
+        run: SHARD=${{ matrix.parte }}/5 python Tools/benchmark_varianti.py varianti_${{ matrix.parte }}.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: varianti_${{ matrix.parte }}
+          path: varianti_*.json
+
+  riepilogo:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: varianti_*
+          merge-multiple: true
+      - name: Tabella
+        run: |
+          python - <<'PY'
+          import json, glob, os, statistics as st
+          songs = {}
+          for f in glob.glob("varianti_*.json"):
+              songs.update(json.load(open(f))["canzoni"])
+          keys = sorted({k for r in songs.values() for k in r})
+          rows = {}
+          for k in keys:
+              v = [r[k] for r in songs.values() if k in r]
+              rows[k] = (round(st.median(v), 2), round(st.mean(v), 2), len(v))
+          names = {"vocals": "Voce", "instrumental": "Base", "drums": "Batteria", "bass": "Basso", "other": "Altro"}
+          md = [f"SDR (dB) sulle {len(songs)} canzoni di prova di MUSDB18 (estratti da 7 s). Più alto = più pulito.", ""]
+          for stem, title in names.items():
+              md += [f"### {title}", "", "| Ricetta | Mediana | Media | Canzoni |", "|---|---|---|---|"]
+              for k, (m, a, n) in sorted(((k, v) for k, v in rows.items() if k.startswith(stem + ":")), key=lambda x: -x[1][0]):
+                  md.append(f"| {k.split(':', 1)[1]} | {m:.2f} | {a:.2f} | {n} |")
+              md.append("")
+          text = "\n".join(md)
+          open("varianti.md", "w").write(text)
+          json.dump({"riepilogo": rows, "canzoni": songs}, open("varianti.json", "w"), ensure_ascii=False)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write("## Banco delle combinazioni\n\n" + text + "\n")
+          print(text)
+          PY
+      - name: Nella release «banco-di-prova»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view banco-di-prova >/dev/null 2>&1 || \
+            gh release create banco-di-prova --prerelease --title "Banco di prova (non è un aggiornamento)" \
+              --notes "Misure di qualità di AudioLR e dei modelli candidati."
+          gh release upload banco-di-prova varianti.md varianti.json --clobber
