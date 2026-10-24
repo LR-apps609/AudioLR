@@ -218,9 +218,9 @@ if os.environ.get("ONNX"):
     import onnxruntime as ort
     spec_in = torch.randn(1, 4, NFFT // 2, LE)
     wave_in = torch.randn(1, 2, L)
-    with torch.no_grad():
-        torch.onnx.export(core, (spec_in, wave_in), OUT + ".onnx", opset_version=17, do_constant_folding=True,
-                          input_names=["spec", "wave"], output_names=["spec_out", "wave_out"])
+    # Con i gradienti attivi (come per Core ML): PyTorch non usa l'attenzione «veloce», che ONNX non conosce
+    torch.onnx.export(core, (spec_in, wave_in), OUT + ".onnx", opset_version=17, do_constant_folding=True,
+                      input_names=["spec", "wave"], output_names=["spec_out", "wave_out"])
     sess = ort.InferenceSession(OUT + ".onnx", providers=["CPUExecutionProvider"])
 
     def core_onnx(xn, xtn):
