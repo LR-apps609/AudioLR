@@ -37,9 +37,13 @@ final class ScreenshotTests: XCTestCase {
         for (i, k) in keys.enumerated() {
             let n = 44_100 * 6
             let f = 110.0 * Double(i + 1)
-            let x = (0..<n).map { j -> Float in
+            let wobble = 0.7 + Double(i) * 0.3
+            var x = [Float](repeating: 0, count: n)
+            for j in 0..<n {
                 let t = Double(j) / 44_100
-                return Float(0.3 * sin(2 * .pi * f * t) * (0.5 + 0.5 * sin(2 * .pi * (0.7 + Double(i) * 0.3) * t)))
+                let tone: Double = sin(2 * Double.pi * f * t)
+                let level: Double = 0.5 + 0.5 * sin(2 * Double.pi * wobble * t)
+                x[j] = Float(0.3 * tone * level)
             }
             let info = Stem.info(k)
             let url = dir.appendingPathComponent("Canzone di prova – \(info.name).wav")
