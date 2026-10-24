@@ -44,6 +44,7 @@ struct AudioLRCommands: Commands {
     @ObservedObject var job: SeparationJob
     @Environment(\.openWindow) private var openWindow
     @AppStorage("showLibrary") private var showLibrary = true
+    @AppStorage("showPractice") private var showPractice = false
     @AppStorage(Quality.key) private var quality = Quality.best.rawValue
 
     private func post(_ name: Notification.Name, _ object: Any? = nil) {
@@ -88,6 +89,16 @@ struct AudioLRCommands: Commands {
                 .disabled(job.phase != .done)
             Button("Solo voce") { post(.audiolrPreset, MixState.Preset.voice.rawValue) }
                 .keyboardShortcut("j")
+                .disabled(job.phase != .done)
+            Divider()
+            Divider()
+            Toggle("Sala prove", isOn: $showPractice)
+                .keyboardShortcut("p", modifiers: [.command, .option])
+            Button("Inizio del passaggio da ripetere") { post(.audiolrLoop, "A") }
+                .keyboardShortcut("[")
+                .disabled(job.phase != .done)
+            Button("Fine del passaggio da ripetere") { post(.audiolrLoop, "B") }
+                .keyboardShortcut("]")
                 .disabled(job.phase != .done)
             Divider()
             Button("Esporta il mix") { post(.audiolrExport) }

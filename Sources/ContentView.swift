@@ -17,6 +17,8 @@ extension Notification.Name {
     static let audiolrPlay = Notification.Name("audiolrPlay")
     /// Menu Mix › Esporta il mix (⌘E).
     static let audiolrExport = Notification.Name("audiolrExport")
+    /// Menu Mix › Inizio / fine del passaggio da ripetere (⌘[ e ⌘]): l'oggetto è «A» o «B».
+    static let audiolrLoop = Notification.Name("audiolrLoop")
     /// Menu Vista › Dettagli della separazione (⌘I).
     static let audiolrDetails = Notification.Name("audiolrDetails")
 }
@@ -32,6 +34,7 @@ struct ContentView: View {
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
     @State private var showDetails = false
+    @AppStorage("showPractice") private var showPractice = false
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var typing = TypingFocus.shared
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
@@ -65,6 +68,11 @@ struct ContentView: View {
             mixer.toggle()
         }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrExport)) { _ in exportMix() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrLoop)) { n in
+            guard job.phase == .done else { return }
+            showPractice = true
+            if (n.object as? String) == "A" { mixer.markLoopStart() } else { mixer.markLoopEnd() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrDetails)) { _ in
             if job.phase == .done { showDetails = true }
         }
@@ -374,8 +382,57 @@ struct ContentView: View {
         }
     }
 
-    /// Il trasporto del mixer: suona tutto insieme, scorciatoie, esportazione del mix.
+    /// Il trasporto del mixer: suona tutto insieme, scorciatoie, esportazione del mix; sotto, la Sala prove.
     private var transport: some View {
+        VStack(spacing: 8) {
+            transportBar
+            if showPractice { practiceBar }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
+        .animation(.easeInOut(duration: 0.15), value: showPractice)
+    }
+
+    /// Sala prove: velocità, tono, un passaggio da ripetere.
+    private var practiceBar: some View {
+        HStack(spacing: 14) {
+            Label("Sala prove", systemImage: "music.note.house").font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Theme.brass)
+            HStack(spacing: 6) {
+                Image(systemName: "tortoise").font(.system(size: 11)).foregroundStyle(.secondary)
+                Slider(value: $mixer.rate, in: 0.5...1.5, step: 0.05).frame(width: 120)
+                    .accessibilityLabel("Velocità")
+                Image(systemName: "hare").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("\(Int((mixer.rate * 100).rounded()))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+                    .frame(width: 38, alignment: .leading)
+            }
+            .help("Velocità senza cambiare il tono")
+            Stepper(value: $mixer.semitones, in: -6...6) {
+                Text("Tono \(mixer.semitones > 0 ? "+" : "")\(mixer.semitones)").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+            }
+            .help("Semitoni in su o in giù, senza cambiare la velocità")
+            HStack(spacing: 4) {
+                Button(mixer.loopA.map { "A " + formatTime($0) } ?? "A") { mixer.markLoopStart() }
+                    .help("Inizio del passaggio da ripetere (⌘[)")
+                Button(mixer.loopB.map { "B " + formatTime($0) } ?? "B") { mixer.markLoopEnd() }
+                    .help("Fine del passaggio: da qui si torna ad A (⌘])")
+                if mixer.loopA != nil || mixer.loopB != nil {
+                    Button { mixer.clearLoop() } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless).help("Togli la ripetizione")
+                }
+            }
+            .controlSize(.small)
+            Spacer()
+            if mixer.rate != 1 || mixer.semitones != 0 || mixer.loopA != nil {
+                Button("Normale") { mixer.resetPractice() }.controlSize(.small)
+                    .help("Velocità e tono originali, niente ripetizione")
+            }
+        }
+        .padding(.horizontal, 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private var transportBar: some View {
         HStack(spacing: 12) {
             Button {
                 player.stop()
@@ -390,12 +447,17 @@ struct ContentView: View {
             .keyboardShortcut(typing.typing ? nil : KeyboardShortcut(.space, modifiers: []))
             .help(mixer.isPlaying ? "Pausa (spazio)" : "Suona tutte le tracce insieme (spazio)")
             .accessibilityLabel(mixer.isPlaying ? "Pausa" : "Suona il mix")
-            TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            // Con la ripetizione attiva si controlla più spesso, per tornare ad A senza pause
+            TimelineView(.periodic(from: .now, by: mixer.isLooping ? 0.04 : 0.25)) { _ in
                 Text("\(formatTime(mixer.position)) / \(formatTime(mixer.duration))")
                     .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(.secondary)
                     .onAppear { mixer.tick() }
-                    .task(id: Int(mixer.position * 4)) { mixer.tick() }
+                    .task(id: Int(mixer.position * (mixer.isLooping ? 25 : 4))) { mixer.tick() }
             }
+            Toggle(isOn: $showPractice) { Image(systemName: "music.note.house") }
+                .toggleStyle(.button).controlSize(.small)
+                .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
+                .accessibilityLabel("Sala prove")
             Picker("Scorciatoie", selection: Binding(
                 get: { mixer.state.preset?.rawValue ?? "" },
                 set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
@@ -409,10 +471,8 @@ struct ContentView: View {
                 if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
             }
             .disabled(mixer.exporting || job.folder == nil)
-            .help("Salva quello che senti, con muto, solo e volumi, accanto alle tracce")
+            .help("Salva quello che senti, con muto, solo e volumi, accanto alle tracce (velocità e tono della Sala prove restano quelli originali)")
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
     }
 
     // MARK: Errore

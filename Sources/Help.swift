@@ -52,6 +52,8 @@ enum FAQ {
               answer: "Sì, in Massima qualità: oltre a voce, batteria e basso ricevi chitarra, pianoforte e gli altri strumenti. Se preferisci quattro tracce, in Impostazioni › Tracce togli «Chitarra e pianoforte in tracce proprie»: finiranno in «Altri strumenti»."),
         Entry(topic: "Qualità", question: "Ci sono archi, fiati o synth separati?",
               answer: "Non ancora: oggi non esiste un modello libero abbastanza preciso per archi e fiati. Restano in «Altri strumenti». Appena ce ne sarà uno all'altezza, arriverà con un aggiornamento."),
+        Entry(topic: "Mixer ed esportazione", question: "Come rallento un passaggio per impararlo?",
+              answer: "Apri la Sala prove (⌥⌘P, o il tasto con la casetta nel trasporto). La velocità va dal 50% al 150% senza cambiare il tono; «Tono» sposta di semitoni senza cambiare la velocità. Per ripetere un passaggio premi A all'inizio e B alla fine (⌘[ e ⌘] mentre suona): il mixer torna da solo ad A. Velocità e tono valgono solo per l'ascolto, il mix esportato resta originale."),
         Entry(topic: "Mixer ed esportazione", question: "Posso tenere i cori nel karaoke?",
               answer: "Sì: dopo una separazione premi «Separa voce e cori» (⇧⌘V). La voce viene divisa in voce solista e cori; nel mixer compare la scorciatoia «Con i cori», che toglie solo la voce principale. La prima volta scarica un modello di circa 200 MB."),
         Entry(topic: "Mixer ed esportazione", question: "Cosa sono BPM e tonalità sotto il mixer?",
