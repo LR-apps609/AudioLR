@@ -131,12 +131,15 @@ enum StemFile {
         guard writer.status == .completed else {
             throw SeparationError("il file per DJ non si è completato (\(writer.error?.localizedDescription ?? "errore sconosciuto"))")
         }
-        var data = try Data(contentsOf: tmp)
+        var data: Data
+        do { data = try Data(contentsOf: tmp) } catch {
+            throw SeparationError("non riesco a rileggere il file per DJ appena scritto (\(error.localizedDescription))")
+        }
         try addStemAtom(to: &data)
-        // Il file finale prende il posto di quello vecchio solo quando è completo
-        try data.write(to: tmp)
         try? FileManager.default.removeItem(at: url)
-        try FileManager.default.moveItem(at: tmp, to: url)
+        do { try data.write(to: url) } catch {
+            throw SeparationError("non riesco a salvare \(url.lastPathComponent) (\(error.localizedDescription))")
+        }
     }
 
     // MARK: Audio per AVAssetWriter
