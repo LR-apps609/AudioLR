@@ -91,6 +91,10 @@ enum Prefs {
     static let speedKey = "speedMode"
     static var fast: Bool { UserDefaults.standard.string(forKey: speedKey) == "rapida" }
     /// Neural Engine e grafica al lavoro insieme sui pezzi della canzone (di serie sì).
+    /// Un Mac con poca memoria (8 GB o meno): i modelli si liberano appena hanno finito il loro passaggio,
+    /// altrimenti macOS usa il disco come memoria e tutto rallenta molto.
+    static let lowMemory = ProcessInfo.processInfo.physicalMemory <= 9 * 1024 * 1024 * 1024
+
     /// Studio con la voce da due modelli (viperx e Kim, in media): +0,22 dB, circa un terzo più lenta.
     static let doubleVoiceKey = "studioDoubleVoice"
     static var doubleVoice: Bool { UserDefaults.standard.bool(forKey: doubleVoiceKey) }

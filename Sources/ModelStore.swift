@@ -100,6 +100,17 @@ final class ModelStore: @unchecked Sendable {
         return removed
     }
 
+    /// Libera la memoria di un modello (tutte le sue copie: Neural Engine, grafica…). Si riapre dal disco quando serve.
+    func release(_ name: String) {
+        lock.withLock {
+            cores = cores.filter { !$0.key.hasPrefix(name + "#") }
+            models = models.filter { !$0.key.hasPrefix(name + "#") }
+        }
+    }
+
+    /// Quante copie di modelli sono aperte (per le prove).
+    var openCount: Int { lock.withLock { models.count } }
+
     /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).
     func forget() { lock.withLock { cores.removeAll(); models.removeAll() } }
 

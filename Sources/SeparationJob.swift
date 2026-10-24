@@ -310,6 +310,11 @@ final class SeparationJob: ObservableObject {
                 if d >= 0.05 { times.append(Timing(name: name, seconds: d)) }
                 clock = now
             }
+            /// Con poca memoria, un modello che ha finito il suo passaggio si libera subito.
+            func done(_ names: String?...) {
+                guard Prefs.lowMemory else { return }
+                for n in names.compactMap({ $0 }) { ModelStore.shared.release(n) }
+            }
             do {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
                 var voiceName = wantedVoice
@@ -458,6 +463,7 @@ final class SeparationJob: ObservableObject {
                         EngineChoice.store(d, for: used)
                     }
                     decisions[used] = d
+                    done(used)
                     lap("Voce (RoFormer)")
                     var vo2 = vo
                     // La seconda voce (Studio): la media dei due modelli è più pulita di ognuno
@@ -472,6 +478,7 @@ final class SeparationJob: ObservableObject {
                                 for k in 0..<n { vo2[c][k] = 0.5 * (vo2[c][k] + other[c][k]) }
                             }
                             decisions[s] = sd
+                            done(s)
                             lap("Seconda voce (Mel-RoFormer)")
                         } catch {
                             // Se non riesce resta la voce del primo modello
@@ -510,6 +517,7 @@ final class SeparationJob: ObservableObject {
                     }
                     decisions[w] = d
                     (sources, out) = SeparationJob.arrange(res.names, res.audio, voice: voiceOut, split: split)
+                    done(w)
                     lap("Strumenti (BS-RoFormer SW)")
 
                     // In Studio il basso dal Demucs specializzato, sulla stessa base: più pieno e più pulito di quello di SW
@@ -538,6 +546,7 @@ final class SeparationJob: ObservableObject {
                                 implausible = true
                             } catch {}
                         }
+                        done(b)
                         if cancel.isSet { throw CancellationError() }
                         // Se il calcolo non riesce resta il basso di SW
                         // La media dei due bassi è la più pulita: 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW
@@ -575,6 +584,7 @@ final class SeparationJob: ObservableObject {
                     }
                     if sources.isEmpty { sources = core.sources }
                     Separator.merge(&out, result, sources: core.sources, specialty: core.specialty)
+                    done(name)
                 }
                 if !instrumentModels.isEmpty {
                     if let vo = voiceOut, let i = sources.firstIndex(of: "vocals") { out[i] = vo }
@@ -633,7 +643,9 @@ final class SeparationJob: ObservableObject {
 
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
     nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
-        let ane = try await ModelStore.shared.roformer(name, units: .all) { _ in }
+        // La stessa copia che poi lavorerà sul Neural Engine (con i due motori insieme): una copia in meno in memoria
+        let aneUnits: MLComputeUnits = hasNeuralEngine && Prefs.dualEngine ? .cpuAndNeuralEngine : .all
+        let ane = try await ModelStore.shared.roformer(name, units: aneUnits) { _ in }
         let gpu = try await ModelStore.shared.roformer(name, units: .cpuAndGPU) { _ in }
         let chunk = ane.config.chunk
         let start = max(0, (mix[0].count - chunk) / 2)
