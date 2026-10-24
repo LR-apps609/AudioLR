@@ -133,8 +133,10 @@ enum StemFile {
         }
         var data = try Data(contentsOf: tmp)
         try addStemAtom(to: &data)
+        // Il file finale prende il posto di quello vecchio solo quando è completo
+        try data.write(to: tmp)
         try? FileManager.default.removeItem(at: url)
-        try data.write(to: url, options: .atomic)
+        try FileManager.default.moveItem(at: tmp, to: url)
     }
 
     // MARK: Audio per AVAssetWriter

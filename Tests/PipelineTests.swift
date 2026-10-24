@@ -39,7 +39,8 @@ final class PipelineTests: XCTestCase {
 
         let job = SeparationJob.shared
         job.reset()
-        let url = try song()
+        // 5 secondi: sul Mac di GitHub (senza Neural Engine) tre modelli pesanti sono lenti
+        let url = try song(seconds: 5)
         let start = Date()
         job.start(url, quality: q)
         while job.isBusy { try await Task.sleep(nanoseconds: 500_000_000) }
@@ -51,7 +52,7 @@ final class PipelineTests: XCTestCase {
         let bass = try AudioIO.read(job.stems.first { $0.key == "bass" }!.url)
         let energy = bass[0].reduce(0) { $0 + $1 * $1 } / Float(bass[0].count)
         XCTAssertGreaterThan(energy, 1e-4, "basso vuoto")
-        let line = String(format: "Studio completa: 12 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
+        let line = String(format: "Studio completa: 5 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
                           job.timings.map { "\($0.name) \(Int($0.seconds.rounded())) s" }.joined(separator: ", "), job.engineText ?? "")
         print(line)
         let path = "/tmp/audiolr-passi.txt"
