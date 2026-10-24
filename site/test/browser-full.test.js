@@ -85,7 +85,7 @@ const log = (...a) => console.log(`[${NAME}]`, ...a);
   page.on("pageerror", (e) => problems.push(String(e)));
   page.on("request", (r) => requests.push(r.url()));
   const visible = (sel) => page.isVisible(sel);
-  const results = () => page.waitForSelector("#results:not([hidden])", { timeout: (NAME === "chromium" ? 20 : 12) * MIN });
+  const results = () => page.waitForSelector("#results:not([hidden])", { timeout: (NAME === "chromium" ? 20 : NAME === "firefox" ? 12 : 5) * MIN });
   const errorShown = async (re) => {
     await page.waitForSelector("#error:not([hidden])", { timeout: 2 * MIN });
     const t = await page.textContent("#error");

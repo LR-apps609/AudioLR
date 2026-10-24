@@ -129,7 +129,7 @@ jobs:
           (python3 site/test/server.py /tmp/sito 8080 > /tmp/server.log 2>&1 &)
           sleep 2
           set +e
-          NODE_PATH=/tmp/pw/node_modules node site/test/browser-full.test.js http://127.0.0.1:8080/ > full.log 2>&1
+          NODE_PATH=/tmp/pw/node_modules timeout 40m node site/test/browser-full.test.js http://127.0.0.1:8080/ > full.log 2>&1
           code=$?
           cat full.log
           # Ogni riga della prova nel riepilogo; se è fallita, l'errore come annotazione e il passo fallisce
