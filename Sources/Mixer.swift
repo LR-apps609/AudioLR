@@ -140,6 +140,17 @@ final class MixPlayer: ObservableObject {
     @Published private(set) var loopA: Double?
     @Published private(set) var loopB: Double?
     var isLooping: Bool { loopA != nil && loopB != nil }
+    /// Rampa di velocità: il passaggio riparte ogni volta un po' più veloce (es. 70% → 100%), per imparare un brano.
+    @Published var ramp = false {
+        didSet { if ramp && !oldValue { rate = Self.rampStart } }
+    }
+    nonisolated static let rampStart = 0.7
+    nonisolated static let rampStep = 0.05
+    nonisolated static let rampTarget = 1.0
+    /// La velocità del giro successivo: un passo in più, senza superare il traguardo.
+    nonisolated static func rampNext(_ r: Double, step: Double = rampStep, target: Double = rampTarget) -> Double {
+        min(target, ((r + step) * 100).rounded() / 100)
+    }
 
     private let timePitch = AVAudioUnitTimePitch()
 
@@ -196,6 +207,7 @@ final class MixPlayer: ObservableObject {
 
     /// Velocità e tono normali, niente ripetizione.
     func resetPractice() {
+        ramp = false
         rate = 1
         semitones = 0
         loopA = nil
@@ -287,7 +299,11 @@ final class MixPlayer: ObservableObject {
     /// Chiamato regolarmente dalla finestra: a fine canzone si ferma; a fine passaggio ricomincia da A.
     func tick() {
         guard isPlaying else { return }
-        if let a = loopA, let b = loopB, position >= b - 0.03 { play(from: a); return }
+        if let a = loopA, let b = loopB, position >= b - 0.03 {
+            if ramp { rate = Self.rampNext(rate) }
+            play(from: a)
+            return
+        }
         if position >= duration - 0.02 { stop() }
     }
 

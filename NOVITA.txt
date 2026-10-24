@@ -1,3 +1,6 @@
+Novità della 0.16.0 «Rampa»:
+• Sala prove: «Rampa» fa ripartire il passaggio A-B ogni volta un po' più veloce, dal 70% al 100% (+5% a giro). Il modo classico per imparare un brano difficile
+
 Novità della 0.15.0 «Due voci»:
 • Nuovo logo: sette barre a forma d'onda, dal corallo al verde acqua
 • SISTEMATO il primo uso lento o «bloccato»: dopo lo scaricamento il modello si adattava al Neural Engine due volte, con tre copie in memoria. Ora una volta sola, e sui Mac con 8 GB una sola copia per modello
