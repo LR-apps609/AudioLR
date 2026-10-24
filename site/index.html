@@ -44,7 +44,8 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between;margin-bottom:16px">
       <div style="display:grid;gap:6px">
-        <span class="label">Prova nel browser · qualità Veloce</span>
+        <span class="label web-only">Prova nel browser · qualità Veloce</span>
+        <span class="label desktop-only">AudioLR per Windows · anteprima · qualità Veloce</span>
         <h2>Trascina una canzone</h2>
       </div>
       <span class="chip" id="backend" hidden></span>
@@ -54,7 +55,8 @@
       <div class="drop" id="drop">
         <div class="bars" id="bars" aria-hidden="true"></div>
         <h3>Trascina qui una canzone</h3>
-        <p class="muted">MP3, M4A, WAV, FLAC · fino a 10 minuti · la canzone resta sul tuo computer</p>
+        <p class="muted web-only">MP3, M4A, WAV, FLAC · fino a 10 minuti · la canzone resta sul tuo computer</p>
+        <p class="muted desktop-only">MP3, M4A, WAV, FLAC · fino a 30 minuti · la canzone resta sul tuo computer</p>
         <label class="btn" for="file">Scegli una canzone…</label>
         <input id="file" type="file" accept="audio/*" hidden>
         <div class="chips" aria-label="Riceverai">
@@ -64,7 +66,8 @@
           <span class="chip" style="--c:var(--other)">Altri strumenti</span>
           <span class="chip" style="--c:var(--base)">Base (senza voce)</span>
         </div>
-        <p class="muted" style="font-size:13.5px">La prima volta il browser scarica il modello (circa 170 MB, una volta sola). Con un browser recente lavora la scheda grafica.</p>
+        <p class="muted web-only" style="font-size:13.5px">La prima volta il browser scarica il modello (circa 170 MB, una volta sola). Con un browser recente lavora la scheda grafica.</p>
+        <p class="muted desktop-only" style="font-size:13.5px">Funziona senza internet: il modello è già nell'app. Lavora la scheda grafica del PC.</p>
       </div>
       <!-- Al lavoro -->
       <div class="working" id="working" hidden>
@@ -91,7 +94,7 @@
           </div>
         </div>
         <div id="stems"></div>
-        <p class="muted" style="font-size:13.5px;margin-top:12px">Clic sull'onda per ascoltare da quel punto. I file WAV (24 bit) si salvano dal tuo browser, senza passare da nessun server.</p>
+        <p class="muted" style="font-size:13.5px;margin-top:12px">Clic sull'onda per ascoltare da quel punto. I file WAV (24 bit) si salvano sul tuo computer, senza passare da nessun server.</p>
       </div>
       <p class="err" id="error" hidden></p>
     </div>
