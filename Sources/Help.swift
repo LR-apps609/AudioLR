@@ -31,7 +31,7 @@ enum FAQ {
         Entry(topic: "Primi passi", question: "Quali file posso usare?",
               answer: "MP3, M4A/AAC, WAV, AIFF, FLAC, ALAC e in generale ogni file audio che il Mac sa aprire. I file protetti da DRM (per esempio scaricati da Apple Music) non si possono aprire."),
         Entry(topic: "Primi passi", question: "Perché la prima volta ci mette di più?",
-              answer: "Al primo uso AudioLR scarica i modelli di IA (circa 400 MB per Massima, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
+              answer: "Al primo uso AudioLR scarica i modelli di IA (circa 530 MB per Massima, 390 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
         Entry(topic: "Primi passi", question: "Dove ritrovo le canzoni già separate?",
               answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla). Un clic riapre la separazione con il mixer, senza rifarla."),
         Entry(topic: "Qualità", question: "Che differenza c'è tra Massima e Veloce?",

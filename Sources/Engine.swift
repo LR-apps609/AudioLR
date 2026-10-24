@@ -108,8 +108,8 @@ enum Quality: String, CaseIterable, Identifiable {
     var downloadSize: String {
         switch self {
         case .fast: return "circa 80 MB"
-        case .best: return "circa 400 MB"
-        case .studio: return "circa 400 MB"
+        case .best: return "circa 530 MB"
+        case .studio: return "circa 390 MB"
         }
     }
 }

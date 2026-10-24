@@ -1,8 +1,13 @@
+Novità della 0.9.0 «Studio»:
+• Nuova qualità Studio (⌥⌘3): la voce dal modello più pulito che abbiamo provato (BS-RoFormer), con gli strumenti di Massima. Nelle prove: voce +0,4 dB e base karaoke +0,6 dB rispetto a Massima
+• Modello strumenti più fedele: ora a 16 bit, identico all'originale anche nelle parti più silenziose
+• Se un modello voce non riesce su un Mac, AudioLR passa da sola a quello più leggero, senza fermarsi
+• Domande frequenti aggiornate su Studio e qualità
+
 Novità della 0.8.0 «Strumenti»:
 • Massima qualità con chitarra e pianoforte: oltre a voce, batteria e basso ricevi chitarra, pianoforte e altri strumenti, ognuno con la sua corsia nel mixer
 • Strumenti più puliti: un nuovo modello (BS-RoFormer SW) al posto dei quattro Demucs; nelle prove la batteria è più pulita di 1 dB e gli altri strumenti di 0,7 dB
 • Dividi la batteria (⇧⌘D): cassa, rullante, tom, charleston, ride e crash in tracce proprie, con un clic dopo la separazione
-• Meno da scaricare per Massima: circa 400 MB invece di 520
 • Impostazioni › Tracce: puoi riunire chitarra e pianoforte in «Altri strumenti» se preferisci quattro tracce
 • Domande frequenti aggiornate su strumenti e batteria
 
