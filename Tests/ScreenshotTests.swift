@@ -11,15 +11,13 @@ final class ScreenshotTests: XCTestCase {
     /// Le finestre con logo e onde animate (disegnate con la grafica) fanno chiudere i test sulle macchine
     /// virtuali di GitHub, dentro Metal: lì si saltano finché non c'è un disegno alternativo.
     private func skipOnVirtualMac() throws {
-        let env = ProcessInfo.processInfo.environment
-        if env["AUDIOLR_CI"] == "1" || env["GITHUB_ACTIONS"] == "true" {
-            throw XCTSkip("disegno con Metal non disponibile sulla macchina virtuale di GitHub")
-        }
+        // Con le forme semplici al posto di Canvas non serve più saltare (vedi Drawing)
     }
 
     override func setUp() async throws {
         // I test girano senza l'app: le finestre hanno bisogno di un'applicazione attiva
         _ = NSApplication.shared
+        Drawing.flat = true
         NSApp.setActivationPolicy(.accessory)
         executionTimeAllowance = 300
     }

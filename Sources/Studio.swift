@@ -8,6 +8,12 @@ import AppKit
 
 /// Il marchio di AudioLR, come l'icona: barre di un'onda divise nei colori dei quattro strumenti.
 /// Animato, le barre «suonano» piano.
+/// Come disegnare onde, barre e marchio: con Canvas (di serie, veloce) oppure con forme semplici.
+/// Le forme servono alle schermate di prova: sulle macchine virtuali di GitHub il disegno con Metal si chiude.
+enum Drawing {
+    static var flat = false
+}
+
 struct LogoMark: View {
     var size: CGFloat = 32
     var animated = false
@@ -17,6 +23,32 @@ struct LogoMark: View {
     static let heights: [Double] = [0.16, 0.30, 0.48, 0.66, 0.84, 0.96, 1.0, 0.90, 0.74, 0.56, 0.40, 0.26, 0.14]
 
     var body: some View {
+        if Drawing.flat { flatBody } else { canvasBody }
+    }
+
+    /// Lo stesso marchio con forme semplici, fermo (per le schermate di prova).
+    private var flatBody: some View {
+        let side = size, inner = tile ? side * 0.80 : side
+        let bw = inner * 0.048, gap = inner * 0.029, hmax = inner * (tile ? 0.80 : 0.95)
+        let colors: [Color] = [0xE5917A, 0xE6B45C, 0xB497D0, 0x76C3B9].map { Color(hex: $0) }
+        return ZStack {
+            if tile {
+                RoundedRectangle(cornerRadius: side * 0.225, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(hex: 0x2E2540), Color(hex: 0x120F18)], startPoint: .top, endPoint: .bottom))
+            }
+            HStack(spacing: gap) {
+                ForEach(Self.heights.indices, id: \.self) { i in
+                    VStack(spacing: 0) { ForEach(0..<4, id: \.self) { k in Rectangle().fill(colors[k]) } }
+                        .frame(width: bw, height: hmax * Self.heights[i])
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private var canvasBody: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: !animated || reduceMotion)) { tl in
             let t = animated && !reduceMotion ? tl.date.timeIntervalSinceReferenceDate : 0
             Canvas { ctx, sz in
@@ -105,6 +137,32 @@ struct WaveformView: View {
     var spacing: CGFloat = 1
 
     var body: some View {
+        if Drawing.flat { flatBody } else { canvasBody }
+    }
+
+    private var flatBody: some View {
+        GeometryReader { g in
+            let slots = max(1, min(240, Int(g.size.width / (barWidth + spacing))))
+            let w = g.size.width / CGFloat(slots)
+            ZStack(alignment: .leading) {
+                HStack(alignment: .center, spacing: max(0, w - barWidth)) {
+                    ForEach(0..<slots, id: \.self) { s in
+                        let a = s * max(peaks.count, 1) / slots, b = max(a + 1, (s + 1) * peaks.count / slots)
+                        let p = peaks.isEmpty ? 0 : (a..<min(b, peaks.count)).map { peaks[$0] }.max() ?? 0
+                        let done = progress.map { Double(s) / Double(slots) < $0 } ?? true
+                        Capsule().fill(done ? color : dim)
+                            .frame(width: barWidth, height: max(1.5, CGFloat(Double(p).squareRoot()) * g.size.height * 0.92))
+                    }
+                }
+                .frame(height: g.size.height)
+                if let ph = playhead {
+                    Rectangle().fill(Theme.ink.opacity(0.85)).frame(width: 2).offset(x: g.size.width * ph - 1)
+                }
+            }
+        }
+    }
+
+    private var canvasBody: some View {
         Canvas { ctx, size in
             guard !peaks.isEmpty else { return }
             let slots = max(1, Int(size.width / (barWidth + spacing)))
@@ -135,6 +193,26 @@ struct IdleBars: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if Drawing.flat { flatBody } else { canvasBody }
+    }
+
+    private var flatBody: some View {
+        GeometryReader { g in
+            let gap = (g.size.width - CGFloat(count) * 5) / CGFloat(max(count - 1, 1))
+            HStack(spacing: gap) {
+                ForEach(0..<count, id: \.self) { i in
+                    let env = sin(Double(i) / Double(count - 1) * .pi)
+                    Capsule().fill(Theme.color(Theme.stemOrder[i * 4 / count]))
+                        .frame(width: 5, height: max(6, g.size.height * CGFloat(0.25 + 0.6 * env)))
+                }
+            }
+            .frame(width: g.size.width, height: g.size.height)
+        }
+        .frame(height: height)
+        .accessibilityHidden(true)
+    }
+
+    private var canvasBody: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { tl in
             let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
