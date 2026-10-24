@@ -114,5 +114,8 @@ details p { margin-top: 8px; color: var(--muted); }
 /* App per Windows: solo la prova (che lì è l'app), niente presentazione */
 .desktop header.hero, .desktop #confronto, .desktop #scarica, .desktop #domande, .desktop nav.top .links { display: none; }
 .desktop #prova { padding-top: 22px; }
+.desktop-only { display: none; }
+.desktop .desktop-only { display: revert; }
+.desktop .web-only { display: none; }
 footer { padding-block: 34px 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; }

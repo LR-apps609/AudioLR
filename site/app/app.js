@@ -124,7 +124,7 @@
     tracks.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
     state.muted.clear(); state.solo.clear(); offset = 0;
     $("title").textContent = songName;
-    $("took").textContent = `Separata in ${fmt(m.seconds)} · ${m.backend === "webgpu" ? "scheda grafica" : "processore"} · tutto nel tuo browser`;
+    $("took").textContent = `Separata in ${fmt(m.seconds)} · ${m.backend === "webgpu" ? "scheda grafica" : "processore"} · ${DESKTOP ? "tutto sul tuo computer" : "tutto nel tuo browser"}`;
     renderStems();
     setPreset("all");
     show("results");
