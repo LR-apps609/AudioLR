@@ -174,6 +174,18 @@ jobs:
             fi
           fi
 
+      # Le schermate prese dai test, nella versione «schermate» (non è una versione dell'app)
+      - name: Schermate
+        if: always() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls /tmp/audiolr-schermate/*.png >/dev/null 2>&1 || { echo "Nessuna schermata"; exit 0; }
+          gh release view schermate >/dev/null 2>&1 || gh release create schermate --prerelease \
+            --title "Schermate di prova" --notes "Schermate prese dal Mac di GitHub durante i test: servono a controllare la grafica."
+          cd /tmp/audiolr-schermate && gh release upload schermate *.png --clobber
+          echo "::notice::Schermate: $(ls *.png | wc -l | tr -d ' ') (ramo ${GITHUB_REF_NAME})"
+
       - uses: actions/upload-artifact@v6
         if: always()
         with:

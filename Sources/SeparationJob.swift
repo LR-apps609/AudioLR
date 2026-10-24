@@ -651,6 +651,21 @@ final class SeparationJob: ObservableObject {
 
     private func set(_ p: Phase) { phase = p }
 
+    /// Per le schermate di prova (ScreenshotTests): mostra una separazione finita senza farla davvero.
+    func showcase(title: String, stems: [Stem], folder: URL, quality: Quality, duration: Double,
+                  analysis: SongAnalysis?, elapsed: Double, engine: String, timings: [Timing]) {
+        self.title = title
+        self.stems = stems
+        self.folder = folder
+        self.quality = quality
+        self.duration = duration
+        self.analysis = analysis
+        self.elapsed = elapsed
+        self.engineText = engine
+        self.timings = timings
+        phase = .done
+    }
+
     /// Annullare ferma anche la coda.
     private func stopped(clearing: Bool) {
         if clearing { queue = [] }
