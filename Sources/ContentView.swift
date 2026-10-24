@@ -517,7 +517,7 @@ struct ContentView: View {
             Spacer()
             Menu {
                 Button("Esporta il mix (⌘E)") { exportMix() }
-                Button("Esporta per DJ: .stem.mp4 (⌥⌘E)") { exportStemFile() }
+                Button("Esporta per DJ: .stem.mp4 · anteprima (⌥⌘E)") { exportStemFile() }
             } label: {
                 if mixer.exporting || makingStemFile { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
             } primaryAction: { exportMix() }

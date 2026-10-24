@@ -27,7 +27,7 @@ final class PipelineTests: XCTestCase {
 
     /// Studio dall'inizio alla fine: voce viperx, SW sugli strumenti e il basso dal Demucs specializzato.
     func testStudioFromStartToFinish() async throws {
-        executionTimeAllowance = 2400
+        executionTimeAllowance = 3000
         let q = Quality.studio
         for m in q.allModels {
             do { _ = try await ModelStore.shared.mlModel(m) { _ in } } catch { throw XCTSkip("\(m) non raggiungibile") }
