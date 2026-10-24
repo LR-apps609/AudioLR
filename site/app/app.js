@@ -22,6 +22,8 @@
   }
 
   let worker = null, ready = null, forceWasm = false, songName = "", started = 0;
+  // Cresce a ogni «Annulla»: una canzone annullata mentre si preparava il modello non riparte da sola
+  let generation = 0;
 
   function show(view) {
     for (const id of ["drop", "working", "results"]) $(id).hidden = id !== view;
@@ -84,9 +86,9 @@
     if (audio.duration < 1) return fail("La canzone è troppo corta (almeno 1 secondo).");
     const left = new Float32Array(audio.getChannelData(0));
     const right = new Float32Array(audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0));
-    const job = startWorker();
-    try { await job; } catch (e) { return; }
-    if (!worker || ready !== job) return; // annullata mentre si preparava il modello
+    const mine = generation;
+    try { await startWorker(); } catch (e) { return; }
+    if (!worker || mine !== generation) return; // annullata mentre si preparava il modello
     $("step").textContent = "Separo voce e strumenti…";
     setProgress(0);
     started = performance.now();
@@ -103,6 +105,7 @@
   $("cancel").addEventListener("click", () => {
     if (worker) { worker.terminate(); worker = null; }
     ready = null;
+    generation++;
     show("drop");
   });
   $("again").addEventListener("click", () => { stop(); show("drop"); });

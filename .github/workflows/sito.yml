@@ -91,9 +91,50 @@ jobs:
             gh release create sito-prova --repo "$GITHUB_REPOSITORY" --prerelease --title "Sito · prova in locale (non pubblicato)" \
               --notes "Il sito di AudioLR da provare sul proprio Mac, senza pubblicarlo. Scarica lo zip, aprilo e fai clic destro su apri-sito.command › Apri (la prima volta macOS chiede conferma): si apre nel browser su http://localhost:8080. Nessun dato esce dal computer."
           gh release upload sito-prova /tmp/pack/AudioLR-sito-prova.zip --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Sito pronto per le prove nei browser
+        uses: actions/upload-artifact@v6
+        with:
+          name: sito-pronto
+          path: site
+          retention-days: 3
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  # Le prove approfondite in tre browser veri: Chromium (Chrome, Edge), Firefox e WebKit (il motore di Safari)
+  browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v6
+        with:
+          name: sito-pronto
+          path: /tmp/sito
+      - name: Prove approfondite (${{ matrix.browser }})
+        env:
+          BROWSER: ${{ matrix.browser }}
+          LUNGA: ${{ matrix.browser == 'chromium' && '40' || '0' }}
+        run: |
+          npm i --prefix /tmp/pw playwright@1.47.2 --silent
+          (cd /tmp/pw && npx playwright install --with-deps ${{ matrix.browser }} > /dev/null)
+          (cd /tmp/sito && python3 -m http.server 8080 > /tmp/server.log 2>&1 &)
+          sleep 2
+          NODE_PATH=/tmp/pw/node_modules node site/test/browser-full.test.js http://127.0.0.1:8080/ | tee full.log
+          grep -E "\] (4 s|WAV|Mono|Annulla|[0-9]+ s separati|Telefono|Nessuna|TUTTO)" full.log | while IFS= read -r l; do echo "::notice::$l"; done
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: schermate-${{ matrix.browser }}
+          path: sito-telefono-*.png
 
   deploy:
     needs: build
