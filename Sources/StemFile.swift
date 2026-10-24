@@ -220,10 +220,10 @@ enum StemFile {
             let b = withUnsafeBytes(of: UInt32(v).bigEndian) { Data($0) }
             data.replaceSubrange(o..<o + 4, with: b)
         }
-        // Gli atomi principali
+        // Gli atomi principali (l'audio, «mdat», può avere la dimensione a 64 bit: 1 + 8 byte dopo il tipo)
         var o = 0, moov: Int?
         while o + 8 <= data.count {
-            let size = u32(o)
+            let size = boxSize(data, at: o)
             guard size >= 8, o + size <= data.count else { throw SeparationError("file per DJ non valido") }
             if String(data: data[o + 4..<o + 8], encoding: .ascii) == "moov" { moov = o }
             o += size
@@ -250,6 +250,15 @@ enum StemFile {
         }
     }
 
+    /// La dimensione di un atomo MP4: 32 bit, oppure 1 = 64 bit nei byte dopo il tipo, oppure 0 = fino in fondo.
+    static func boxSize(_ data: Data, at o: Int) -> Int {
+        let start = data.startIndex + o
+        let s32 = data[start..<start + 4].reduce(0) { $0 << 8 | Int($1) }
+        if s32 == 1, o + 16 <= data.count { return data[start + 8..<start + 16].reduce(0) { $0 << 8 | Int($1) } }
+        if s32 == 0 { return data.count - o }
+        return s32
+    }
+
     /// L'atomo «stem» di un file, se c'è (per le prove e per riconoscere i file).
     static func readMetadata(_ data: Data) -> Data? {
         func u32(_ o: Int) -> Int { data[o..<o + 4].reduce(0) { $0 << 8 | Int($1) } }
@@ -258,7 +267,7 @@ enum StemFile {
         func child(_ name: String, from: Int, to: Int) -> Int? {
             var o = from
             while o + 8 <= to {
-                let size = u32(o)
+                let size = boxSize(data, at: o)
                 guard size >= 8, o + size <= to else { return nil }
                 if type(o) == name { return o }
                 o += size

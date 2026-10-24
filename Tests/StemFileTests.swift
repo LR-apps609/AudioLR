@@ -39,9 +39,7 @@ final class StemFileTests: XCTestCase {
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Prova DJ \(UUID().uuidString).stem.mp4")
         defer { try? FileManager.default.removeItem(at: url) }
-        // Sul Mac di GitHub questa prova dà un errore di file non ancora spiegato: ogni passo dice il suo nome,
-        // e finché non è capito non ferma il rilascio (il file DJ è segnato come anteprima nell'app)
-        XCTExpectFailure("file DJ: errore del Mac di GitHub da capire", strict: false)
+        // Ogni passo dice il suo nome, se non riesce
         do { try await StemFile.write(master: master, stems: [drums, bass, other, vocals], to: url) } catch {
             return XCTFail("scrittura del file DJ: \(error)")
         }
@@ -104,6 +102,12 @@ final class StemFileTests: XCTestCase {
         XCTAssertEqual(o, data.count)
         XCTAssertEqual(Array(data.prefix(24)), Array(original.prefix(24)), "ftyp e audio (mdat) non si spostano")
         XCTAssertNotNil(StemFile.readMetadata(data))
+        // L'audio con la dimensione a 64 bit (come lo scrive macOS): si legge e si salta giusto
+        var big = Data(box("ftyp", Array("mp42".utf8)))
+        big.append(contentsOf: [0, 0, 0, 1] + Array("mdat".utf8) + [0, 0, 0, 0, 0, 0, 0, 20] + [7, 7, 7, 7])
+        big.append(contentsOf: box("moov", box("mvhd", [0, 0, 0, 0])))
+        try StemFile.addStemAtom(to: &big)
+        XCTAssertNotNil(StemFile.readMetadata(big), "con la «mdat» a 64 bit")
         // Una «moov» che non è in fondo non si tocca
         var wrong = Data(box("moov", box("mvhd", [0])) + box("mdat", [9]))
         XCTAssertThrowsError(try StemFile.addStemAtom(to: &wrong))

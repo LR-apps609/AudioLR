@@ -6,41 +6,53 @@ import AppKit
 //  lo sfondo da studio, le forme d'onda con la testina di lettura.
 // ════════════════════════════════════════════════════════════════════
 
-/// Il marchio di AudioLR, come l'icona: barre di un'onda divise nei colori dei quattro strumenti.
-/// Animato, le barre «suonano» piano.
 /// Come disegnare onde, barre e marchio: con Canvas (di serie, veloce) oppure con forme semplici.
 /// Le forme servono alle schermate di prova: sulle macchine virtuali di GitHub il disegno con Metal si chiude.
 enum Drawing {
     static var flat = false
 }
 
+/// Il marchio di AudioLR, come l'icona: sette barre arrotondate a forma d'onda, dal corallo al verde acqua,
+/// su un riquadro prugna scuro. Animato, le barre «suonano» piano.
 struct LogoMark: View {
     var size: CGFloat = 32
     var animated = false
     var tile = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let heights: [Double] = [0.16, 0.30, 0.48, 0.66, 0.84, 0.96, 1.0, 0.90, 0.74, 0.56, 0.40, 0.26, 0.14]
+    /// Altezza (frazione del riquadro) e sfumatura dall'alto al basso di ogni barra, come in Tools/make_icon.py.
+    static let bars: [(height: Double, colors: [UInt32])] = [
+        (0.14, [0xEF9882, 0xE88874]),
+        (0.29, [0xEDA489, 0xE89174]),
+        (0.47, [0xF1CA93, 0xDEA484]),
+        (0.65, [0xE8D4F6, 0xC2ABEB, 0x86BFC6]),
+        (0.47, [0xA8C4EE, 0x80ADE4, 0x71B4BA]),
+        (0.29, [0x6FA2E0, 0x65AFAE]),
+        (0.14, [0x77C3AB, 0x6CB8A0]),
+    ]
+    static let spacing = 0.1147, width = 0.067
 
     var body: some View {
         if Drawing.flat { flatBody } else { canvasBody }
     }
 
+    private var background: LinearGradient {
+        LinearGradient(colors: [Color(hex: 0x3E3550), Color(hex: 0x252134), Color(hex: 0x0E0E16)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     /// Lo stesso marchio con forme semplici, fermo (per le schermate di prova).
     private var flatBody: some View {
-        let side = size, inner = tile ? side * 0.80 : side
-        let bw = inner * 0.048, gap = inner * 0.029, hmax = inner * (tile ? 0.80 : 0.95)
-        let colors: [Color] = [0xE5917A, 0xE6B45C, 0xB497D0, 0x76C3B9].map { Color(hex: $0) }
+        let side = size, scale = tile ? 1.0 : 1.25
         return ZStack {
             if tile {
-                RoundedRectangle(cornerRadius: side * 0.225, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(hex: 0x2E2540), Color(hex: 0x120F18)], startPoint: .top, endPoint: .bottom))
+                RoundedRectangle(cornerRadius: side * 0.225, style: .continuous).fill(background)
             }
-            HStack(spacing: gap) {
-                ForEach(Self.heights.indices, id: \.self) { i in
-                    VStack(spacing: 0) { ForEach(0..<4, id: \.self) { k in Rectangle().fill(colors[k]) } }
-                        .frame(width: bw, height: hmax * Self.heights[i])
-                        .clipShape(Capsule())
+            HStack(spacing: side * (Self.spacing - Self.width) * scale) {
+                ForEach(Self.bars.indices, id: \.self) { i in
+                    Capsule()
+                        .fill(LinearGradient(colors: Self.bars[i].colors.map { Color(hex: $0) }, startPoint: .top, endPoint: .bottom))
+                        .frame(width: side * Self.width * scale, height: side * Self.bars[i].height * scale)
                 }
             }
         }
@@ -56,30 +68,22 @@ struct LogoMark: View {
                 if tile {
                     let r = CGRect(x: 0, y: 0, width: side, height: side)
                     let path = Path(roundedRect: r, cornerRadius: side * 0.225, style: .continuous)
-                    ctx.fill(path, with: .linearGradient(Gradient(colors: [Color(hex: 0x2E2540), Color(hex: 0x120F18)]),
-                                                         startPoint: .zero, endPoint: CGPoint(x: 0, y: side)))
-                    ctx.stroke(path, with: .color(Color(hex: 0xD6AA62).opacity(0.35)), lineWidth: max(0.5, side * 0.006))
+                    ctx.fill(path, with: .linearGradient(Gradient(colors: [Color(hex: 0x3E3550), Color(hex: 0x252134), Color(hex: 0x0E0E16)]),
+                                                         startPoint: .zero, endPoint: CGPoint(x: side, y: side)))
+                    ctx.stroke(path, with: .color(.white.opacity(0.12)), lineWidth: max(0.5, side * 0.006))
                 }
-                let inner = tile ? side * 0.80 : side
-                let n = Self.heights.count
-                let bw = inner * 0.048, gap = inner * 0.029
-                let total = Double(n) * bw + Double(n - 1) * gap
-                let x0 = (side - total) / 2
-                let hmax = inner * (tile ? 0.80 : 0.95)
-                // Sempre i colori «di notte»: il marchio ha il suo fondo scuro
-                let colors: [Color] = [0xE5917A, 0xE6B45C, 0xB497D0, 0x76C3B9].map { Color(hex: $0) }
-                for (i, h0) in Self.heights.enumerated() {
-                    let wobble = animated ? 0.82 + 0.18 * sin(t * 3.1 + Double(i) * 0.9) : 1
-                    let h = hmax * h0 * wobble
-                    let x = x0 + Double(i) * (bw + gap)
-                    let top = side / 2 - h / 2
-                    let cap = Path(roundedRect: CGRect(x: x, y: top, width: bw, height: h), cornerRadius: bw / 2)
-                    ctx.drawLayer { layer in
-                        layer.clip(to: cap)
-                        for (k, c) in colors.enumerated() {
-                            layer.fill(Path(CGRect(x: x, y: top + h * Double(k) / 4, width: bw, height: h / 4 + 0.5)), with: .color(c))
-                        }
-                    }
+                // Senza riquadro le barre occupano un po' più spazio
+                let scale = tile ? 1.0 : 1.25
+                let n = Self.bars.count
+                let w = side * Self.width * scale
+                for (i, bar) in Self.bars.enumerated() {
+                    let wobble = animated ? 0.80 + 0.20 * sin(t * 3.1 + Double(i) * 0.9) : 1
+                    let h = side * bar.height * scale * wobble
+                    let cx = side / 2 + (Double(i) - Double(n - 1) / 2) * Self.spacing * side * scale
+                    let rect = CGRect(x: cx - w / 2, y: side / 2 - h / 2, width: w, height: h)
+                    ctx.fill(Path(roundedRect: rect, cornerRadius: w / 2),
+                             with: .linearGradient(Gradient(colors: bar.colors.map { Color(hex: $0) }),
+                                                   startPoint: CGPoint(x: cx, y: rect.minY), endPoint: CGPoint(x: cx, y: rect.maxY)))
                 }
             }
         }

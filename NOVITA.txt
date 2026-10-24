@@ -1,4 +1,5 @@
 Novità della 0.15.0 «Due voci»:
+• Nuovo logo: sette barre a forma d'onda, dal corallo al verde acqua
 • SISTEMATO il primo uso lento o «bloccato»: dopo lo scaricamento il modello si adattava al Neural Engine due volte, con tre copie in memoria. Ora una volta sola, e sui Mac con 8 GB una sola copia per modello
 • La finestra dice sempre cosa sta facendo e da quanto («Apro il modello degli strumenti sul Neural Engine… · 1:12»), invece di restare a 0%
 • Se il Neural Engine non apre un modello entro 4 minuti, AudioLR continua con la grafica e lo dice
