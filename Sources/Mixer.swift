@@ -22,34 +22,44 @@ struct MixState: Equatable {
         return gain[key] ?? 1
     }
 
-    /// Scorciatoie: tutto, karaoke (senza voce), solo voce.
+    /// Scorciatoie: tutto, karaoke (senza voce), karaoke con i cori (se la voce è divisa), solo voce.
     enum Preset: String, CaseIterable, Identifiable {
-        case all, karaoke, voice
+        case all, karaoke, backing, voice
         var id: String { rawValue }
         var title: String {
             switch self {
             case .all: return "Tutto"
             case .karaoke: return "Karaoke"
+            case .backing: return "Con i cori"
             case .voice: return "Solo voce"
             }
         }
     }
+
+    /// Tutte le tracce di voce (intera, oppure solista e cori se è stata divisa).
+    static let voices: Set<String> = ["vocals", "lead", "backing"]
 
     mutating func apply(_ p: Preset) {
         muted = []
         solo = []
         switch p {
         case .all: break
-        case .karaoke: muted = ["vocals"]
-        case .voice: solo = ["vocals"]
+        case .karaoke: muted = Self.voices
+        case .backing: muted = ["lead"]
+        case .voice: solo = Self.voices
         }
     }
 
     /// Quale scorciatoia corrisponde allo stato attuale (se una corrisponde).
     var preset: Preset? {
+        // «Tutta la voce»: la voce intera, oppure solista e cori insieme
+        func allVoice(_ s: Set<String>) -> Bool {
+            !s.isEmpty && s.isSubset(of: Self.voices) && (s.contains("vocals") || s.isSuperset(of: ["lead", "backing"]))
+        }
         if muted.isEmpty && solo.isEmpty { return .all }
-        if muted == ["vocals"] && solo.isEmpty { return .karaoke }
-        if solo == ["vocals"] && muted.isEmpty { return .voice }
+        if muted == ["lead"] && solo.isEmpty { return .backing }
+        if allVoice(muted) && solo.isEmpty { return .karaoke }
+        if allVoice(solo) && muted.isEmpty { return .voice }
         return nil
     }
 
@@ -107,8 +117,8 @@ final class MixPlayer: ObservableObject {
     /// Le tracce che si mescolano: la base senza voce è già un mix, quindi resta fuori; se la batteria
     /// è stata divisa, al suo posto ci sono le sue parti (cassa, rullante…).
     nonisolated static func mixable(_ stems: [Stem]) -> [Stem] {
-        let split = stems.contains { DrumSplitter.parts.contains($0.key) }
-        return stems.filter { $0.key != "instrumental" && !(split && $0.key == "drums") }
+        let replaced = ExtraSplit.allCases.filter { k in stems.contains { k.parts.contains($0.key) } }.map(\.source)
+        return stems.filter { $0.key != "instrumental" && !replaced.contains($0.key) }
     }
 
     /// Prepara le tracce da mescolare.
@@ -212,6 +222,7 @@ final class MixPlayer: ObservableObject {
         switch state.preset {
         case .karaoke?: return "\(title) – Karaoke"
         case .voice?: return "\(title) – Solo voce"
+        case .backing?: return "\(title) – Karaoke con cori"
         default: return "\(title) – Mix"
         }
     }

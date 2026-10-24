@@ -311,7 +311,7 @@ struct ContentView: View {
                     ForEach(MixPlayer.mixable(job.stems)) { stem in
                         MixerRow(stem: stem, mixer: mixer)
                     }
-                    drumSplitRow
+                    splitRows
                     let mixed = Set(MixPlayer.mixable(job.stems).map(\.key))
                     let others = job.stems.filter { !mixed.contains($0.key) }
                     if !others.isEmpty {
@@ -325,6 +325,12 @@ struct ContentView: View {
                 Chip(text: job.quality.title, symbol: job.quality.symbol, tint: Theme.brass)
                 if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
                 if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
+                if let a = job.analysis {
+                    Chip(text: a.bpmText, symbol: "metronome", tint: Theme.color("drums"))
+                        .help("Tempo stimato dalla batteria · se ti sembra lento, può essere \(Int((a.bpm * 2).rounded())) BPM")
+                    Chip(text: a.keyName, symbol: "music.note", tint: Theme.color("piano"))
+                        .help("Tonalità \(a.keyShort) · Camelot \(a.camelot)\(a.keyConfidence < 0.5 ? " · incerta: la canzone cambia tonalità o è poco tonale" : "")")
+                }
                 Spacer()
             }
             Text("Trascina una traccia in GarageBand, Logic o nel Finder. Clic sull'onda per ascoltare da quel punto.")
@@ -336,32 +342,34 @@ struct ContentView: View {
         .onDisappear { mixer.stop() }
     }
 
-    /// «Dividi la batteria»: cassa, rullante, tom, charleston, ride e crash in corsie proprie.
-    @ViewBuilder private var drumSplitRow: some View {
-        if let p = job.drumSplit {
+    /// Le divisioni in più: «Separa voce e cori» e «Dividi la batteria», con la barra mentre lavorano.
+    @ViewBuilder private var splitRows: some View {
+        if let kind = job.splitting {
             HStack(spacing: 10) {
-                ProgressView(value: p).tint(Theme.color("drums")).frame(maxWidth: .infinity)
-                Text("Divido la batteria · \(Int(p * 100))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
+                ProgressView(value: job.splitProgress).tint(Theme.color(kind.source)).frame(maxWidth: .infinity)
+                Text("\(kind.working) · \(Int(job.splitProgress * 100))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
                     .foregroundStyle(.secondary)
                 Button("Annulla") { job.cancel() }.controlSize(.small)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-        } else if job.canSplitDrums {
-            HStack(spacing: 10) {
-                Image(systemName: "square.split.2x2").foregroundStyle(Theme.color("drums"))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Dividi la batteria").font(.system(size: 12.5, weight: .semibold))
-                    Text(job.drumSplitError.map { "Non riuscito: \($0). Riprova." } ?? "Cassa, rullante, tom, charleston, ride e crash in corsie proprie")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+        } else {
+            ForEach(ExtraSplit.allCases.filter { job.canSplit($0) }) { kind in
+                HStack(spacing: 10) {
+                    Image(systemName: kind.symbol).foregroundStyle(Theme.color(kind.source)).frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(kind.title).font(.system(size: 12.5, weight: .semibold))
+                        Text(job.splitErrors[kind].map { "Non riuscito: \($0). Riprova." } ?? kind.detail)
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(kind == .drums ? "Dividi" : "Separa") { mixer.stop(); job.split(kind) }
+                        .keyboardShortcut(kind == .drums ? "d" : "v", modifiers: [.command, .shift])
+                        .help("\(kind == .drums ? "⇧⌘D" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
                 }
-                Spacer()
-                Button("Dividi") { mixer.stop(); job.splitDrums() }
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
-                    .help("⇧⌘D · la prima volta scarica il modello (circa 200 MB)")
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4])).foregroundStyle(Theme.stroke))
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4])).foregroundStyle(Theme.stroke))
         }
     }
 
@@ -390,11 +398,11 @@ struct ContentView: View {
             Picker("Scorciatoie", selection: Binding(
                 get: { mixer.state.preset?.rawValue ?? "" },
                 set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
-                ForEach(MixState.Preset.allCases) { p in Text(p.title).tag(p.rawValue) }
+                ForEach(MixState.Preset.allCases.filter { $0 != .backing || mixer.keys.contains("lead") }) { p in Text(p.title).tag(p.rawValue) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 250)
+            .frame(width: mixer.keys.contains("lead") ? 340 : 250)
             Spacer()
             Button { exportMix() } label: {
                 if mixer.exporting { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }

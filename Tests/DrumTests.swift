@@ -41,6 +41,29 @@ final class DrumTests: XCTestCase {
         XCTAssertEqual(Stem.info("hh").name, "Charleston")
     }
 
+    func testVoiceSplitInMixer() {
+        func stem(_ k: String) -> Stem { Stem(key: k, name: k, symbol: "", url: URL(fileURLWithPath: "/tmp/\(k).wav")) }
+        let stems = ["vocals", "drums", "bass", "lead", "backing", "instrumental"].map(stem)
+        XCTAssertEqual(MixPlayer.mixable(stems).map(\.key), ["drums", "bass", "lead", "backing"])
+        var m = MixState()
+        m.apply(.backing)
+        XCTAssertEqual(m.effectiveGain("lead"), 0)
+        XCTAssertEqual(m.effectiveGain("backing"), 1)
+        XCTAssertEqual(m.preset, .backing)
+        XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Karaoke con cori")
+        m.apply(.karaoke)
+        XCTAssertEqual(m.effectiveGain("backing"), 0)
+        XCTAssertEqual(m.effectiveGain("vocals"), 0)
+        // Muto a mano sulla voce intera: è ancora «Karaoke»
+        m.apply(.all)
+        m.muted = ["vocals"]
+        XCTAssertEqual(m.preset, .karaoke)
+        m.muted = []
+        m.solo = ["lead", "backing"]
+        XCTAssertEqual(m.preset, .voice)
+        XCTAssertLessThan(Stem.info("backing").order, Stem.info("drums").order)
+    }
+
     func testDrumPartsAreFoundAgainInTheLibrary() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("drums-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -15,6 +15,8 @@ struct HistoryItem: Codable, Identifiable, Equatable {
     var duration: Double? = nil
     var seconds: Double? = nil
     var engine: String? = nil
+    /// Tempo e tonalità (dalla 0.10).
+    var analysis: SongAnalysis? = nil
 
     var folderURL: URL { URL(fileURLWithPath: folder, isDirectory: true) }
     var exists: Bool { FileManager.default.fileExists(atPath: folder) }
@@ -32,11 +34,11 @@ enum History {
     }
 
     static func add(song: URL?, folder: URL, quality: Quality, duration: Double? = nil, seconds: Double? = nil,
-                    engine: String? = nil, defaults: UserDefaults = .standard) {
+                    engine: String? = nil, analysis: SongAnalysis? = nil, defaults: UserDefaults = .standard) {
         let title = song?.deletingPathExtension().lastPathComponent ?? folder.lastPathComponent
         var items = all(defaults: defaults).filter { $0.folder != folder.path }
         items.insert(HistoryItem(title: title, folder: folder.path, date: Date(), quality: quality.rawValue,
-                                 duration: duration, seconds: seconds, engine: engine), at: 0)
+                                 duration: duration, seconds: seconds, engine: engine, analysis: analysis), at: 0)
         save(Array(items.prefix(limit)), defaults: defaults)
     }
 
@@ -52,7 +54,7 @@ enum History {
     static func stems(in folder: URL, title: String) -> [(key: String, url: URL)] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         var found: [(key: String, url: URL)] = []
-        for key in ["vocals", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"] {
+        for key in ["vocals", "lead", "backing", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"] {
             let name = Stem.info(key).name
             if let f = files.first(where: { $0.deletingPathExtension().lastPathComponent == "\(title) – \(name)" }) {
                 found.append((key, f))

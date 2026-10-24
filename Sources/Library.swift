@@ -115,7 +115,7 @@ struct GuideView: View {
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
         ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
-        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⌘L", "Libreria"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
+        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌘L", "Libreria"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
         ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]
@@ -170,6 +170,10 @@ struct DetailsView: View {
                 if job.duration > 0 { row("Durata", formatTime(job.duration)) }
                 if let s = job.sourceInfo { row("File di partenza", s) }
                 row("Qualità", job.quality.title)
+                if let a = job.analysis {
+                    row("Tempo", a.bpmText)
+                    row("Tonalità", "\(a.keyName) (\(a.keyShort) · \(a.camelot))")
+                }
                 if let e = job.engineText { row("Motore", e) }
                 row("Formato tracce", Prefs.format.title)
                 if let f = job.folder { row("Cartella", Prefs.displayName(of: f)) }

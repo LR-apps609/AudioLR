@@ -1,3 +1,9 @@
+Novità della 0.10.0 «Ritmo»:
+• Tempo e tonalità di ogni canzone: BPM dalla batteria e tonalità dagli strumenti (es. «128 BPM · La minore»), con sigla e codice Camelot per i DJ
+• Separa voce e cori (⇧⌘V): la voce principale da una parte, i cori dall'altra; nuova scorciatoia del mixer «Con i cori» per il karaoke che tiene i cori
+• «Dividi la batteria» e «Separa voce e cori» insieme sotto il mixer, con la barra di avanzamento e Annulla
+• Karaoke e Solo voce riconoscono anche la voce divisa in solista e cori
+
 Novità della 0.9.0 «Studio»:
 • Nuova qualità Studio (⌥⌘3): la voce dal modello più pulito che abbiamo provato (BS-RoFormer), con gli strumenti di Massima. Nelle prove: voce +0,4 dB e base karaoke +0,6 dB rispetto a Massima
 • Modello strumenti più fedele: ora a 16 bit, identico all'originale anche nelle parti più silenziose

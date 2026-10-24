@@ -58,6 +58,9 @@ enum Theme {
         case "guitar": return Color(light: 0x6E9A52, dark: 0x93C174)        // oliva
         case "piano": return Color(light: 0x6F78A3, dark: 0xA0A8CC)         // ardesia
         case "other": return Color(light: 0x3C978C, dark: 0x76C3B9)         // verde acqua
+        // Voce solista e cori: sfumature del corallo della voce
+        case "lead": return Color(light: 0xC85A44, dark: 0xEC8A70)
+        case "backing": return Color(light: 0xD88F7C, dark: 0xF0B3A2)
         // Le parti della batteria: sfumature dell'ambra della batteria
         case "kick": return Color(light: 0xB0702A, dark: 0xE09A50)
         case "snare": return Color(light: 0xC9A040, dark: 0xEBC670)

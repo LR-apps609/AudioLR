@@ -144,6 +144,8 @@ final class VoiceTests: XCTestCase {
 
     func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio", label: "Voce Studio") }
 
+    func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori", label: "Voce e cori") }
+
     /// Un pezzo di prova separato dall'app e dal modello originale (Tools/convert_roformer.py): tutti gli strumenti insieme.
     private func matchesOriginal(_ name: String, label: String) async throws {
         executionTimeAllowance = 900

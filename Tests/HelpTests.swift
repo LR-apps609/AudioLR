@@ -47,6 +47,12 @@ final class HelpTests: XCTestCase {
         XCTAssertTrue(s.contains("Memoria"))
     }
 
+    func testTwoDigitVersionsAreNewer() {
+        XCTAssertTrue(News.newer("0.10.0", than: "0.9.0"), "0.10 viene dopo 0.9, non prima")
+        XCTAssertFalse(News.newer("0.9.0", than: "0.10.0"))
+        XCTAssertTrue(News.newer("1.0.0", than: "0.15.2"))
+    }
+
     func testInitials() {
         XCTAssertEqual(LRFamily.initials("Mario Rossi"), "MR")
         XCTAssertEqual(LRFamily.initials("ledion"), "L")

@@ -101,3 +101,41 @@ extension ModelStore {
         return DrumSplitter(model: try await mlModel(DrumSplitter.modelName, units: units, progress: progress), config: cfg)
     }
 }
+
+/// Le divisioni in più, a richiesta dopo la separazione: la batteria nelle sue parti, la voce in solista e cori.
+enum ExtraSplit: String, CaseIterable, Identifiable {
+    case vocals, drums
+    var id: String { rawValue }
+
+    /// La traccia che si divide.
+    var source: String { self == .drums ? "drums" : "vocals" }
+    /// Le tracce che ne escono.
+    var parts: [String] { self == .drums ? DrumSplitter.parts : ["lead", "backing"] }
+    var modelName: String { self == .drums ? DrumSplitter.modelName : "VoceCori" }
+
+    var title: String { self == .drums ? "Dividi la batteria" : "Separa voce e cori" }
+    var detail: String {
+        self == .drums ? "Cassa, rullante, tom, charleston, ride e crash in corsie proprie"
+                       : "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori"
+    }
+    var symbol: String { self == .drums ? "square.split.2x2" : "person.2.wave.2" }
+    var working: String { self == .drums ? "Divido la batteria" : "Separo voce e cori" }
+    var downloadSize: String { self == .drums ? "circa 200 MB" : "circa 200 MB" }
+
+    /// Divide la traccia: (nomi delle parti, parti).
+    func run(_ audio: [[Float]], units: MLComputeUnits, progress: @escaping (Double) -> Void,
+             isCancelled: @escaping () -> Bool) async throws -> (names: [String], parts: [[[Float]]]) {
+        switch self {
+        case .drums:
+            let model = try await ModelStore.shared.drums(units: units) { p in progress(p * 0.2) }
+            let parts = try model.separate(audio, progress: { progress(0.2 + 0.78 * $0) }, isCancelled: isCancelled)
+            return (model.config.sources, parts)
+        case .vocals:
+            let model = try await ModelStore.shared.roformer(modelName, units: units) { p in progress(p * 0.2) }
+            let lead = try model.separate(audio, progress: { progress(0.2 + 0.78 * $0) }, isCancelled: isCancelled)
+            // I cori sono la voce meno la voce principale
+            let backing = (0..<2).map { c in zip(audio[c], lead[c]).map { $0 - $1 } }
+            return (["lead", "backing"], [lead, backing])
+        }
+    }
+}
