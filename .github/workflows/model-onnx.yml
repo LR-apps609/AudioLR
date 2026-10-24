@@ -37,6 +37,7 @@ jobs:
         run: |
           pip install "torch==2.2.2" --index-url https://download.pytorch.org/whl/cpu > pip.log 2>&1
           pip install "numpy<2" pyyaml einops beartype "rotary-embedding-torch==0.6.5" scipy \
+            "numba==0.60.0" "llvmlite==0.43.0" "librosa==0.10.2.post1" \
             "onnx==1.16.2" "onnxruntime==1.19.2" "onnxconverter-common==1.14.0" >> pip.log 2>&1 || {
             grep -iE "error|requires|conflict|no matching" pip.log | tail -n 12 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1; }
