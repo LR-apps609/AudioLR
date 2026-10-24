@@ -43,6 +43,13 @@ final class ModelStore: @unchecked Sendable {
         return c
     }
 
+    /// Scarica e installa il modello se manca, senza aprirlo: aprirlo (e adattarlo al Neural Engine) si fa dopo,
+    /// una volta sola e con le unità di calcolo giuste. `progress`: 0…0,8 scaricamento, poi verifica e installazione.
+    func prepare(_ name: String, progress: @escaping (Double) -> Void) async throws {
+        if !isReady(name) { try await download(name, progress: progress) }
+        progress(1)
+    }
+
     /// Il modello Core ML così com'è (scaricato e preparato se serve).
     func mlModel(_ name: String, units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> MLModel {
         let key = "\(name)#\(units.rawValue)"
@@ -125,9 +132,12 @@ final class ModelStore: @unchecked Sendable {
                 throw SeparationError("il modello di IA non è ancora disponibile")
             }
             let zipURL = Self.base.appendingPathComponent(name + ".mlpackage.zip")
-            let (tmp, resp) = try await URLSession.shared.download(from: zipURL, delegate: ProgressDelegate(progress))
+            // Lo scaricamento è l'80% della barra; il resto è verifica, estrazione e installazione (sul Mac, qualche decina di secondi)
+            let (tmp, resp) = try await URLSession.shared.download(from: zipURL, delegate: ProgressDelegate { progress(0.8 * $0) })
             guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw SeparationError("il modello di IA non è ancora disponibile") }
+            progress(0.81)
             guard Self.sha256(of: tmp) == expected else { throw SeparationError("il modello scaricato è rovinato, riprova") }
+            progress(0.84)
             let work = Self.folder.appendingPathComponent("scarico-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
             defer { try? fm.removeItem(at: work); try? fm.removeItem(at: tmp) }
@@ -139,7 +149,9 @@ final class ModelStore: @unchecked Sendable {
                   let pkg = try fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil).first(where: { $0.pathExtension == "mlpackage" }) else {
                 throw SeparationError("non riesco ad aprire il modello scaricato")
             }
+            progress(0.88)
             let built = try await MLModel.compileModel(at: pkg)
+            progress(0.99)
             try? fm.removeItem(at: Self.compiled(name))
             try fm.moveItem(at: built, to: Self.compiled(name))
         } catch let e as SeparationError {

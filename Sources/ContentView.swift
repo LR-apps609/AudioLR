@@ -589,7 +589,7 @@ struct ContentView: View {
 
     private var stepText: String {
         switch job.phase {
-        case .downloading: return "Scarico il modello di IA"
+        case .downloading: return job.installing ? "Installo il modello di IA" : "Scarico il modello di IA"
         case .reading: return "Leggo la canzone"
         case .tuning: return "Provo il motore del tuo Mac"
         case .separating: return job.quality == .fast ? "Separo voce e strumenti" : "Separo voce e strumenti · \(job.quality.title)"
@@ -600,9 +600,12 @@ struct ContentView: View {
 
     private var detailText: String {
         switch job.phase {
-        case .downloading: return "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
-        case .tuning: return "Solo la prima volta: confronto Neural Engine e grafica per scegliere il più preciso"
-        case .separating: return job.remaining.map(Self.timeLeft) ?? "Calcolo il tempo che manca…"
+        case .downloading: return job.installing
+            ? "Scaricato: lo verifico e lo installo sul Mac. Solo la prima volta, qualche decina di secondi."
+            : "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
+        case .tuning: return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica. Può richiedere qualche minuto."
+        case .separating(let p): return job.remaining.map(Self.timeLeft)
+            ?? (p == 0 ? "Apro i modelli (dopo un aggiornamento, la prima volta può richiedere qualche minuto)…" : "Calcolo il tempo che manca…")
         case .saving: return "\(Prefs.format.title) in \(Prefs.displayName(of: Prefs.folder))"
         default: return " "
         }

@@ -109,6 +109,8 @@ final class SeparationJob: ObservableObject {
     /// Se questa separazione ha dovuto usare un modello di riserva (memoria, download…): la qualità non è quella piena
     /// e lo si dice, invece di tacerlo.
     @Published private(set) var qualityNote: String?
+    /// Durante lo scaricamento: il file è arrivato e il modello si sta verificando e installando.
+    @Published private(set) var installing = false
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
     /// La traccia di cui si stanno cercando le note (MIDI), e i file MIDI già creati per questa canzone.
@@ -292,6 +294,7 @@ final class SeparationJob: ObservableObject {
         elapsed = nil
         engineText = nil
         qualityNote = nil
+        installing = false
         analysis = nil
         timings = []
         sourceInfo = AudioIO.describe(url)
@@ -331,9 +334,13 @@ final class SeparationJob: ObservableObject {
                 var secondApplied = false
                 for (k, name) in downloads.enumerated() {
                     do {
-                        _ = try await ModelStore.shared.mlModel(name) { p in
+                        try await ModelStore.shared.prepare(name) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
-                            Task { @MainActor in if case .downloading = self?.phase { self?.phase = .downloading(total) } }
+                            Task { @MainActor in
+                                guard case .downloading = self?.phase else { return }
+                                self?.phase = .downloading(total)
+                                self?.installing = p >= 0.8 && p < 1
+                            }
                         }
                         if name == wantedVoice || name == wantedInstruments || name == quality.secondVoice { _ = try await ModelStore.shared.config(name) }
                     } catch is CancellationError {
@@ -345,7 +352,7 @@ final class SeparationJob: ObservableObject {
                         voiceName = nil
                         var next = Quality.fallbackVoice(for: name)
                         while let n = next, voiceName == nil {
-                            if (try? await ModelStore.shared.mlModel(n) { _ in }) != nil,
+                            if (try? await ModelStore.shared.prepare(n) { _ in }) != nil,
                                (try? await ModelStore.shared.config(n)) != nil { voiceName = n }
                             next = Quality.fallbackVoice(for: n)
                         }
@@ -361,7 +368,7 @@ final class SeparationJob: ObservableObject {
                         swName = nil
                         let reserve = voiceName == nil ? models : models.filter { $0 != Quality.voiceSpecialist }
                         for (j, m) in reserve.enumerated() {
-                            _ = try await ModelStore.shared.mlModel(m) { p in
+                            try await ModelStore.shared.prepare(m) { p in
                                 let total = (Double(j) + p) / Double(reserve.count)
                                 Task { @MainActor in if case .downloading = self?.phase { self?.phase = .downloading(total) } }
                             }
