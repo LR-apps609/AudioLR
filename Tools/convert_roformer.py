@@ -11,11 +11,13 @@
 # stft_np/istft_np/pipeline_np qui sotto sono la copia esatta di quello che fa l'app, confrontata con il modello intero.
 #
 #   python Tools/convert_roformer.py <file.ckpt> <config.yaml> <NomeUscita> [campioni_per_pezzo]
+#   ONNX=1 python Tools/convert_roformer.py …   → la stessa rete in ONNX (per Windows), con la stessa prova di fedeltà
 import sys, os, math, json
 import numpy as np
 import torch
 import yaml
-import coremltools as ct
+if not os.environ.get("ONNX"):
+    import coremltools as ct
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from roformer.mel_band_roformer import MelBandRoformer
@@ -188,6 +190,50 @@ print(f"RoFormer diviso / intero: {q:.1f} dB")
 if os.environ.get("SOLO_TORCH"):
     sys.exit(0)
 assert q > 45, "dividere il modello cambia il risultato"
+
+
+def save_extras(precision, db, ext):
+    json.dump({"kind": KIND, "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
+               "frames": T, "freq_indices": FI.tolist(), "num_bands_per_freq": NB.tolist(), "precision": precision,
+               "db": round(db, 1), "format": ext}, open(OUT + ".json", "w"))
+    with open(OUT + "-prova.f32", "wb") as f:
+        np.array([CHUNK, len(STEMS)], dtype="<f4").tofile(f)
+        mix.astype("<f4").tofile(f)
+        ref.astype("<f4").tofile(f)
+
+
+# 3b. ONNX (Windows): la stessa rete, provata con ONNX Runtime contro il modello originale
+if os.environ.get("ONNX"):
+    import onnx
+    import onnxruntime as ort
+    for p_ in core.parameters():
+        p_.requires_grad_(False)
+    x_in = torch.randn(1, T, FSEL * 2)
+    torch.onnx.export(core, (x_in,), OUT + "-32.onnx", input_names=["x"], output_names=["mask"], opset_version=17,
+                      do_constant_folding=True)
+    opts = ort.SessionOptions()
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    s32 = ort.InferenceSession(OUT + "-32.onnx", opts, providers=["CPUExecutionProvider"])
+    q32 = snr(ref, pipeline_np(lambda x: s32.run(["mask"], {"x": x})[0], mix.astype(np.float64)))
+    print(f"ONNX 32 bit / RoFormer: {q32:.1f} dB")
+    assert q32 > 45, "conversione ONNX non fedele"
+    best, precision, qbest = OUT + "-32.onnx", "32", q32
+    # Pesi a 16 bit: metà da scaricare e più veloce sulle schede grafiche; si tiene solo se resta fedele
+    try:
+        from onnxconverter_common import float16
+        m16 = float16.convert_float_to_float16(onnx.load(OUT + "-32.onnx"), keep_io_types=True)
+        onnx.save(m16, OUT + "-16.onnx")
+        s16 = ort.InferenceSession(OUT + "-16.onnx", opts, providers=["CPUExecutionProvider"])
+        q16 = snr(ref, pipeline_np(lambda x: s16.run(["mask"], {"x": x})[0], mix.astype(np.float64)))
+        print(f"ONNX 16 bit / RoFormer: {q16:.1f} dB")
+        if q16 >= 40:
+            best, precision, qbest = OUT + "-16.onnx", "16", q16
+    except Exception as e:
+        print("ONNX a 16 bit non riuscito:", e)
+    os.replace(best, OUT + ".onnx")
+    save_extras(precision, qbest, "onnx")
+    print("Fatto:", OUT + ".onnx", precision, round(qbest, 1), f"{os.path.getsize(OUT + '.onnx') / 1e6:.0f} MB")
+    sys.exit(0)
 
 # 3. Core ML
 x_in = torch.randn(1, T, FSEL * 2)
