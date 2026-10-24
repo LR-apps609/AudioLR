@@ -5,7 +5,8 @@ name: Modello strumenti SW
 on:
   workflow_dispatch:
   push:
-    paths: [Tools/convert_roformer.py, Tools/roformer/**, .github/workflows/model-sw.yml]
+    # Solo se cambia questo file: il modello pubblicato funziona, non va riconvertito a ogni modifica del convertitore
+    paths: [.github/workflows/model-sw.yml]
 
 permissions:
   contents: write

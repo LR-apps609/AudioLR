@@ -149,7 +149,10 @@ for F, B in [(700, 110), (1220, 120), (2600, 160)]:
     voice = lfilter([1 - r], [1, -2 * r * np.cos(th), r * r], voice)
 voice = 0.25 * voice / np.abs(voice).max() * np.clip(np.sin(np.pi * (t % 1.0) / 0.9), 0, 1) ** 0.3
 acc = 0.15 * np.sin(2 * np.pi * 110 * t) + 0.1 * np.sin(2 * np.pi * 165 * t) + 0.06 * np.sin(2 * np.pi * 330 * t)
-sig = np.stack([voice + acc, voice + 0.8 * acc])
+# Un filo di fruscio (−60 dB) come in ogni registrazione vera: senza, le bande alte sono silenzio digitale,
+# e lì i modelli BS-RoFormer amplificano anche gli arrotondamenti (il confronto non direbbe niente)
+hiss = 0.001 * np.random.default_rng(0).standard_normal((2, CHUNK))
+sig = np.stack([voice + acc, voice + 0.8 * acc]) + hiss
 mix = sig.astype(np.float32)
 
 # 1. La STFT dell'app è quella di torch

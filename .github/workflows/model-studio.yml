@@ -1,5 +1,6 @@
 # Modello voce «Studio»: BS-RoFormer di viperx (ep 317, il più pulito sulla voce nelle prove su MUSDB):
 # conversione in Core ML, prove di fedeltà e pubblicazione tra i file scaricabili.
+# Prova di fedeltà con un filo di fruscio (vedi Tools/convert_roformer.py)
 name: Modello voce Studio
 
 on:
