@@ -50,7 +50,7 @@ enum StemFile {
                 }
             }
             // Senza canzone né base: la canzone intera è la somma delle quattro tracce
-            if mix.isEmpty { mix = (0..<2).map { c in (0..<n).map { i in parts.reduce(0) { $0 + $1[c][i] } } } }
+            if mix.isEmpty { mix = (0..<2).map { c in (0..<n).map { i in parts.reduce(Float(0)) { (sum: Float, p: [[Float]]) -> Float in sum + p[c][i] } } } }
             return (mix.map { Array($0.prefix(n)) + [Float](repeating: 0, count: max(0, n - $0.count)) }, parts)
         }.value
         try await write(master: master, stems: parts, to: url)

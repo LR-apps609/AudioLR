@@ -31,7 +31,12 @@ final class StemFileTests: XCTestCase {
 
     func testWritesFiveTracksWithStemAtom() async throws {
         let drums = tone(100, 0.2), bass = tone(55, 0.3), other = tone(440, 0.15), vocals = tone(880, 0.1)
-        let master = (0..<2).map { c in (0..<drums[0].count).map { i in drums[c][i] + bass[c][i] + other[c][i] + vocals[c][i] } }
+        var master = drums
+        for part in [bass, other, vocals] {
+            for c in 0..<2 {
+                for i in 0..<master[c].count { master[c][i] += part[c][i] }
+            }
+        }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Prova DJ \(UUID().uuidString).stem.mp4")
         defer { try? FileManager.default.removeItem(at: url) }
         try await StemFile.write(master: master, stems: [drums, bass, other, vocals], to: url)
