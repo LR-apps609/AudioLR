@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var showGuide = false
     @State private var showDetails = false
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var typing = TypingFocus.shared
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
 
     var body: some View {
@@ -349,7 +350,7 @@ struct ContentView: View {
                 ProgressView(value: job.splitProgress).tint(Theme.color(kind.source)).frame(maxWidth: .infinity)
                 Text("\(kind.working) · \(Int(job.splitProgress * 100))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
                     .foregroundStyle(.secondary)
-                Button("Annulla") { job.cancel() }.controlSize(.small)
+                Button("Annulla") { job.cancelSplit() }.controlSize(.small)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
         } else {
@@ -386,7 +387,7 @@ struct ContentView: View {
                     .background(Circle().fill(Theme.brass.gradient))
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(.space, modifiers: [])
+            .keyboardShortcut(typing.typing ? nil : KeyboardShortcut(.space, modifiers: []))
             .help(mixer.isPlaying ? "Pausa (spazio)" : "Suona tutte le tracce insieme (spazio)")
             .accessibilityLabel(mixer.isPlaying ? "Pausa" : "Suona il mix")
             TimelineView(.periodic(from: .now, by: 0.25)) { _ in

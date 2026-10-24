@@ -7,9 +7,16 @@ import AppKit
 //  file di partenza, motore, peso di ogni strumento nella canzone).
 // ════════════════════════════════════════════════════════════════════
 
+/// Si sta scrivendo nella ricerca della libreria: lo spazio deve scrivere uno spazio, non far partire il mix.
+final class TypingFocus: ObservableObject {
+    static let shared = TypingFocus()
+    @Published var typing = false
+}
+
 struct LibraryView: View {
     @EnvironmentObject private var job: SeparationJob
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
 
     private var items: [HistoryItem] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
@@ -29,6 +36,9 @@ struct LibraryView: View {
             TextField("Cerca", text: $search)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
+                .focused($searchFocused)
+                .onChange(of: searchFocused) { _, f in TypingFocus.shared.typing = f }
+                .onExitCommand { searchFocused = false }
             if items.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "music.note.list").font(.system(size: 26)).foregroundStyle(.tertiary)

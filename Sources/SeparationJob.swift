@@ -133,6 +133,22 @@ final class SeparationJob: ObservableObject {
         }
     }
 
+    /// Al lavoro: una separazione, oppure una divisione in più (batteria, voce e cori).
+    /// Aggiornare l'app o eliminare i modelli aspetta che abbia finito.
+    var isWorking: Bool { isBusy || splitting != nil }
+
+    /// La divisione in più in corso: il suo Annulla, e un segno per riconoscerla quando finisce.
+    private var splitCancel = Cancel()
+    private var splitToken = UUID()
+
+    /// Ferma la divisione in più in corso (se c'è): cambiando canzone non ha più senso.
+    func cancelSplit() {
+        guard splitting != nil else { return }
+        splitCancel.set()
+        splitToken = UUID()
+        splitting = nil
+    }
+
     /// Bandierina condivisa con il lavoro in corso, per fermarlo.
     final class Cancel: @unchecked Sendable {
         private let lock = NSLock()
@@ -141,10 +157,14 @@ final class SeparationJob: ObservableObject {
         func set() { lock.lock(); value = true; lock.unlock() }
     }
 
+    /// La qualità scelta per ogni canzone in coda (quella del momento in cui è stata aggiunta).
+    private var queuedQuality: [URL: Quality] = [:]
+
     /// Più canzoni insieme: la prima parte subito, le altre aspettano in coda.
     func enqueue(_ urls: [URL], quality: Quality = .current) {
         let songs = urls.filter { $0.isFileURL }
         guard let first = songs.first else { return }
+        for s in songs { queuedQuality[s] = quality }
         if isBusy {
             queue += songs
         } else {
@@ -153,10 +173,13 @@ final class SeparationJob: ObservableObject {
         }
     }
 
-    func clearQueue() { queue = [] }
+    func clearQueue() { queue = []; queuedQuality = [:] }
 
     func start(_ url: URL, quality: Quality = .current) {
-        guard !isBusy else { queue.append(url); return }
+        guard !isBusy else { queue.append(url); queuedQuality[url] = quality; return }
+        cancelSplit()
+        splitErrors = [:]
+        queuedQuality[url] = nil
         song = url
         title = url.deletingPathExtension().lastPathComponent
         stems = []
@@ -196,9 +219,13 @@ final class SeparationJob: ObservableObject {
                     do {
                         _ = try await ModelStore.shared.mlModel(name) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
-                            Task { @MainActor in self?.phase = .downloading(total) }
+                            Task { @MainActor in if case .downloading = self?.phase { self?.phase = .downloading(total) } }
                         }
                         if name == wantedVoice || name == wantedInstruments { _ = try await ModelStore.shared.config(name) }
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch _ where cancel.isSet {
+                        throw CancellationError()
                     } catch _ where name == wantedVoice {
                         // Il modello voce non è disponibile: si prova quello più leggero, altrimenti si separa senza
                         voiceName = nil
@@ -209,13 +236,23 @@ final class SeparationJob: ObservableObject {
                             next = Quality.fallbackVoice(for: n)
                         }
                     } catch _ where name == wantedInstruments {
-                        // Il modello strumenti non è disponibile: si usano i modelli Demucs di riserva
+                        // Il modello strumenti non è disponibile: si usano i modelli Demucs di riserva,
+                        // scaricati qui con la loro barra (non in silenzio durante la prova del motore)
                         swName = nil
+                        let reserve = voiceName == nil ? models : models.filter { $0 != Quality.voiceSpecialist }
+                        for (j, m) in reserve.enumerated() {
+                            _ = try await ModelStore.shared.mlModel(m) { p in
+                                let total = (Double(j) + p) / Double(reserve.count)
+                                Task { @MainActor in if case .downloading = self?.phase { self?.phase = .downloading(total) } }
+                            }
+                            if cancel.isSet { throw CancellationError() }
+                        }
                     }
+                    if cancel.isSet { throw CancellationError() }
                 }
                 lap("Preparazione dei modelli")
                 await self?.set(.reading)
-                let mix = try AudioIO.read(url)
+                var mix = try AudioIO.read(url)
                 guard mix[0].count >= Int(AudioIO.sampleRate) else { throw SeparationError("la canzone è troppo corta (almeno 1 secondo)") }
                 let seconds = Double(mix[0].count) / AudioIO.sampleRate
                 await self?.loaded(peaks: Peaks.of(mix), duration: seconds)
@@ -251,6 +288,8 @@ final class SeparationJob: ObservableObject {
                     let elapsed = Date().timeIntervalSince(began)
                     let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
                     Task { @MainActor in
+                        // Un aggiornamento in ritardo non deve riaprire una separazione già finita o annullata
+                        guard case .separating = self?.phase else { return }
                         self?.phase = .separating(total)
                         self?.remaining = left
                     }
@@ -259,16 +298,19 @@ final class SeparationJob: ObservableObject {
                 var instrumentsInput = mix
                 if let v = voiceName {
                     var d = EngineChoice.stored(v) ?? EngineChoice.decide(agreement: 99)
+                    // Il modello voce davvero usato: se quello scelto non riesce si passa al più leggero
+                    var used = v
                     func runVoice(_ units: MLComputeUnits) async throws -> [[Float]] {
                         do {
-                            let voice = try await ModelStore.shared.voice(v, units: units) { _ in }
+                            let voice = try await ModelStore.shared.voice(used, units: units) { _ in }
                             voice.overlap = Prefs.voiceOverlap
                             return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
-                        } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && Quality.fallbackVoice(for: v) != nil {
+                        } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && !cancel.isSet
+                                    && Quality.fallbackVoice(for: used) != nil {
                             // Il modello voce non riesce (memoria, Mac più vecchio): si usa quello più leggero
-                            let voice = try await ModelStore.shared.voice(Quality.fallbackVoice(for: v)!, units: units) { _ in }
-                            voice.overlap = Prefs.voiceOverlap
-                            return try voice.separate(mix, progress: { report($0 * voiceShare) }, isCancelled: { cancel.isSet })
+                            used = Quality.fallbackVoice(for: used)!
+                            if let stored = EngineChoice.stored(used) { d = stored }
+                            return try await runVoice(d.units)
                         }
                     }
                     let vo: [[Float]]
@@ -277,12 +319,14 @@ final class SeparationJob: ObservableObject {
                             throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
                         }
                         d = EngineChoice.Decision(units: .cpuAndGPU, agreement: d.agreement)
-                        EngineChoice.store(d, for: v)
+                        EngineChoice.store(d, for: used)
                     }
-                    decisions[v] = d
+                    decisions[used] = d
                     voiceOut = vo
                     // Gli strumenti si cercano nella base senza voce: ogni modello fa quello in cui è migliore
                     instrumentsInput = (0..<2).map { c in zip(mix[c], vo[c]).map { $0 - $1 } }
+                    // La canzone intera non serve più: con le canzoni lunghe sono centinaia di MB in meno
+                    mix = []
                     lap("Voce (RoFormer)")
                 }
 
@@ -422,6 +466,9 @@ final class SeparationJob: ObservableObject {
             history = History.all()
             return
         }
+        cancelSplit()
+        splitErrors = [:]
+        analysis = nil
         song = nil
         timings = []
         sourceInfo = nil
@@ -468,13 +515,16 @@ final class SeparationJob: ObservableObject {
         splitting = kind
         splitProgress = 0
         splitErrors[kind] = nil
-        let title = self.title, format = Prefs.format, cancel = Cancel()
-        cancelled = cancel
+        let title = self.title, format = Prefs.format, cancel = Cancel(), token = UUID()
+        splitCancel = cancel
+        splitToken = token
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let audio = try AudioIO.read(source.url)
                 func run(_ units: MLComputeUnits) async throws -> (names: [String], parts: [[[Float]]]) {
-                    try await kind.run(audio, units: units, progress: { p in Task { @MainActor in self?.splitProgress = p } },
+                    try await kind.run(audio, units: units, progress: { p in
+                        Task { @MainActor in if self?.splitToken == token { self?.splitProgress = p } }
+                    },
                                        isCancelled: { cancel.isSet })
                 }
                 var res: (names: [String], parts: [[[Float]]])
@@ -490,27 +540,31 @@ final class SeparationJob: ObservableObject {
                     let url = dir.appendingPathComponent("\(title) – \(info.name).\(format.fileExtension)")
                     try AudioIO.write(res.parts[k], to: url, format: format, gain: gain)
                     made.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(res.parts[k]),
-                                     share: nil, peakDB: measures[k].peakDB, balance: measures[k].balance,
+                                     share: nil, peakDB: measures[k].peakDB + (gain < 1 ? 20 * log10(Double(gain)) : 0),
+                                     balance: measures[k].balance,
                                      gainDB: gain < 1 ? 20 * log10(Double(gain)) : 0))
                 }
-                await self?.splitDone(made, folder: dir)
+                await self?.splitDone(made, folder: dir, token: token)
             } catch is CancellationError {
-                await self?.splitDone([], folder: dir)
+                await self?.splitDone([], folder: dir, token: token)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                await self?.splitFailed(kind, msg)
+                await self?.splitFailed(kind, msg, token: token)
             }
         }
     }
 
-    private func splitDone(_ parts: [Stem], folder dir: URL) {
+    private func splitDone(_ parts: [Stem], folder dir: URL, token: UUID) {
+        // Una divisione annullata (o di un'altra canzone) che arriva tardi non tocca niente
+        guard token == splitToken else { return }
         splitting = nil
         guard folder == dir, !parts.isEmpty else { return }
         stems = (stems + parts).sorted { Stem.info($0.key).order < Stem.info($1.key).order }
         if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
     }
 
-    private func splitFailed(_ kind: ExtraSplit, _ msg: String) {
+    private func splitFailed(_ kind: ExtraSplit, _ msg: String, token: UUID) {
+        guard token == splitToken else { return }
         splitting = nil
         splitErrors[kind] = msg
     }
@@ -529,13 +583,14 @@ final class SeparationJob: ObservableObject {
     private func startNextInQueue() {
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
-        let q = quality
+        let q = queuedQuality.removeValue(forKey: next) ?? quality
         // Un attimo per vedere il risultato della canzone appena finita
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.start(next, quality: q) }
     }
 
     func reset() {
         guard !isBusy else { return }
+        cancelSplit()
         phase = .idle
         song = nil
         title = ""

@@ -116,6 +116,11 @@ final class ModelStore: @unchecked Sendable {
             try fm.moveItem(at: built, to: Self.compiled(name))
         } catch let e as SeparationError {
             throw e
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let e as URLError where e.code == .cancelled {
+            // Annullato dall'utente: non è un problema di rete
+            throw CancellationError()
         } catch {
             throw SeparationError("non riesco a scaricare il modello di IA (serve internet la prima volta)")
         }

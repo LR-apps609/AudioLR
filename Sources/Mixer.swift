@@ -107,6 +107,7 @@ final class MixPlayer: ObservableObject {
     private var startedAt: Date?
     private(set) var keys: [String] = []
     private var loadedFolder: URL?
+    private var attempted: Set<String> = []
 
     /// Secondi dall'inizio della canzone.
     var position: Double {
@@ -124,7 +125,10 @@ final class MixPlayer: ObservableObject {
     /// Prepara le tracce da mescolare.
     func load(_ stems: [Stem], folder: URL?) {
         let wanted = Self.mixable(stems).map(\.key)
-        guard folder != loadedFolder || keys.isEmpty || Set(wanted) != Set(keys) else { return }
+        // Si confrontano le tracce chieste l'ultima volta (non quelle aperte): un file illeggibile
+        // non deve far ricaricare il mixer a ogni aggiornamento
+        guard folder != loadedFolder || attempted.isEmpty || Set(wanted) != attempted else { return }
+        attempted = Set(wanted)
         let keep = folder == loadedFolder ? state : MixState()
         stop()
         for p in players.values { engine.detach(p) }
@@ -207,10 +211,18 @@ final class MixPlayer: ObservableObject {
         let chosen = Self.mixable(stems)
         let name = Self.exportName(state: state, title: title)
         let format = Prefs.format
+        // Un mix esportato prima non si sovrascrive: «Canzone – Mix 2», «Canzone – Mix 3»…
+        var url = folder.appendingPathComponent("\(name).\(format.fileExtension)")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = folder.appendingPathComponent("\(name) \(n).\(format.fileExtension)")
+            n += 1
+        }
+        let target = url
         return try await Task.detached(priority: .userInitiated) {
             let tracks = try chosen.map { (key: $0.key, audio: try AudioIO.read($0.url)) }
             let mixed = MixState.mix(tracks, state: state)
-            let url = folder.appendingPathComponent("\(name).\(format.fileExtension)")
+            let url = target
             // Con i volumi alzati il mix può superare il massimo: si abbassa tutto quanto basta, senza tagliare
             try AudioIO.write(mixed, to: url, format: format, gain: Stem.safeGain(peaks: [Stem.measure(mixed).peak]))
             return url

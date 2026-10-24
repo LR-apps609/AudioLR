@@ -114,7 +114,7 @@ struct EngineSettings: View {
             Section {
                 LabeledContent("Modelli scaricati", value: size)
                 Button("Elimina i modelli scaricati…") { confirmDelete = true }
-                    .disabled(SeparationJob.shared.isBusy)
+                    .disabled(SeparationJob.shared.isWorking)
             } footer: {
                 Text("Si riscaricano da soli alla prossima separazione.").font(.caption).foregroundStyle(.secondary)
             }

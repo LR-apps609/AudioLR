@@ -51,7 +51,7 @@ final class Updater: ObservableObject, @unchecked Sendable {
     @MainActor
     func open(_ file: URL, confirmed: Bool = false) {
         guard !busy else { window?.makeKeyAndOrderFront(nil); return }
-        if SeparationJob.shared.isBusy {
+        if SeparationJob.shared.isWorking {
             alert("Aspetta che finisca la separazione", "Poi apri di nuovo l'aggiornamento: ci vogliono pochi secondi.")
             return
         }
@@ -295,7 +295,7 @@ enum UpdateCheck {
         // Una versione saltata non si ripropone da sola (ma «Controlla aggiornamenti» sì)
         if !userInitiated, UserDefaults.standard.string(forKey: skipKey) == rel.version { return }
         // Durante una separazione non si interrompe: ci si riprova al prossimo avvio
-        if !userInitiated, SeparationJob.shared.isBusy { UserDefaults.standard.set(0.0, forKey: lastKey); return }
+        if !userInitiated, SeparationJob.shared.isWorking { UserDefaults.standard.set(0.0, forKey: lastKey); return }
         let a = NSAlert()
         a.messageText = "È disponibile AudioLR \(rel.version)"
         a.informativeText = "Hai la \(current). La scarico e la installo? Ci vogliono pochi secondi e AudioLR si riapre da sola."
