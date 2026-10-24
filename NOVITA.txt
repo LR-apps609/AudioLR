@@ -1,3 +1,7 @@
+Novità della 0.12.0 «Note»:
+• MIDI da ogni traccia: menu «MIDI» in alto, scegli voce, basso, chitarra, pianoforte o altro; le note diventano un file .mid al tempo della canzone, pronto per GarageBand e Logic
+• Le note le trova Basic Pitch di Spotify, incluso nell'app: niente da scaricare, tutto sul Mac
+
 Novità della 0.11.0 «Sala prove»:
 • Sala prove (⌥⌘P): rallenta fino al 50% senza cambiare il tono, oppure accelera fino al 150%
 • Tono: sposta la canzone fino a 6 semitoni in su o in giù, alla stessa velocità (per cantare o suonare nella tua tonalità)

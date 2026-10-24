@@ -105,6 +105,50 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var engineText: String?
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
+    /// La traccia di cui si stanno cercando le note (MIDI), e i file MIDI già creati per questa canzone.
+    @Published private(set) var midiWorking: String?
+    @Published private(set) var midiFiles: [String: URL] = [:]
+    @Published private(set) var midiError: String?
+
+    /// Le tracce che hanno note da trascrivere (la batteria no: non ha altezze).
+    var midiStems: [Stem] {
+        stems.filter { ["vocals", "lead", "backing", "bass", "guitar", "piano", "other"].contains($0.key) }
+    }
+
+    /// Le note di una traccia in un file MIDI accanto alle tracce, al tempo della canzone.
+    func makeMidi(_ stem: Stem) {
+        guard midiWorking == nil, let dir = folder else { return }
+        if let done = midiFiles[stem.key] { NSWorkspace.shared.activateFileViewerSelecting([done]); return }
+        midiWorking = stem.key
+        midiError = nil
+        let title = self.title, bpm = analysis?.bpm ?? 120
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let audio = try AudioIO.read(stem.url)
+                let notes = try MidiTranscriber.bundled().transcribe(audio)
+                let url = dir.appendingPathComponent("\(title) – \(stem.name).mid")
+                try MidiFile.data(notes, bpm: bpm, program: MidiFile.program(for: stem.key), name: "\(title) – \(stem.name)")
+                    .write(to: url, options: .atomic)
+                await self?.midiDone(stem.key, url, folder: dir)
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                await self?.midiFailed(msg, folder: dir)
+            }
+        }
+    }
+
+    private func midiDone(_ key: String, _ url: URL, folder dir: URL) {
+        midiWorking = nil
+        guard folder == dir else { return }
+        midiFiles[key] = url
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func midiFailed(_ msg: String, folder dir: URL) {
+        midiWorking = nil
+        if folder == dir { midiError = msg }
+    }
+
     /// Tempo e tonalità della canzone separata.
     @Published private(set) var analysis: SongAnalysis?
     /// La divisione in più in corso (batteria o voce), e a che punto è (0…1).
@@ -180,6 +224,8 @@ final class SeparationJob: ObservableObject {
         cancelSplit()
         splitErrors = [:]
         queuedQuality[url] = nil
+        midiFiles = [:]
+        midiError = nil
         song = url
         title = url.deletingPathExtension().lastPathComponent
         stems = []
@@ -469,6 +515,8 @@ final class SeparationJob: ObservableObject {
         cancelSplit()
         splitErrors = [:]
         analysis = nil
+        midiFiles = [:]
+        midiError = nil
         song = nil
         timings = []
         sourceInfo = nil

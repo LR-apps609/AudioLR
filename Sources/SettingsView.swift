@@ -200,6 +200,7 @@ struct AboutSettings: View {
     private let models: [(String, String, String)] = [
         ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
+        ("VoceCori", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
         ("VoceRoFormer8", "Massima · voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("VoceStudio", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
         ("StrumentiSW", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
@@ -236,6 +237,8 @@ struct AboutSettings: View {
                 }
             }
             Section {
+                Text("Incluso nell'app: Basic Pitch di Spotify (licenza Apache 2.0), per le note MIDI.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Le canzoni non lasciano mai il Mac. Le tracce separate di brani altrui sono per uso personale: studio, pratica, karaoke.")
                     .font(.caption).foregroundStyle(.secondary)
             }

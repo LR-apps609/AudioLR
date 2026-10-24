@@ -304,6 +304,20 @@ struct ContentView: View {
                 Button { showDetails = true } label: { Label("Dettagli", systemImage: "info.circle") }
                     .popover(isPresented: $showDetails, arrowEdge: .bottom) { DetailsView().environmentObject(job) }
                     .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone")
+                Menu {
+                    ForEach(job.midiStems) { s in
+                        Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
+                    }
+                } label: {
+                    if let k = job.midiWorking {
+                        Label("Note di \(Stem.info(k).name.lowercased())…", systemImage: "pianokeys")
+                    } else {
+                        Label("MIDI", systemImage: "pianokeys")
+                    }
+                }
+                .fixedSize()
+                .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
+                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da trascinare in GarageBand o Logic")
                 Button {
                     if let f = job.folder { NSWorkspace.shared.activateFileViewerSelecting([f]) }
                 } label: { Label("Mostra nel Finder", systemImage: "folder") }

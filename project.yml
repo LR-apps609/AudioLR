@@ -16,6 +16,12 @@ targets:
       - path: Resources/Assets.xcassets
       - path: Resources/LICENZA-Demucs.txt
         buildPhase: resources
+      - path: Resources/LICENZA-BasicPitch.txt
+        buildPhase: resources
+      # Basic Pitch (Spotify, Apache 2.0): dall'audio alle note MIDI; Xcode lo compila in BasicPitch.mlmodelc
+      - path: Resources/BasicPitch.mlpackage
+        type: file
+        buildPhase: sources
       - path: NOVITA.txt              # «Cosa c'è di nuovo» dopo un aggiornamento
         buildPhase: resources
     info:
@@ -24,8 +30,8 @@ targets:
         CFBundleDisplayName: AudioLR
         CFBundleName: AudioLR
         CFBundleDevelopmentRegion: it
-        CFBundleShortVersionString: "0.11.0"
-        CFBundleVersion: "13"
+        CFBundleShortVersionString: "0.12.0"
+        CFBundleVersion: "14"
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.music
         NSHumanReadableCopyright: "Uso personale di Ledion"
@@ -53,8 +59,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.ledion.AudioLR
         PRODUCT_NAME: AudioLR
-        MARKETING_VERSION: "0.11.0"
-        CURRENT_PROJECT_VERSION: "13"
+        MARKETING_VERSION: "0.12.0"
+        CURRENT_PROJECT_VERSION: "14"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
@@ -67,6 +73,7 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         COMBINE_HIDPI_IMAGES: YES
+        COREML_CODEGEN_LANGUAGE: None
 
   # Test automatici: spettrogramma, divisione in pezzi, lettura e scrittura audio.
   # Girano sul Mac di GitHub a ogni modifica; se uno fallisce, la versione non viene pubblicata.
@@ -80,10 +87,14 @@ targets:
         excludes:
           - "Main.swift"
           - "Info.plist"
+      - path: Resources/BasicPitch.mlpackage
+        type: file
+        buildPhase: sources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.ledion.AudioLRTests
         GENERATE_INFOPLIST_FILE: YES
+        COREML_CODEGEN_LANGUAGE: None
         SWIFT_VERSION: "5.0"
         SWIFT_STRICT_CONCURRENCY: minimal
         CODE_SIGN_IDENTITY: "-"
