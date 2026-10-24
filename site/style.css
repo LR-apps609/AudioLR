@@ -2,7 +2,7 @@
 :root {
   --bg: #f4efe6; --bg2: #e9e1d3; --card: #fffcf6; --well: #f1ebe0; --ink: #2b2433; --muted: #6a6175; --line: rgba(43,36,51,.12);
   --brass: #a97e3f; --green: #4e9a6a; --mute: #b8463a;
-  --voice: #cf6f57; --drums: #c48e2c; --bass: #8c6aaf; --other: #3c978c; --base: #5b7faa;
+  --voice: #cf6f57; --drums: #c48e2c; --bass: #8c6aaf; --other: #3c978c; --base: #5b7faa; --guitar: #6e9a52; --piano: #6f78a3;
   --display: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
   --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -11,11 +11,11 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #17141e; --bg2: #0f0d14; --card: #221e2b; --well: #1a1721; --ink: #ede6f2; --muted: #a59cb2; --line: rgba(237,230,242,.11);
   --brass: #d6aa62; --green: #7cc796; --mute: #e0705f;
-  --voice: #e5917a; --drums: #e6b45c; --bass: #b497d0; --other: #76c3b9; --base: #82a5cf; --shadow: 0 10px 30px rgba(0,0,0,.35); color-scheme: dark } }
+  --voice: #e5917a; --drums: #e6b45c; --bass: #b497d0; --other: #76c3b9; --base: #82a5cf; --guitar: #93c174; --piano: #a0a8cc; --shadow: 0 10px 30px rgba(0,0,0,.35); color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #17141e; --bg2: #0f0d14; --card: #221e2b; --well: #1a1721; --ink: #ede6f2; --muted: #a59cb2; --line: rgba(237,230,242,.11);
   --brass: #d6aa62; --green: #7cc796; --mute: #e0705f;
-  --voice: #e5917a; --drums: #e6b45c; --bass: #b497d0; --other: #76c3b9; --base: #82a5cf; --shadow: 0 10px 30px rgba(0,0,0,.35); color-scheme: dark }
+  --voice: #e5917a; --drums: #e6b45c; --bass: #b497d0; --other: #76c3b9; --base: #82a5cf; --guitar: #93c174; --piano: #a0a8cc; --shadow: 0 10px 30px rgba(0,0,0,.35); color-scheme: dark }
 
 * { box-sizing: border-box; }
 /* «hidden» vince sempre, anche sugli elementi che hanno un display proprio */
@@ -125,3 +125,10 @@ details p { margin-top: 8px; color: var(--muted); }
 .desktop .web-only { display: none; }
 footer { padding-block: 34px 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; }
+
+/* Scelta della qualità (solo nell'app per Windows) */
+.quality { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 6%, transparent); border: 1px solid var(--line); }
+.quality button { border: 0; background: transparent; color: var(--ink); font: 650 14px var(--body); padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+.quality button[aria-pressed="true"] { background: var(--brass); color: #fff; }
+.quality-note { font-size: 13px; text-align: center; max-width: 52ch; }
+.desktop .quality.desktop-only { display: inline-flex; }

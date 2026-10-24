@@ -5,7 +5,7 @@ name: Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, windows]
+    branches: [main, windows, win-motore]
     paths: [windows/**, site/**, .github/workflows/windows.yml]
 
 permissions:
@@ -27,6 +27,9 @@ jobs:
         run: |
           set -e
           mkdir -p windows/dist && cp -r site/* windows/dist/ && rm -rf windows/dist/test
+          # Nell'app la pagina parla con il programma (scaricamento e lettura dei modelli di Massima e Studio)
+          sed -i "s|connect-src 'self'|connect-src 'self' ipc: http://ipc.localhost|" windows/dist/index.html
+          grep -q "ipc.localhost" windows/dist/index.html
           mkdir -p windows/dist/vendor windows/dist/models /tmp/ort
           (cd /tmp/ort && npm pack onnxruntime-web@1.19.2 --silent && tar xzf onnxruntime-web-1.19.2.tgz)
           cp /tmp/ort/package/dist/ort.webgpu.min.js /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.mjs /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.wasm windows/dist/vendor/

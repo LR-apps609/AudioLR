@@ -2,11 +2,13 @@
 // Riceve la canzone già decodificata (2 canali a 44,1 kHz) e restituisce le tracce. Nessuna rete,
 // tranne il modello che arriva da questo stesso sito (e poi resta nella cache del browser).
 /* global ort, AudioLREngine */
-importScripts("../vendor/ort.webgpu.min.js", "engine-core.js");
+importScripts("../vendor/ort.webgpu.min.js", "engine-core.js", "roformer-core.js");
 
 const MODEL = "../models/HTDemucsWeb.json";
 const CACHE = "audiolr-modelli-v1";
 let session = null, config = null, backend = null, cancelled = false;
+// I modelli RoFormer (Massima e Studio, solo nell'app per Windows): nome → { session, cfg }
+const roformers = {};
 
 ort.env.wasm.wasmPaths = new URL("../vendor/", self.location).href;
 // Più thread solo se la pagina è «isolata» (serve SharedArrayBuffer); altrimenti uno
@@ -76,10 +78,66 @@ async function runCore(spec, wave, le, seg) {
   return { spec: out.spec_out.data, wave: out.wave_out.data };
 }
 
+// Un modello RoFormer dai byte che manda la pagina (scaricati e verificati dall'app), sulla scheda grafica se c'è
+async function loadRoformer(name, bytes, cfg, forceWasm) {
+  if (roformers[name]) return;
+  const eps = !forceWasm && "gpu" in navigator ? ["webgpu", "wasm"] : ["wasm"];
+  let last;
+  for (const ep of eps) {
+    try {
+      const s = await ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: [ep], graphOptimizationLevel: "all" });
+      roformers[name] = { session: s, cfg, backend: ep };
+      return;
+    } catch (err) { last = err; }
+  }
+  throw last;
+}
+
+function netFor(name) {
+  const { session: s, cfg } = roformers[name];
+  const T = cfg.frames, FS = cfg.freq_indices.length;
+  return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
+}
+
+// Massima: SW su tutta la canzone. Studio: la voce da viperx, poi SW sulla base senza voce.
+// La base è sempre la canzone meno la voce, come nell'app per Mac.
+async function separateRoformer(quality, left, right) {
+  const t0 = performance.now();
+  const mix = [left, right], n = left.length;
+  const sw = roformers.StrumentiSW;
+  let voice = null, input = mix, share = 0;
+  if (quality === "studio") {
+    share = 0.45;
+    const v = roformers.VoceStudio;
+    const out = await AudioLRRoFormer.separateAll(mix, v.cfg, netFor("VoceStudio"), {
+      onProgress: (p) => post("progress", { progress: p * share, step: "Voce" }), isCancelled: () => cancelled });
+    voice = out[v.cfg.sources.indexOf("vocals") >= 0 ? v.cfg.sources.indexOf("vocals") : 0];
+    input = [new Float32Array(n), new Float32Array(n)];
+    for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) input[c][k] = mix[c][k] - voice[c][k];
+  }
+  const stems = await AudioLRRoFormer.separateAll(input, sw.cfg, netFor("StrumentiSW"), {
+    onProgress: (p) => post("progress", { progress: share + (1 - share) * p, step: "Strumenti" }), isCancelled: () => cancelled });
+  const names = sw.cfg.sources, keys = [], tracks = [];
+  for (let i = 0; i < names.length; i++) {
+    if (names[i] === "vocals") continue;           // la voce che SW trova nella base (Studio) o la voce di Massima: sotto
+    keys.push(names[i]); tracks.push(stems[i]);
+  }
+  if (!voice) voice = stems[names.indexOf("vocals")];
+  const base = [new Float32Array(n), new Float32Array(n)];
+  for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = mix[c][k] - voice[c][k];
+  const all = [voice, ...tracks, base];
+  const gain = AudioLREngine.safeGain(all);
+  const buffers = all.flat().map((a) => { if (gain !== 1) for (let k = 0; k < a.length; k++) a[k] *= gain; return a; });
+  post("done", { keys: ["vocals", ...keys, "instrumental"], channels: buffers, seconds: (performance.now() - t0) / 1000, backend: sw.backend },
+    buffers.map((b) => b.buffer));
+}
+
 self.onmessage = async (e) => {
   const m = e.data;
   try {
-    if (m.type === "load") await load(m.forceWasm);
+    if (m.type === "loadRoformer") { await loadRoformer(m.name, m.bytes, m.cfg, m.forceWasm); post("roformerReady", { name: m.name, backend: roformers[m.name].backend }); }
+    else if (m.type === "separateRoformer") { cancelled = false; await separateRoformer(m.quality, m.left, m.right); }
+    else if (m.type === "load") await load(m.forceWasm);
     else if (m.type === "cancel") cancelled = true;
     else if (m.type === "separate") {
       cancelled = false;

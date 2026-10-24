@@ -57,6 +57,12 @@
         <h3>Trascina qui una canzone</h3>
         <p class="muted web-only">MP3, M4A, WAV, FLAC · fino a 10 minuti · la canzone resta sul tuo computer</p>
         <p class="muted desktop-only">MP3, M4A, WAV, FLAC · fino a 30 minuti · la canzone resta sul tuo computer</p>
+        <div class="quality desktop-only" role="group" aria-label="Qualità">
+          <button data-quality="fast" aria-pressed="false">Veloce</button>
+          <button data-quality="best" aria-pressed="true">Massima</button>
+          <button data-quality="studio" aria-pressed="false">Studio</button>
+        </div>
+        <p class="muted quality-note desktop-only" id="qualityNote"></p>
         <label class="btn" for="file">Scegli una canzone…</label>
         <input id="file" type="file" accept="audio/*" hidden>
         <div class="chips" aria-label="Riceverai">

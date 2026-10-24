@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "La finestra di AudioLR: eventi (barra di scaricamento dei modelli) e comandi dell'app",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

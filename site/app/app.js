@@ -3,9 +3,9 @@
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const COLORS = { vocals: "--voice", drums: "--drums", bass: "--bass", other: "--other", instrumental: "--base" };
-  const NAMES = { vocals: "Voce", drums: "Batteria", bass: "Basso", other: "Altri strumenti", instrumental: "Base (senza voce)" };
-  const ORDER = ["vocals", "drums", "bass", "other", "instrumental"];
+  const COLORS = { vocals: "--voice", drums: "--drums", bass: "--bass", guitar: "--guitar", piano: "--piano", other: "--other", instrumental: "--base" };
+  const NAMES = { vocals: "Voce", drums: "Batteria", bass: "Basso", guitar: "Chitarra", piano: "Pianoforte", other: "Altri strumenti", instrumental: "Base (senza voce)" };
+  const ORDER = ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"];
   // Dentro l'app per Windows (Tauri) niente pubblicità dell'app stessa, e canzoni più lunghe
   const DESKTOP = "__TAURI_INTERNALS__" in window || location.protocol === "tauri:" || location.hostname === "tauri.localhost";
   if (DESKTOP) document.documentElement.classList.add("desktop");
@@ -22,6 +22,51 @@
   }
 
   let worker = null, ready = null, forceWasm = false, songName = "", started = 0;
+
+  // ── Qualità (solo nell'app per Windows): Veloce nell'installer, Massima e Studio scaricate la prima volta ──
+  const TAURI = window.__TAURI__;
+  const QUALITY = {
+    fast: { models: [], note: "Un modello per tutto, già nell'app: il più rapido." },
+    best: { models: ["StrumentiSW"], note: "Sei tracce con BS-RoFormer SW, chitarra e pianoforte comprese. La prima volta scarica circa 330 MB." },
+    studio: { models: ["VoceStudio", "StrumentiSW"], note: "La voce più pulita (BS-RoFormer viperx) più SW sugli strumenti: la più lenta. La prima volta scarica circa 650 MB." },
+  };
+  let quality = "fast";
+  if (DESKTOP) {
+    try { quality = localStorage.getItem("audiolr-quality") || "best"; } catch { quality = "best"; }
+    if (!QUALITY[quality]) quality = "best";
+  }
+  function setQuality(q) {
+    quality = q;
+    try { localStorage.setItem("audiolr-quality", q); } catch {}
+    document.querySelectorAll("[data-quality]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.quality === q));
+    $("qualityNote").textContent = QUALITY[q].note;
+  }
+  document.querySelectorAll("[data-quality]").forEach((b) => b.addEventListener("click", () => setQuality(b.dataset.quality)));
+  if (DESKTOP) setQuality(quality);
+  const loadedModels = new Set();
+  let modelWaiters = {};
+
+  // Il modello sul disco (scaricato e verificato dall'app la prima volta), poi dentro il lavoratore
+  async function ensureModels(names) {
+    for (const name of names) {
+      if (loadedModels.has(name)) continue;
+      $("step").textContent = `Preparo il modello ${name === "StrumentiSW" ? "degli strumenti" : "della voce"}…`;
+      const off = await TAURI.event.listen("model-download", (ev) => {
+        if (ev.payload.name !== name) return;
+        $("step").textContent = `Scarico il modello ${name === "StrumentiSW" ? "degli strumenti" : "della voce"} (solo la prima volta)…`;
+        setProgress(ev.payload.progress);
+      });
+      try { await TAURI.core.invoke("prepare_model", { name }); } finally { off(); }
+      $("step").textContent = "Apro il modello sulla scheda grafica (la prima volta può richiedere un minuto)…";
+      const cfg = JSON.parse(new TextDecoder().decode(new Uint8Array(await TAURI.core.invoke("read_model", { name, part: "json" }))));
+      const bytes = await TAURI.core.invoke("read_model", { name, part: "onnx" });
+      await new Promise((resolve, reject) => {
+        modelWaiters[name] = { resolve, reject };
+        worker.postMessage({ type: "loadRoformer", name, bytes, cfg, forceWasm }, [bytes]);
+      });
+      loadedModels.add(name);
+    }
+  }
   // Cresce a ogni «Annulla»: una canzone annullata mentre si preparava il modello non riparte da sola
   let generation = 0;
 
@@ -33,7 +78,7 @@
   function fmt(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
   // Il lavoratore, creato alla prima canzone (così chi guarda soltanto non scarica niente)
-  function startWorker() {
+  function startWorker(withDemucs = true) {
     if (ready) return ready;
     ready = new Promise((resolve, reject) => {
       worker = new Worker("app/worker.js");
@@ -49,12 +94,22 @@
           b.textContent = m.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore (più lento)";
           b.hidden = false;
           resolve(m);
-        } else if (m.type === "progress") onProgress(m.progress);
+        } else if (m.type === "roformerReady") {
+          const b = $("backend");
+          b.textContent = m.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore (più lento)";
+          b.hidden = false;
+          const w = modelWaiters[m.name]; delete modelWaiters[m.name]; if (w) w.resolve();
+        } else if (m.type === "progress") onProgress(m.progress, m.step);
         else if (m.type === "done") onDone(m);
-        else if (m.type === "error") { if (m.message === "annullato") show("drop"); else fail("Non ci sono riuscito: " + m.message); reject(new Error(m.message)); }
+        else if (m.type === "error") {
+          if (m.message === "annullato") show("drop"); else fail("Non ci sono riuscito: " + m.message);
+          for (const k of Object.keys(modelWaiters)) { modelWaiters[k].reject(new Error(m.message)); delete modelWaiters[k]; }
+          reject(new Error(m.message));
+        }
       };
       worker.onerror = (e) => { fail("Il browser ha interrotto il lavoro: " + (e.message || "memoria insufficiente?")); ready = null; };
-      worker.postMessage({ type: "load", forceWasm });
+      if (withDemucs) worker.postMessage({ type: "load", forceWasm });
+      else resolve({});
     });
     return ready;
   }
@@ -63,8 +118,10 @@
     $("bar").style.width = `${Math.round(p * 100)}%`;
     $("percent").textContent = `${Math.round(p * 100)}%`;
   }
-  function onProgress(p) {
+  function onProgress(p, step) {
     setProgress(p);
+    if (step === "Voce") $("step").textContent = "Separo la voce…";
+    else if (step === "Strumenti") $("step").textContent = quality === "studio" ? "Separo gli strumenti dalla base…" : "Separo voce e strumenti…";
     const elapsed = (performance.now() - started) / 1000;
     $("eta").textContent = p > 0.03 ? `Mancano circa ${fmt((elapsed / p) * (1 - p))}` : "Calcolo il tempo che manca…";
   }
@@ -87,12 +144,20 @@
     const left = new Float32Array(audio.getChannelData(0));
     const right = new Float32Array(audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0));
     const mine = generation;
-    try { await startWorker(); } catch (e) { return; }
+    const roformer = DESKTOP && quality !== "fast";
+    try {
+      await startWorker(!roformer);
+      if (roformer) await ensureModels(QUALITY[quality].models);
+    } catch (e) {
+      if (mine === generation) fail("Non ci sono riuscito: " + (e && e.message || e));
+      return;
+    }
     if (!worker || mine !== generation) return; // annullata mentre si preparava il modello
-    $("step").textContent = "Separo voce e strumenti…";
+    $("step").textContent = roformer ? (quality === "studio" ? "Separo la voce…" : "Separo voce e strumenti…") : "Separo voce e strumenti…";
     setProgress(0);
     started = performance.now();
-    worker.postMessage({ type: "separate", left, right }, [left.buffer, right.buffer]);
+    if (roformer) worker.postMessage({ type: "separateRoformer", quality, left, right }, [left.buffer, right.buffer]);
+    else worker.postMessage({ type: "separate", left, right }, [left.buffer, right.buffer]);
   }
 
   $("file").addEventListener("change", (e) => { handle(e.target.files[0]); e.target.value = ""; });
@@ -105,6 +170,8 @@
   $("cancel").addEventListener("click", () => {
     if (worker) { worker.terminate(); worker = null; }
     ready = null;
+    loadedModels.clear();
+    for (const k of Object.keys(modelWaiters)) { modelWaiters[k].reject(new Error("annullato")); delete modelWaiters[k]; }
     generation++;
     show("drop");
   });
