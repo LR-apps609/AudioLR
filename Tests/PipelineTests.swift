@@ -25,6 +25,41 @@ final class PipelineTests: XCTestCase {
         return url
     }
 
+    /// Studio dall'inizio alla fine: voce viperx, SW sugli strumenti e il basso dal Demucs specializzato.
+    func testStudioFromStartToFinish() async throws {
+        executionTimeAllowance = 2400
+        let q = Quality.studio
+        for m in q.allModels {
+            do { _ = try await ModelStore.shared.mlModel(m) { _ in } } catch { throw XCTSkip("\(m) non raggiungibile") }
+        }
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("uscita-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        UserDefaults.standard.set(out.path, forKey: Prefs.folderKey)
+        defer { UserDefaults.standard.removeObject(forKey: Prefs.folderKey); try? FileManager.default.removeItem(at: out) }
+
+        let job = SeparationJob.shared
+        job.reset()
+        let url = try song()
+        let start = Date()
+        job.start(url, quality: q)
+        while job.isBusy { try await Task.sleep(nanoseconds: 500_000_000) }
+        if case .failed(let msg) = job.phase { return XCTFail("separazione non riuscita: \(msg)") }
+        XCTAssertEqual(job.phase, .done)
+        XCTAssertEqual(Set(job.stems.map(\.key)), ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"])
+        XCTAssertTrue(job.timings.contains { $0.name == "Basso (Demucs)" }, "il basso deve venire da Demucs")
+        // Il basso c'è davvero: la canzone di prova ha un basso a 55 Hz
+        let bass = try AudioIO.read(job.stems.first { $0.key == "bass" }!.url)
+        let energy = bass[0].reduce(0) { $0 + $1 * $1 } / Float(bass[0].count)
+        XCTAssertGreaterThan(energy, 1e-4, "basso vuoto")
+        let line = String(format: "Studio completa: 12 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
+                          job.timings.map { "\($0.name) \(Int($0.seconds.rounded())) s" }.joined(separator: ", "), job.engineText ?? "")
+        print(line)
+        let path = "/tmp/audiolr-passi.txt"
+        let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+        job.reset()
+    }
+
     func testMassimaFromStartToFinish() async throws {
         executionTimeAllowance = 2400
         guard let sw = Quality.best.instrumentModel else { return XCTFail("Massima senza modello strumenti") }

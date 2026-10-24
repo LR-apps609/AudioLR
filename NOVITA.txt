@@ -1,3 +1,8 @@
+Novità della 0.13.1 «Basso»:
+• Studio: il basso ora viene dal modello Demucs specializzato nel basso, applicato alla base già senza voce. Più pieno e più pulito (9,1 dB contro 8,8 sulle 50 canzoni di prova MUSDB)
+• Se quel modello non si può usare, Studio continua con il basso di SW: nessuna separazione si ferma per questo
+• Studio scarica circa 80 MB in più, una volta sola
+
 Novità della 0.13.0 «Velocità»:
 • MOLTO PIÙ VELOCE: sui Mac con chip Apple il Neural Engine e la grafica lavorano insieme, ognuno su un pezzo diverso della canzone
 • Il Neural Engine non viene più scartato per differenze che non si sentono (soglia più ragionevole): sui Mac M1, M2, M3 e M4 la separazione usa finalmente tutto il chip

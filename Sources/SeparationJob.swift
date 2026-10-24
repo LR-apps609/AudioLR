@@ -261,6 +261,7 @@ final class SeparationJob: ObservableObject {
                 // 1. I modelli (la prima volta si scaricano: un'unica barra per tutti)
                 var voiceName = wantedVoice
                 var swName = wantedInstruments
+                var bassName = quality.bassModel
                 for (k, name) in downloads.enumerated() {
                     do {
                         _ = try await ModelStore.shared.mlModel(name) { p in
@@ -281,6 +282,9 @@ final class SeparationJob: ObservableObject {
                                (try? await ModelStore.shared.config(n)) != nil { voiceName = n }
                             next = Quality.fallbackVoice(for: n)
                         }
+                    } catch _ where name == quality.bassModel {
+                        // Il basso di Demucs è un di più: senza, resta quello di SW
+                        bassName = nil
                     } catch _ where name == wantedInstruments {
                         // Il modello strumenti non è disponibile: si usano i modelli Demucs di riserva,
                         // scaricati qui con la loro barra (non in silenzio durante la prova del motore)
@@ -310,7 +314,7 @@ final class SeparationJob: ObservableObject {
 
                 // 2. Il motore: deciso una volta per modello su questo Mac
                 var decisions: [String: EngineChoice.Decision] = [:]
-                for name in instrumentModels {
+                for name in instrumentModels + (swName == nil ? [] : [bassName].compactMap { $0 }) {
                     if let d = EngineChoice.stored(name) { decisions[name] = d; continue }
                     await self?.set(.tuning)
                     let d = try await SeparationJob.tune(name, mix: mix)
@@ -380,13 +384,15 @@ final class SeparationJob: ObservableObject {
                 // 4. Gli strumenti: con SW un modello solo per tutti; con htdemucs_ft ogni modello dà il suo strumento
                 var out: [[[Float]]] = []
                 var sources: [String] = []
+                // Quanta parte della barra degli strumenti spetta a SW (il resto al basso di Demucs, se c'è)
+                let swShare = bassName == nil ? 1.0 : 0.85
                 if let w = swName {
                     var d = EngineChoice.stored(w) ?? EngineChoice.decide(agreement: 99)
                     let input = instrumentsInput
                     func runSW(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
                         let (model, helpers) = try await SeparationJob.workers(w, units: units)
                         model.overlap = Prefs.instrumentOverlap
-                        let audio = try model.separateAll(input, helpers: helpers, progress: { report(voiceShare + (1 - voiceShare) * $0) },
+                        let audio = try model.separateAll(input, helpers: helpers, progress: { report(voiceShare + (1 - voiceShare) * swShare * $0) },
                                                           isCancelled: { cancel.isSet })
                         return (model.config.sources, audio)
                     }
@@ -401,6 +407,30 @@ final class SeparationJob: ObservableObject {
                     decisions[w] = d
                     (sources, out) = SeparationJob.arrange(res.names, res.audio, voice: voiceOut, split: split)
                     lap("Strumenti (BS-RoFormer SW)")
+
+                    // In Studio il basso dal Demucs specializzato, sulla stessa base: più pieno e più pulito di quello di SW
+                    if let b = bassName, let i = sources.firstIndex(of: "bass"), let d = decisions[b] {
+                        func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
+                            try Separator(core: core).separate(input, progress: { p in
+                                report(voiceShare + (1 - voiceShare) * (swShare + (1 - swShare) * p))
+                            }, isCancelled: { cancel.isSet })
+                        }
+                        // Un di più: se il modello non si carica o il calcolo non riesce, resta il basso di SW
+                        var result: [[[Float]]]?
+                        var bassSources: [String] = []
+                        for units in d.units == .cpuAndGPU ? [MLComputeUnits.cpuAndGPU] : [d.units, .cpuAndGPU] where result == nil {
+                            guard let core = try? await ModelStore.shared.load(b, units: units, progress: { _ in }) else { continue }
+                            do {
+                                result = try run(core)
+                                bassSources = core.sources
+                                if units != d.units { EngineChoice.store(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0), for: b) }
+                            } catch is CancellationError { throw CancellationError() } catch {}
+                        }
+                        if cancel.isSet { throw CancellationError() }
+                        // Se il calcolo non riesce resta il basso di SW
+                        if let r = result, let j = bassSources.firstIndex(of: "bass") { out[i] = r[j] }
+                        lap("Basso (Demucs)")
+                    }
                 }
                 for (k, name) in instrumentModels.enumerated() {
                     let span = (Double(k), Double(k + 1))

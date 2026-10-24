@@ -88,8 +88,9 @@ struct EngineSettings: View {
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)),
          ("Massima e Studio · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? "")),
-         ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? ""))] +
-        Quality.best.models.enumerated().map { (i, m) in
+         ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? "")),
+         ("Studio · Basso Demucs", EngineChoice.stored(Quality.studio.bassModel ?? ""))] +
+        Quality.best.models.enumerated().filter { $0.element != Quality.studio.bassModel }.map { (i, m) in
             ("Riserva · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
         }.filter { $0.1 != nil }
     }
@@ -220,7 +221,7 @@ struct AboutSettings: View {
         ("VoceStudio2", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
         ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
-        ("HTDemucsFT-1", "Riserva · basso", "Demucs v4 fine-tuned · MIT"),
+        ("HTDemucsFT-1", "Studio · basso; riserva", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),
     ]
 
