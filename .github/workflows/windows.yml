@@ -55,6 +55,32 @@ jobs:
           cp "$EXE" "AudioLR-Windows-anteprima.exe"
           ls -la AudioLR-Windows-anteprima.exe
           echo "::notice::Installer: $(du -h AudioLR-Windows-anteprima.exe | cut -f1)"
+      - name: Prova di avvio (installa, apri, fotografa)
+        shell: pwsh
+        run: |
+          Start-Process -FilePath ".\AudioLR-Windows-anteprima.exe" -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA\AudioLR", "$env:LOCALAPPDATA\Programs\AudioLR" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "uninstall*" } | Select-Object -First 1
+          if (-not $exe) { Write-Output "::error::AudioLR non risulta installata"; exit 1 }
+          Write-Output "Installata in $($exe.FullName)"
+          $p = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { Write-Output "::error::AudioLR si è chiusa da sola dopo l'avvio (codice $($p.ExitCode))"; exit 1 }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("windows-avvio.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          Stop-Process -Id $p.Id -Force
+          Write-Output "::notice::AudioLR per Windows si avvia e resta aperta"
+      - name: Schermata
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f windows-avvio.png ] || exit 0
+          gh release upload schermate windows-avvio.png --repo "$GITHUB_REPOSITORY" --clobber || true
       - uses: actions/upload-artifact@v6
         with:
           name: AudioLR-Windows
