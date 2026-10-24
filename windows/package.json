@@ -1,0 +1,9 @@
+{
+  "name": "audiolr-windows",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AudioLR per Windows: l'interfaccia e il motore del sito dentro un'app (Tauri), tutto sul computer",
+  "devDependencies": {
+    "@tauri-apps/cli": "2.1.0"
+  }
+}

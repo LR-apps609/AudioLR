@@ -6,7 +6,10 @@
   const COLORS = { vocals: "--voice", drums: "--drums", bass: "--bass", other: "--other", instrumental: "--base" };
   const NAMES = { vocals: "Voce", drums: "Batteria", bass: "Basso", other: "Altri strumenti", instrumental: "Base (senza voce)" };
   const ORDER = ["vocals", "drums", "bass", "other", "instrumental"];
-  const MAX_SECONDS = 600;
+  // Dentro l'app per Windows (Tauri) niente pubblicità dell'app stessa, e canzoni più lunghe
+  const DESKTOP = "__TAURI_INTERNALS__" in window || location.protocol === "tauri:" || location.hostname === "tauri.localhost";
+  if (DESKTOP) document.documentElement.classList.add("desktop");
+  const MAX_SECONDS = DESKTOP ? 1800 : 600;
 
   // Barre «in attesa», come nell'app
   const bars = $("bars"), stemOrder = ["--voice", "--drums", "--bass", "--other"];
