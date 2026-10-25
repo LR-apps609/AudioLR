@@ -44,7 +44,7 @@ struct Stem: Identifiable, Equatable {
     }
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
-    /// Tutte le tracce che AudioLR può creare, nell'ordine della libreria.
+    /// Tutte le tracce che IsoLR può creare, nell'ordine della libreria.
     static let allKeys = ["vocals", "lead", "backing", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
 
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
@@ -257,14 +257,14 @@ final class SeparationJob: ObservableObject {
     nonisolated static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "flac", "caf", "alac"]
 
     /// Le canzoni da separare: i file così come sono, le cartelle aperte con le sottocartelle (in ordine di nome).
-    /// Dentro le cartelle si saltano i file nascosti, quelli non audio e i file creati da AudioLR: «X – Voce»,
+    /// Dentro le cartelle si saltano i file nascosti, quelli non audio e i file creati da IsoLR: «X – Voce»,
     /// «X – Karaoke», «X – Mix 2», «X – Senza batteria»… ma solo se accanto ci sono davvero le tracce di «X»,
     /// così una canzone che si chiama «Artista – Senza di te» non si salta.
     nonisolated static func songs(in urls: [URL], limit: Int = 5000) -> [URL] {
         let fm = FileManager.default
         let stemNames = Set(Stem.allKeys.map { Stem.info($0).name })
         let mixNames = ["Karaoke", "Karaoke con cori", "Solo voce", "Mix"] + MixState.Instrument.allCases.map(\.without)
-        /// «X» se il nome è «X – qualcosa» con «qualcosa» tra quelli creati da AudioLR.
+        /// «X» se il nome è «X – qualcosa» con «qualcosa» tra quelli creati da IsoLR.
         func made(_ name: String, extra: Bool) -> String? {
             guard let r = name.range(of: " – ", options: .backwards) else { return nil }
             var tail = String(name[r.upperBound...])
@@ -287,7 +287,7 @@ final class SeparationJob: ObservableObject {
                 found.append(f)
                 if found.count >= limit { break }
             }
-            // Per ogni cartella, le canzoni di cui ci sono già le tracce di AudioLR (almeno due tracce)
+            // Per ogni cartella, le canzoni di cui ci sono già le tracce di IsoLR (almeno due tracce)
             var count: [String: Int] = [:]
             for f in found {
                 if let x = made(f.deletingPathExtension().lastPathComponent, extra: false) {
@@ -1157,7 +1157,7 @@ final class SeparationJob: ObservableObject {
         startNextInQueue()
     }
 
-    /// Un WAV per strumento, più la base senza voce, in Musica/AudioLR/<canzone>/.
+    /// Un WAV per strumento, più la base senza voce, in Musica/IsoLR/<canzone>/.
     nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL,
                                  into root: URL = Prefs.folder, format: OutputFormat = Prefs.format,
                                  instrumental: Bool = Prefs.makeInstrumental,

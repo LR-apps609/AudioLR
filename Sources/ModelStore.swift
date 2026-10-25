@@ -3,15 +3,30 @@ import CoreML
 
 // ════════════════════════════════════════════════════════════════════
 //  Il modello Demucs (HTDemucs, licenza MIT) si scarica la prima volta
-//  dalle «Release» di AudioLR (versione «modelli-1», non è un aggiornamento
+//  dalle «Release» di IsoLR (versione «modelli-1», non è un aggiornamento
 //  dell'app) e resta nella cartella di supporto. Poi tutto funziona senza internet.
 // ════════════════════════════════════════════════════════════════════
 
 enum Paths {
     static let home = FileManager.default.homeDirectoryForCurrentUser
     static let support = home.appendingPathComponent("Library/Application Support/AudioLR", isDirectory: true)
-    /// Dove finiscono le tracce separate: Musica/AudioLR/<canzone>/ (Musica non chiede permessi).
-    static let output = home.appendingPathComponent("Music/AudioLR", isDirectory: true)
+    /// Dove finiscono le tracce separate: Musica/IsoLR/<canzone>/ (Musica non chiede permessi).
+    static let output = home.appendingPathComponent("Music/IsoLR", isDirectory: true)
+    /// La cartella delle tracce delle versioni chiamate ancora AudioLR (fino alla 0.23).
+    static let legacyOutput = home.appendingPathComponent("Music/AudioLR", isDirectory: true)
+
+    /// IsoLR (0.24): Musica › AudioLR diventa Musica › IsoLR, una volta sola, con la cronologia che punta
+    /// ai nuovi percorsi. Se la cartella nuova c'è già, o lo spostamento non riesce, non si tocca niente.
+    @discardableResult
+    static func migrateOutput(from old: URL = legacyOutput, to new: URL = output, defaults: UserDefaults = .standard) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: new.path) else { return false }
+        do { try fm.moveItem(at: old, to: new) } catch { return false }
+        History.rebase(from: old.path, to: new.path, defaults: defaults)
+        // Chi aveva scelto proprio quella cartella nelle Impostazioni passa a quella nuova
+        if defaults.string(forKey: Prefs.folderKey) == old.path { defaults.set(new.path, forKey: Prefs.folderKey) }
+        return true
+    }
 }
 
 final class ModelStore: @unchecked Sendable {

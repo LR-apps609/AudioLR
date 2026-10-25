@@ -44,6 +44,7 @@ struct ContentView: View {
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
+    @State private var showPrivacy = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
     @Environment(\.openWindow) private var openWindow
@@ -160,7 +161,7 @@ struct ContentView: View {
             LogoMark(size: 38, animated: job.isBusy)
             VStack(alignment: .leading, spacing: 1) {
                 // Il nome non si accorcia mai: è il primo a cui si dà spazio
-                Text("AudioLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
+                Text("IsoLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
                 // Se lo spazio non basta (libreria aperta, finestra stretta) si accorcia invece di andare a capo
                 ViewThatFits(in: .horizontal) {
                     Text("Separa voce e strumenti di qualsiasi canzone")
@@ -189,23 +190,35 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .fixedSize()
                 .disabled(updateNotice.downloading)
-                .help("Hai la \(UpdateCheck.current): clic per scaricare e installare la \(rel.version). AudioLR si riapre da sola.")
+                .help("Hai la \(UpdateCheck.current): clic per scaricare e installare la \(rel.version). IsoLR si riapre da sola.")
                 .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
                 .transition(.scale.combined(with: .opacity))
             }
-            // Con poco spazio resta solo il lucchetto (il testo compare passandoci sopra)
-            Group {
+            // Con poco spazio resta solo il lucchetto. È un tasto: un clic spiega cosa vuol dire
+            // (i suggerimenti al passaggio del mouse su macOS compaiono in modo affidabile solo sui tasti)
+            Button { showPrivacy.toggle() } label: {
                 if compact {
                     Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.green)
                         .frame(width: 28, height: 24)
                         .background(Capsule().fill(Theme.green.opacity(0.14)))
                         .overlay(Capsule().strokeBorder(Theme.green.opacity(0.35)))
+                        .contentShape(Capsule())
                 } else {
-                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
+                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green).contentShape(Capsule())
                 }
             }
+            .buttonStyle(.plain)
             .help("Tutto sul tuo Mac: la canzone non viene caricata su internet")
             .accessibilityLabel("Tutto sul tuo Mac")
+            .popover(isPresented: $showPrivacy, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Tutto sul tuo Mac", systemImage: "lock.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
+                    Text("Le canzoni vengono separate qui, sul tuo Mac. Non vengono caricate su internet e nessuno le ascolta: nemmeno noi.")
+                        .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(width: 280)
+            }
             HStack(spacing: 2) {
                 toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
                     showLibrary.toggle()
@@ -965,7 +978,7 @@ struct WhatsNewSheet: View {
             HStack(spacing: 12) {
                 LogoMark(size: 44, animated: true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("AudioLR è aggiornata").font(.system(size: 18, weight: .bold, design: .rounded))
+                    Text("IsoLR è aggiornata").font(.system(size: 18, weight: .bold, design: .rounded))
                     Text("Versione \(UpdateCheck.current)").font(.system(size: 12)).foregroundStyle(Theme.brass)
                 }
             }

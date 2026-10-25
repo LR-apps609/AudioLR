@@ -27,13 +27,13 @@ enum FAQ {
 
     static let all: [Entry] = [
         Entry(topic: "Primi passi", question: "Come separo una canzone?",
-              answer: "Trascina il file nella finestra, oppure premi ⌘O e sceglilo. AudioLR crea le tracce di voce, batteria, basso, altri strumenti e la base senza voce. Puoi trascinare anche più canzoni o un album intero: vengono separate una dopo l'altra."),
+              answer: "Trascina il file nella finestra, oppure premi ⌘O e sceglilo. IsoLR crea le tracce di voce, batteria, basso, altri strumenti e la base senza voce. Puoi trascinare anche più canzoni o un album intero: vengono separate una dopo l'altra."),
         Entry(topic: "Primi passi", question: "Quali file posso usare?",
               answer: "MP3, M4A/AAC, WAV, AIFF, FLAC, ALAC e in generale ogni file audio che il Mac sa aprire. I file protetti da DRM (per esempio scaricati da Apple Music) non si possono aprire."),
         Entry(topic: "Primi passi", question: "Posso separare una cartella intera?",
-              answer: "Sì: trascina la cartella nella finestra, oppure scegli «Apri una canzone…» (⌘O) e seleziona la cartella. AudioLR mette in coda tutte le canzoni che contiene, anche nelle sottocartelle, in ordine di nome, e le separa una dopo l'altra mentre fai altro. Le tracce già create da AudioLR nella cartella vengono saltate."),
+              answer: "Sì: trascina la cartella nella finestra, oppure scegli «Apri una canzone…» (⌘O) e seleziona la cartella. IsoLR mette in coda tutte le canzoni che contiene, anche nelle sottocartelle, in ordine di nome, e le separa una dopo l'altra mentre fai altro. Le tracce già create da IsoLR nella cartella vengono saltate."),
         Entry(topic: "Primi passi", question: "Perché la prima volta ci mette di più?",
-              answer: "Con la versione completa (il file .dmg) i modelli sono già dentro l'app: al primo avvio AudioLR li installa e prepara il Neural Engine in sottofondo, una volta sola. Con la versione leggera, al primo uso AudioLR scarica i modelli di IA (circa 330 MB per Massima, 540 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
+              answer: "Con la versione completa (il file .dmg) i modelli sono già dentro l'app: al primo avvio IsoLR li installa e prepara il Neural Engine in sottofondo, una volta sola. Con la versione leggera, al primo uso IsoLR scarica i modelli di IA (circa 330 MB per Massima, 540 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
         Entry(topic: "Primi passi", question: "Dove ritrovo le canzoni già separate?",
               answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla): un clic riapre la separazione con il mixer, senza rifarla. Nella Cronologia (⌘Y, o il tasto con l'orologio in alto) trovi tutte le separazioni con data, qualità, durata, tempo impiegato, BPM e tonalità; doppio clic per riaprirne una."),
         Entry(topic: "Qualità", question: "Che differenza c'è tra Massima e Veloce?",
@@ -55,9 +55,9 @@ enum FAQ {
         Entry(topic: "Qualità", question: "Ci sono archi, fiati o synth separati?",
               answer: "Non ancora: oggi non esiste un modello libero abbastanza preciso per archi e fiati. Restano in «Altri strumenti». Appena ce ne sarà uno all'altezza, arriverà con un aggiornamento."),
         Entry(topic: "Mixer ed esportazione", question: "Posso avere le note in MIDI?",
-              answer: "Sì: dopo una separazione apri il menu «MIDI» in alto e scegli la traccia (voce, basso, chitarra, pianoforte…). AudioLR trova le note con Basic Pitch di Spotify, direttamente sul Mac, e salva un file .mid accanto alle tracce, al tempo della canzone: trascinalo in GarageBand o Logic. Funziona meglio sulle tracce con una nota per volta, come voce e basso."),
+              answer: "Sì: dopo una separazione apri il menu «MIDI» in alto e scegli la traccia (voce, basso, chitarra, pianoforte…). IsoLR trova le note con Basic Pitch di Spotify, direttamente sul Mac, e salva un file .mid accanto alle tracce, al tempo della canzone: trascinalo in GarageBand o Logic. Funziona meglio sulle tracce con una nota per volta, come voce e basso."),
         Entry(topic: "Mixer ed esportazione", question: "Posso togliere il mio strumento e suonarci sopra?",
-              answer: "Sì: nel mixer apri «Senza…» e scegli batteria, basso, chitarra o pianoforte. La tua parte sparisce e il resto della band suona. AudioLR ricorda l'ultimo strumento scelto: ⇧⌘K lo toglie o lo rimette in un attimo. Con «Esporta il mix» salvi la versione «Senza batteria» (o basso…) per esercitarti anche fuori dall'app. Con la Sala prove puoi anche rallentarla."),
+              answer: "Sì: nel mixer apri «Senza…» e scegli batteria, basso, chitarra o pianoforte. La tua parte sparisce e il resto della band suona. IsoLR ricorda l'ultimo strumento scelto: ⇧⌘K lo toglie o lo rimette in un attimo. Con «Esporta il mix» salvi la versione «Senza batteria» (o basso…) per esercitarti anche fuori dall'app. Con la Sala prove puoi anche rallentarla."),
         Entry(topic: "Mixer ed esportazione", question: "Come rallento un passaggio per impararlo?",
               answer: "Apri la Sala prove (⌥⌘P, o il tasto con la casetta nel trasporto). La velocità va dal 50% al 150% senza cambiare il tono; «Tono» sposta di semitoni senza cambiare la velocità. Per ripetere un passaggio premi A all'inizio e B alla fine (⌘[ e ⌘] mentre suona): il mixer torna da solo ad A. Velocità e tono valgono solo per l'ascolto, il mix esportato resta originale."),
         Entry(topic: "Mixer ed esportazione", question: "Come imparo un passaggio difficile un po' alla volta?",
@@ -65,15 +65,15 @@ enum FAQ {
         Entry(topic: "Mixer ed esportazione", question: "Posso tenere i cori nel karaoke?",
               answer: "Sì: dopo una separazione premi «Separa voce e cori» (⇧⌘V). La voce viene divisa in voce solista e cori; nel mixer compare la scorciatoia «Con i cori», che toglie solo la voce principale. La prima volta scarica un modello di circa 200 MB."),
         Entry(topic: "Mixer ed esportazione", question: "Cosa sono BPM e tonalità sotto il mixer?",
-              answer: "Dopo ogni separazione AudioLR stima il tempo (BPM, dalla batteria) e la tonalità (dagli strumenti, senza voce e batteria). Passa sopra con il mouse per vedere la sigla (es. Am) e il codice Camelot dei DJ (es. 8A). Se il tempo ti sembra la metà di quello giusto, è il doppio: succede con i brani molto veloci."),
+              answer: "Dopo ogni separazione IsoLR stima il tempo (BPM, dalla batteria) e la tonalità (dagli strumenti, senza voce e batteria). Passa sopra con il mouse per vedere la sigla (es. Am) e il codice Camelot dei DJ (es. 8A). Se il tempo ti sembra la metà di quello giusto, è il doppio: succede con i brani molto veloci."),
         Entry(topic: "Mixer ed esportazione", question: "Come salvo il mio mix?",
-              answer: "Premi «Esporta il mix» (⌘E): AudioLR salva quello che senti, con muto, solo e volumi, accanto alle tracce, nel formato scelto nelle Impostazioni."),
+              answer: "Premi «Esporta il mix» (⌘E): IsoLR salva quello che senti, con muto, solo e volumi, accanto alle tracce, nel formato scelto nelle Impostazioni."),
         Entry(topic: "Mixer ed esportazione", question: "Posso usare le tracce in Traktor o Mixxx?",
-              answer: "Sì: dal tasto «Esporta il mix» scegli «Esporta per DJ» (⌥⌘E). AudioLR crea «Canzone.stem.mp4», il formato Stem di Native Instruments: la canzone intera più batteria, basso, altri strumenti e voce, in AAC a 320 kbps. Traktor e Mixxx lo aprono con le quattro tracce; Musica e gli altri lettori suonano la canzone intera. In Impostazioni › Tracce puoi farlo creare a ogni separazione."),
+              answer: "Sì: dal tasto «Esporta il mix» scegli «Esporta per DJ» (⌥⌘E). IsoLR crea «Canzone.stem.mp4», il formato Stem di Native Instruments: la canzone intera più batteria, basso, altri strumenti e voce, in AAC a 320 kbps. Traktor e Mixxx lo aprono con le quattro tracce; Musica e gli altri lettori suonano la canzone intera. In Impostazioni › Tracce puoi farlo creare a ogni separazione."),
         Entry(topic: "Mixer ed esportazione", question: "Posso usare le tracce in GarageBand o Logic?",
               answer: "Sì: trascina una traccia dalla finestra direttamente in GarageBand, Logic, Ableton o nel Finder. Tutte le tracce hanno la stessa durata e partono insieme, quindi restano allineate."),
         Entry(topic: "File e cartelle", question: "Dove vengono salvate le tracce?",
-              answer: "Di serie in Musica › AudioLR, una cartella per canzone. Puoi cambiarla in Impostazioni › Tracce. ⇧⌘R mostra nel Finder la cartella della canzone aperta."),
+              answer: "Di serie in Musica › IsoLR, una cartella per canzone. Puoi cambiarla in Impostazioni › Tracce. ⇧⌘R mostra nel Finder la cartella della canzone aperta."),
         Entry(topic: "File e cartelle", question: "Quale formato scelgo?",
               answer: "WAV 24 bit è il più fedele e va bene ovunque. WAV 16 bit occupa meno. FLAC e ALAC sono senza perdita e più leggeri (ALAC si apre bene in Musica e GarageBand)."),
         Entry(topic: "File e cartelle", question: "Quanto spazio occupano i modelli? Posso eliminarli?",
@@ -81,21 +81,21 @@ enum FAQ {
         Entry(topic: "Velocità e motore", question: "Perché ci mette tanto?",
               answer: "La separazione è un calcolo pesante che avviene tutto sul tuo Mac. Sui Mac con chip Apple usa il Neural Engine ed è molto più rapida che sui Mac Intel. Veloce è circa 4 volte più rapida di Massima. In «Dettagli» (⌘I) vedi quanto tempo ha richiesto ogni fase."),
         Entry(topic: "Velocità e motore", question: "Cos'è «Prova il motore»?",
-              answer: "Al primo uso di ogni modello AudioLR confronta Neural Engine e grafica su un pezzo della canzone e usa il più preciso. In Impostazioni › Motore puoi rifare la prova."),
+              answer: "Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone e usa il più preciso. In Impostazioni › Motore puoi rifare la prova."),
         Entry(topic: "Velocità e motore", question: "Posso usare il Mac mentre separa?",
               answer: "Sì. Il Mac può scaldarsi e la ventola girare: è normale. Puoi annullare in qualsiasi momento con ⌘."),
         Entry(topic: "Aggiornamenti e privacy", question: "Le mie canzoni vengono caricate su internet?",
               answer: "No. Tutto il calcolo avviene sul tuo Mac. Internet serve solo per scaricare i modelli la prima volta e per controllare gli aggiornamenti."),
-        Entry(topic: "Aggiornamenti e privacy", question: "Come si aggiorna AudioLR?",
-              answer: "AudioLR controlla da sola all'apertura e ogni poche ore: quando esce una versione nuova compare in alto a destra il tasto «Aggiornamento disponibile», un clic e si installa. Puoi anche controllare a mano dal menu AudioLR › Controlla aggiornamenti…, oppure fare doppio clic su un file .audiolr: si installa in pochi secondi e l'app si riapre."),
+        Entry(topic: "Aggiornamenti e privacy", question: "Come si aggiorna IsoLR?",
+              answer: "IsoLR controlla da sola all'apertura e ogni poche ore: quando esce una versione nuova compare in alto a destra il tasto «Aggiornamento disponibile», un clic e si installa. Puoi anche controllare a mano dal menu IsoLR › Controlla aggiornamenti…, oppure fare doppio clic su un file .audiolr: si installa in pochi secondi e l'app si riapre."),
         Entry(topic: "Aggiornamenti e privacy", question: "Posso usare le tracce di canzoni famose?",
               answer: "Per uso personale (studio, pratica, karaoke) sì. Pubblicare o vendere tracce di brani altrui richiede il permesso di chi ne ha i diritti."),
         Entry(topic: "Se qualcosa non va", question: "La separazione si è fermata con un errore",
               answer: "Premi «Riprova». Se l'errore torna, controlla di avere almeno 2 GB liberi sul disco e prova con Veloce. Poi usa «Segnala un bug» (⌥⌘B): il rapporto contiene già le informazioni del Mac."),
         Entry(topic: "Se qualcosa non va", question: "Il download dei modelli non parte",
               answer: "Serve internet solo la prima volta. Controlla la connessione e riprova; se sei in una rete aziendale o scolastica, GitHub potrebbe essere bloccato."),
-        Entry(topic: "Se qualcosa non va", question: "macOS dice che AudioLR non si può aprire",
-              answer: "Clic destro sull'app › Apri › Apri. Serve una volta sola, perché AudioLR non viene dall'App Store."),
+        Entry(topic: "Se qualcosa non va", question: "macOS dice che IsoLR non si può aprire",
+              answer: "Clic destro sull'app › Apri › Apri. Serve una volta sola, perché IsoLR non viene dall'App Store."),
     ]
 
     /// Le domande che contengono tutte le parole cercate (nella domanda, nella risposta o nell'argomento).
@@ -122,7 +122,7 @@ struct FAQView: View {
                 LogoMark(size: 34)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Domande frequenti").font(.system(size: 18, weight: .bold, design: .rounded))
-                    Text("Come si usa AudioLR, in breve").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("Come si usa IsoLR, in breve").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 TextField("Cerca una domanda", text: $search)
@@ -243,7 +243,7 @@ struct BugReport {
         let p = ProcessInfo.processInfo
         let job = SeparationJob.shared
         var lines = [
-            "AudioLR \(UpdateCheck.current) (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))",
+            "IsoLR \(UpdateCheck.current) (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))",
             "macOS \(p.operatingSystemVersionString)",
             "Mac: \(sysctl("hw.model")) · \(chip())",
             String(format: "Memoria: %.0f GB · processori: %d", Double(p.physicalMemory) / 1_073_741_824, p.activeProcessorCount),

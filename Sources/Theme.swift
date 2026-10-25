@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 // ════════════════════════════════════════════════════════════════════
-//  Colori di AudioLR: uno studio di registrazione. Di giorno carta crema,
+//  Colori di IsoLR: uno studio di registrazione. Di giorno carta crema,
 //  di notte inchiostro-prugna come l'icona; ottone per i comandi e un
 //  colore per ogni strumento (gli stessi delle barre dell'icona).
 // ════════════════════════════════════════════════════════════════════

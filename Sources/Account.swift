@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 // ════════════════════════════════════════════════════════════════════
-//  Account: chi usa AudioLR, il piano, i numeri della libreria e le
+//  Account: chi usa IsoLR, il piano, i numeri della libreria e le
 //  altre app della famiglia LR. Le Impostazioni restano per le scelte
 //  su come lavora l'app; qui c'è tutto quello che riguarda te.
 // ════════════════════════════════════════════════════════════════════
@@ -18,8 +18,8 @@ enum LRFamily {
     }
 
     static let apps: [App] = [
-        App(name: "AudioLR", bundleID: "it.ledion.AudioLR", symbol: "waveform", detail: "Separa voce e strumenti"),
-        App(name: "OrbitLR", bundleID: "it.ledion.OrbitLR", symbol: "circle.circle", detail: "La sorella di AudioLR"),
+        App(name: "IsoLR", bundleID: "it.ledion.AudioLR", symbol: "waveform", detail: "Separa voce e strumenti"),
+        App(name: "OrbitLR", bundleID: "it.ledion.OrbitLR", symbol: "circle.circle", detail: "La sorella di IsoLR"),
     ]
 
     static func installed(_ app: App) -> URL? {

@@ -1,0 +1,3 @@
+/* Il nome dell'app nel Finder, nel Dock e nei menu: IsoLR (il file resta AudioLR.app per gli aggiornamenti) */
+"CFBundleDisplayName" = "IsoLR";
+"CFBundleName" = "IsoLR";

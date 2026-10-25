@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-/// Nel Dock: una barra sotto l'icona mentre AudioLR separa, e alla fine la finestra torna in primo piano.
+/// Nel Dock: una barra sotto l'icona mentre IsoLR separa, e alla fine la finestra torna in primo piano.
 @MainActor
 final class DockProgress {
     static let shared = DockProgress()
@@ -48,7 +48,7 @@ final class DockProgress {
             tile.contentView = nil
             tile.display()
         }
-        // Finita (anche l'ultima della coda): AudioLR torna davanti, con la finestra dei risultati
+        // Finita (anche l'ultima della coda): IsoLR torna davanti, con la finestra dei risultati
         if wasWorking, phase == .done, queueEmpty {
             NSApp.activate()
             if let w = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }) {

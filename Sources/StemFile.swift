@@ -10,7 +10,7 @@ import AVFoundation
 // ════════════════════════════════════════════════════════════════════
 
 enum StemFile {
-    /// Le quattro tracce nell'ordine del formato, con le chiavi di AudioLR che finiscono in ognuna.
+    /// Le quattro tracce nell'ordine del formato, con le chiavi di IsoLR che finiscono in ognuna.
     static let layout: [(name: String, color: String, keys: Set<String>)] = [
         ("Drums", "#C48E2C", Set(["drums"] + DrumSplitter.parts)),
         ("Bass", "#8C6AAF", ["bass"]),

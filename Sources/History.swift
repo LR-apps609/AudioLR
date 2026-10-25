@@ -33,6 +33,21 @@ enum History {
         return items.filter(\.exists)
     }
 
+    /// Dopo lo spostamento di una cartella: i percorsi che iniziano con `old` passano a `new`.
+    static func rebase(from old: String, to new: String, defaults: UserDefaults = .standard) {
+        guard let data = defaults.data(forKey: key),
+              var items = try? JSONDecoder().decode([HistoryItem].self, from: data) else { return }
+        let prefix = old.hasSuffix("/") ? old : old + "/"
+        for i in items.indices where items[i].folder == old || items[i].folder.hasPrefix(prefix) {
+            let tail = items[i].folder.dropFirst(old.count)
+            let moved = HistoryItem(id: items[i].id, title: items[i].title, folder: new + tail, date: items[i].date,
+                                    quality: items[i].quality, duration: items[i].duration, seconds: items[i].seconds,
+                                    engine: items[i].engine, analysis: items[i].analysis)
+            items[i] = moved
+        }
+        if let out = try? JSONEncoder().encode(items) { defaults.set(out, forKey: key) }
+    }
+
     static func add(song: URL?, folder: URL, quality: Quality, duration: Double? = nil, seconds: Double? = nil,
                     engine: String? = nil, analysis: SongAnalysis? = nil, defaults: UserDefaults = .standard) {
         let title = song?.deletingPathExtension().lastPathComponent ?? folder.lastPathComponent
@@ -54,7 +69,7 @@ enum History {
         if let data = try? JSONEncoder().encode(items) { defaults.set(data, forKey: key) }
     }
 
-    /// Le tracce di una cartella di AudioLR («Canzone – Voce.wav»…), riconosciute dal nome.
+    /// Le tracce di una cartella di IsoLR («Canzone – Voce.wav»…), riconosciute dal nome.
     static func stems(in folder: URL, title: String) -> [(key: String, url: URL)] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         var found: [(key: String, url: URL)] = []
