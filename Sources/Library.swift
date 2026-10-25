@@ -184,6 +184,13 @@ struct DetailsView: View {
     @EnvironmentObject private var job: SeparationJob
 
     var body: some View {
+        // Più lunghi dello schermo sui Mac piccoli: scorrono invece di essere tagliati
+        ScrollView { details }
+            .frame(width: 320)
+            .frame(maxHeight: 640)
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(job.title).font(.system(size: 15, weight: .bold, design: .rounded)).lineLimit(2)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
@@ -272,7 +279,6 @@ struct DetailsView: View {
             }
         }
         .padding(18)
-        .frame(width: 320)
     }
 
     @ViewBuilder

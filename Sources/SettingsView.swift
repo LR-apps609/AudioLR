@@ -16,7 +16,8 @@ struct SettingsView: View {
             UpdateSettings().tabItem { Label("Aggiornamenti", systemImage: "arrow.down.circle") }
             AboutSettings().tabItem { Label("Informazioni", systemImage: "info.circle") }
         }
-        .frame(width: 520)
+        // Su macOS 26 le cinque schede in alto hanno bisogno di più spazio: più stretta, finirebbero nascoste dietro «»»
+        .frame(width: 660)
         .tint(Theme.brass)
     }
 }
