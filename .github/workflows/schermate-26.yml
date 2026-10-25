@@ -1,0 +1,41 @@
+# Le schermate dell'app anche su macOS 26 (Tahoe): lì tasti e controlli sono più grandi che su macOS 15,
+# e un controllo stretto a forza si disegna sopra i vicini. Solo i test delle schermate, con nomi «-26».
+name: Schermate macOS 26
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Sources/**, Tests/ScreenshotTests.swift, .github/workflows/schermate-26.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  schermate:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Xcode più recente disponibile
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version; sw_vers
+      - name: Progetto
+        run: brew install xcodegen && xcodegen generate
+      - name: Schermate
+        run: |
+          xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+            -only-testing:AudioLRTests/ScreenshotTests -derivedDataPath build-test \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > test.log 2>&1 || true
+          grep -E "Test Case .*(passed|failed)|Executed" test.log | tail -n 30 || true
+          ls /tmp/audiolr-schermate/*.png | wc -l
+      - name: Nella versione «schermate»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd /tmp/audiolr-schermate || exit 0
+          for f in *.png; do mv "$f" "${f%.png}-26.png"; done
+          gh release upload schermate *-26.png --clobber
+          echo "::notice::Schermate macOS 26: $(ls *-26.png | wc -l | tr -d ' ')"

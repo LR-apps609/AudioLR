@@ -283,7 +283,10 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 360)
+                // Mai più stretto delle sue parole (testo grande nelle Impostazioni di Sistema compreso):
+                // un controllo costretto in poco spazio disegna fuori dai bordi, sopra i vicini
+                .frame(minWidth: 360)
+                .fixedSize()
                 Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
@@ -623,7 +626,45 @@ struct ContentView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
+    /// La barra del mixer: se Tutto/Karaoke/Solo voce non ci stanno affiancati, diventano un menu.
+    /// Niente viene mai stretto sotto la misura delle sue parole (e quindi niente si sovrappone).
     private var transportBar: some View {
+        ViewThatFits(in: .horizontal) {
+            transportRow(segmented: true)
+            transportRow(segmented: false)
+        }
+    }
+
+    @ViewBuilder
+    private func presetControl(segmented: Bool) -> some View {
+        let presets = MixState.Preset.allCases.filter { $0 != .backing || mixer.keys.contains("lead") }
+        if segmented {
+            Picker("Scorciatoie", selection: Binding(
+                get: { mixer.state.preset?.rawValue ?? "" },
+                set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
+                ForEach(presets) { p in Text(p.title).tag(p.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(minWidth: compact ? 0 : (mixer.keys.contains("lead") ? 340 : 250))
+            .fixedSize()
+        } else {
+            Menu {
+                ForEach(presets) { p in
+                    Button { mixer.state.apply(p) } label: {
+                        if mixer.state.preset == p { Label(p.title, systemImage: "checkmark") } else { Text(p.title) }
+                    }
+                }
+            } label: {
+                Text(mixer.state.preset?.title ?? "Mix personale").lineLimit(1)
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help("Tutto, Karaoke, Solo voce")
+        }
+    }
+
+    private func transportRow(segmented: Bool) -> some View {
         HStack(spacing: 12) {
             Button {
                 player.stop()
@@ -651,14 +692,7 @@ struct ContentView: View {
                 .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
                 .accessibilityLabel("Sala prove")
-            Picker("Scorciatoie", selection: Binding(
-                get: { mixer.state.preset?.rawValue ?? "" },
-                set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
-                ForEach(MixState.Preset.allCases.filter { $0 != .backing || mixer.keys.contains("lead") }) { p in Text(p.title).tag(p.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: (mixer.keys.contains("lead") ? 340 : 250) * (compact ? 0.72 : 1))
+            presetControl(segmented: segmented)
             withoutMenu
             Spacer()
             Menu {
