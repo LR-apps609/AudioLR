@@ -180,6 +180,16 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Mix")
     }
 
+    /// Il tempo che manca parte dal primo avanzamento: l'apertura lenta dei modelli non gonfia la stima.
+    func testPaceIgnoresModelOpening() {
+        let p = SeparationJob.Pace()
+        let t0 = Date()
+        XCTAssertNil(p.remaining(at: 0.01, now: t0.addingTimeInterval(300)), "il primo pezzo arriva dopo 5 minuti di apertura")
+        // Poi 10 s per ogni 10%: da 0,01 a 0,21 in 20 s, mancano 0,79 → 79 s (non i 1.500 s di prima)
+        let left = p.remaining(at: 0.21, now: t0.addingTimeInterval(320))
+        XCTAssertEqual(left ?? 0, 79, accuracy: 0.5)
+    }
+
     /// Versione completa: i modelli inclusi nell'app si copiano una volta sola, senza toccare quelli già presenti.
     func testInstallBundledModels() throws {
         let fm = FileManager.default

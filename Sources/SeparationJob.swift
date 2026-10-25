@@ -453,9 +453,11 @@ final class SeparationJob: ObservableObject {
                 let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : secondName == nil ? 0.45 : 0.6
                 // Con due modelli voce, metà della parte della voce a ognuno
                 let firstShare = secondName == nil ? 1.0 : 0.5
+                // Il tempo che manca si misura dal primo pezzo calcolato, non dal clic: l'apertura dei modelli
+                // (a volte minuti la prima volta) non deve gonfiare la stima di tutta la canzone
+                let pace = Pace()
                 func report(_ total: Double) {
-                    let elapsed = Date().timeIntervalSince(began)
-                    let left: Double? = total > 0.02 ? elapsed / total * (1 - total) : nil
+                    let left = pace.remaining(at: total)
                     Task { @MainActor in
                         // Un aggiornamento in ritardo non deve riaprire una separazione già finita o annullata
                         guard case .separating = self?.phase, self?.cancelled === cancel else { return }
@@ -665,6 +667,20 @@ final class SeparationJob: ObservableObject {
                 await self?.set(cancel, .failed(msg))
                 await self?.afterFailure(cancel)
             }
+        }
+    }
+
+    /// La stima del tempo che manca: dalla velocità misurata a partire dal primo avanzamento.
+    final class Pace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var first: (time: Date, total: Double)?
+        /// I secondi che mancano a `total` (0…1), oppure nil finché non c'è abbastanza da misurare.
+        func remaining(at total: Double, now: Date = Date()) -> Double? {
+            lock.lock(); defer { lock.unlock() }
+            guard let f = first else { first = (now, total); return nil }
+            let done = total - f.total, elapsed = now.timeIntervalSince(f.time)
+            guard done > 0.01, elapsed > 1 else { return nil }
+            return elapsed / done * (1 - total)
         }
     }
 
