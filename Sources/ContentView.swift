@@ -51,6 +51,31 @@ struct ContentView: View {
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
 
     var body: some View {
+        // La larghezza vera della finestra (non quella del contenuto, che potrebbe essere più larga):
+        // da qui si decide se i tasti mostrano solo l'icona
+        GeometryReader { g in
+            content
+                .frame(width: g.size.width, height: g.size.height)
+                .onChange(of: g.size.width, initial: true) { _, w in mainWidth = w - (showLibrary ? 237 : 0) }
+                .onChange(of: showLibrary) { _, lib in
+                    mainWidth = g.size.width - (lib ? 237 : 0)
+                    widenIfNeeded(library: lib)
+                }
+        }
+        // Con la libreria aperta serve più spazio: la finestra non si stringe oltre il punto in cui i tasti escono
+        .frame(minWidth: showLibrary ? 940 : 700)
+    }
+
+    /// Aprendo la libreria in una finestra stretta, la finestra si allarga invece di tagliare il contenuto.
+    private func widenIfNeeded(library: Bool) {
+        let need: CGFloat = library ? 940 : 700
+        guard let w = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain && $0.frame.width < need }) else { return }
+        var f = w.frame
+        f.size.width = need
+        w.setFrame(f, display: true, animate: true)
+    }
+
+    private var content: some View {
         HStack(spacing: 0) {
             if showLibrary {
                 LibraryView()
@@ -60,8 +85,6 @@ struct ContentView: View {
             main
         }
         .animation(.easeInOut(duration: 0.2), value: showLibrary)
-        // Con la libreria aperta serve più spazio: la finestra non si stringe oltre il punto in cui i tasti escono
-        .frame(minWidth: showLibrary ? 940 : 700)
         .background(StudioBackground())
         .foregroundStyle(Theme.ink)
         .dropDestination(for: URL.self) { urls, _ in
@@ -128,7 +151,6 @@ struct ContentView: View {
             footer
         }
         .padding(22)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { mainWidth = $0 }
     }
 
     // MARK: Testata
@@ -185,7 +207,7 @@ struct ContentView: View {
             .help("Tutto sul tuo Mac: la canzone non viene caricata su internet")
             .accessibilityLabel("Tutto sul tuo Mac")
             HStack(spacing: 2) {
-                toolButton(showLibrary ? "sidebar.left" : "sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
+                toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
                     showLibrary.toggle()
                 }
                 toolButton("questionmark.circle", help: "Come si usa") { showGuide = true }
@@ -261,7 +283,8 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
+                // Invio avvia la separazione, ma non mentre si scrive nella ricerca della libreria
+                .keyboardShortcut(typing.typing ? nil : .defaultAction)
                 .help("Avvia la separazione con la qualità scelta (Invio)")
             }
             // Primo avvio: modelli che si installano e Neural Engine che si prepara (si può già separare)
@@ -542,11 +565,13 @@ struct ContentView: View {
     /// Sala prove: velocità, tono, un passaggio da ripetere.
     private var practiceBar: some View {
         HStack(spacing: 14) {
-            Label("Sala prove", systemImage: "music.note.house").font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(Theme.brass)
+            if !compact {
+                Label("Sala prove", systemImage: "music.note.house").font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.brass)
+            }
             HStack(spacing: 6) {
                 Image(systemName: "tortoise").font(.system(size: 11)).foregroundStyle(.secondary)
-                Slider(value: $mixer.rate, in: 0.5...1.5, step: 0.05).frame(width: 120)
+                Slider(value: $mixer.rate, in: 0.5...1.5, step: 0.05).frame(width: compact ? 90 : 120)
                     .accessibilityLabel("Velocità")
                 Image(systemName: "hare").font(.system(size: 11)).foregroundStyle(.secondary)
                 Text("\(Int((mixer.rate * 100).rounded()))%").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
@@ -569,7 +594,7 @@ struct ContentView: View {
             }
             .controlSize(.small)
             Toggle(isOn: $mixer.ramp) {
-                Text(mixer.ramp ? "Rampa \(Int((MixPlayer.rampStart * 100).rounded()))% → \(Int((MixPlayer.rampTarget * 100).rounded()))%" : "Rampa")
+                Text(mixer.ramp ? (compact ? "" : "Rampa ") + "\(Int((MixPlayer.rampStart * 100).rounded()))→\(Int((MixPlayer.rampTarget * 100).rounded()))%" : "Rampa")
                     .font(.system(size: 11.5, weight: .medium))
             }
             .toggleStyle(.button).controlSize(.small)
@@ -603,6 +628,7 @@ struct ContentView: View {
             // Con la ripetizione attiva si controlla più spesso, per tornare ad A senza pause
             TimelineView(.periodic(from: .now, by: mixer.isLooping ? 0.04 : 0.25)) { _ in
                 Text("\(formatTime(mixer.position)) / \(formatTime(mixer.duration))")
+                    .fixedSize()
                     .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(.secondary)
                     .onAppear { mixer.tick() }
                     .task(id: Int(mixer.position * (mixer.isLooping ? 25 : 4))) { mixer.tick() }
@@ -619,7 +645,7 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: (mixer.keys.contains("lead") ? 340 : 250) * (compact ? 0.8 : 1))
+            .frame(width: (mixer.keys.contains("lead") ? 340 : 250) * (compact ? 0.72 : 1))
             withoutMenu
             Spacer()
             Menu {
@@ -768,12 +794,14 @@ struct ContentView: View {
         } label: {
             Label(mixer.state.without?.without ?? "Senza…", systemImage: "music.note.list")
                 .lineLimit(1)
-                .labelStyle(compact && mixer.state.without == nil ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                // Con poco spazio solo l'icona, colorata quando uno strumento è tolto (il nome compare passandoci sopra)
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .foregroundStyle(compact && mixer.state.without != nil ? Theme.brass : Theme.ink)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(available.isEmpty)
-        .help("Togli la tua parte e suonaci sopra (⇧⌘K: l'ultimo strumento scelto)")
+        .help((mixer.state.without.map { $0.without + " · " } ?? "") + "Togli la tua parte e suonaci sopra (⇧⌘K: l'ultimo strumento scelto)")
         .accessibilityLabel("Senza il mio strumento")
     }
 

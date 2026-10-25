@@ -108,7 +108,6 @@ struct AudioLRCommands: Commands {
                 .keyboardShortcut("k", modifiers: [.command, .shift])
                 .disabled(job.phase != .done)
             Divider()
-            Divider()
             Toggle("Sala prove", isOn: $showPractice)
                 .keyboardShortcut("p", modifiers: [.command, .option])
             Button("Inizio del passaggio da ripetere") { post(.audiolrLoop, "A") }

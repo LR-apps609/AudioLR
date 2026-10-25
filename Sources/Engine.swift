@@ -121,7 +121,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
         case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
-        case .studio: return "Ogni traccia da una squadra di modelli: la voce da tre, gli strumenti da tre · la più pulita, la più lenta"
+        case .studio: return "Ogni traccia da una squadra di modelli: la voce da tre, gli strumenti da tre o quattro · la più pulita, la più lenta"
         }
     }
 

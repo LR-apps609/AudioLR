@@ -13,7 +13,8 @@ final class DockProgress {
     func start() {
         let job = SeparationJob.shared
         job.$phase
-            .receive(on: RunLoop.main)
+            // Senza ritardo: il valore arriva prima che parta la canzone successiva della coda,
+            // così «la coda è vuota» è vero solo alla fine dell'ultima
             .sink { [weak self] phase in self?.update(phase, queueEmpty: job.queue.isEmpty) }
             .store(in: &bag)
     }
@@ -22,8 +23,8 @@ final class DockProgress {
     nonisolated static func fraction(_ phase: SeparationJob.Phase) -> Double? {
         switch phase {
         case .downloading(let p): return 0.02 + 0.08 * min(max(p, 0), 1)
-        case .reading: return 0.02
-        case .tuning: return 0.05
+        // Dopo lo scaricamento la barra non torna indietro
+        case .reading, .tuning: return 0.10
         case .separating(let p): return 0.1 + 0.86 * min(max(p, 0), 1)
         case .saving: return 0.97
         case .idle, .done, .failed: return nil

@@ -38,6 +38,8 @@ struct LibraryView: View {
                 .controlSize(.small)
                 .focused($searchFocused)
                 .onChange(of: searchFocused) { _, f in TypingFocus.shared.typing = f }
+                // Nascondendo la libreria mentre si scrive, la barra spaziatrice torna a far suonare
+                .onDisappear { TypingFocus.shared.typing = false }
                 .onExitCommand { searchFocused = false }
                 // All'apertura la ricerca non deve prendersi il cursore (e il riquadro acceso)
                 .onAppear { DispatchQueue.main.async { searchFocused = false; NSApp.keyWindow?.makeFirstResponder(nil) } }
