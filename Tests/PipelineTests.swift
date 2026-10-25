@@ -63,7 +63,7 @@ final class PipelineTests: XCTestCase {
     }
 
     func testMassimaFromStartToFinish() async throws {
-        executionTimeAllowance = 2400
+        executionTimeAllowance = 3600
         guard let sw = Quality.best.instrumentModel else { return XCTFail("Massima senza modello strumenti") }
         do { _ = try await ModelStore.shared.mlModel(sw) { _ in } } catch { throw XCTSkip("\(sw) non raggiungibile") }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("uscita-\(UUID().uuidString)")

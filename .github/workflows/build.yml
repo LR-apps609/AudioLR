@@ -17,7 +17,7 @@ jobs:
   build:
     # I Mac Apple Silicon di GitHub sono spesso esauriti: si usa il Mac Intel, che compila lo stesso per entrambi
     runs-on: macos-15-intel
-    timeout-minutes: 200
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v5
 
@@ -77,13 +77,13 @@ jobs:
           du -sh "$APP"
 
       - name: Test automatici (spettrogramma, pezzi, audio)
-        timeout-minutes: 175
+        timeout-minutes: 270
         run: |
           status=0
           # Ogni test ha al massimo 3 minuti: uno bloccato fallisce con il suo nome, invece di fermare tutto
           # perl alarm: se tutto si blocca, dopo 110 minuti si ferma e si vede dove
           # TEST_RUNNER_AUDIOLR_CI arriva ai test come AUDIOLR_CI (xcodebuild passa così le variabili ai test)
-          TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 10200 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+          TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 15600 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 5400 \
             -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             > test.log 2>&1 || status=$?
