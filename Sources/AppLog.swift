@@ -40,7 +40,9 @@ enum AppLog {
 
     /// Le ultime righe, per una segnalazione.
     static func tail(_ lines: Int = 120) -> String {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return "" }
+        // Lettura tollerante: un registro tagliato a metà di una lettera non deve far perdere tutto
+        guard let data = try? Data(contentsOf: url) else { return "" }
+        let text = String(decoding: data.suffix(64_000), as: UTF8.self)
         return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
     }
 }

@@ -96,7 +96,7 @@ final class ScreenshotTests: XCTestCase {
     func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 520, height: 470) }
     func testShotAccount() throws { try shot(AccountView().environmentObject(SeparationJob.shared), "5-account", width: 480, height: 600) }
     func testShotFAQ() throws { try skipOnVirtualMac(); try shot(FAQView(), "6-domande", width: 620, height: 620) }
-    func testShotBugReport() throws { try shot(BugReportView(), "7-segnala", width: 520, height: 600) }
+    func testShotBugReport() throws { try skipOnVirtualMac(); try shot(BugReportView(), "7-segnala", width: 520, height: 600) }
     func testShotGuide() throws { try skipOnVirtualMac(); try shot(GuideView(), "8-guida", width: 330, height: 640) }
     func testShotHistory() throws { try shot(HistoryView().environmentObject(SeparationJob.shared), "9-cronologia", width: 860, height: 520) }
     /// La finestra alla misura minima, con la libreria aperta: niente parole spezzate
