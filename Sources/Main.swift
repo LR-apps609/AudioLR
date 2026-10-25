@@ -154,6 +154,11 @@ struct AudioLRCommands: Commands {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Tornando su AudioLR dopo tanto tempo, il tasto dell'aggiornamento si rinfresca.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in UpdateCheck.checkIfStale() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         UpdateCheck.autoCheckSoon()          // all'avvio e ogni 3 ore, in silenzio: tasto in alto a destra
         Prefs.applyAppearance()

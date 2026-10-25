@@ -102,6 +102,32 @@ final class ScreenshotTests: XCTestCase {
     /// La finestra alla misura minima, con la libreria aperta: niente parole spezzate
     func testShotStartNarrow() throws {
         try skipOnVirtualMac()
-        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 860, height: 600)
+        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 940, height: 600)
+    }
+
+    /// Il tasto «Aggiornamento disponibile» nella testata: alla misura minima e a quella di partenza,
+    /// all'inizio e con i risultati. Niente deve uscire dalla finestra.
+    func testShotUpdateButton() throws {
+        let u = URL(string: "https://example.com/a.audiolr")!
+        UpdateNotice.shared.available = UpdateCheck.Release(version: "0.23.1", asset: u, page: u)
+        defer { UpdateNotice.shared.available = nil }
+        try shot(ContentView().environmentObject(SeparationJob.shared), "10-aggiornamento-stretta", width: 940, height: 600)
+        let job = SeparationJob.shared
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.reset() }
+        job.showcase(title: "TENDER_WIP_2 versione lunga del titolo", stems: stems, folder: dir, quality: .studio, duration: 280,
+                     analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8), elapsed: 536,
+                     engine: "Grafica (scelta nelle Impostazioni)", timings: [])
+        try shot(ContentView().environmentObject(job), "11-aggiornamento-risultati-stretta", width: 940, height: 640)
+        try shot(ContentView().environmentObject(job), "12-aggiornamento-risultati", width: 1020, height: 680)
+    }
+
+    /// Una canzone trascinata in attesa di «Separa».
+    func testShotPending() throws {
+        let job = SeparationJob.shared
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.clearPending() }
+        job.prepare([stems[0].url])
+        try shot(ContentView().environmentObject(job), "13-canzone-pronta", width: 940, height: 640)
     }
 }

@@ -137,21 +137,26 @@ struct ContentView: View {
         HStack(spacing: 12) {
             LogoMark(size: 38, animated: job.isBusy)
             VStack(alignment: .leading, spacing: 1) {
-                Text("AudioLR").font(.system(size: 22, weight: .bold, design: .rounded))
+                // Il nome non si accorcia mai: è il primo a cui si dà spazio
+                Text("AudioLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
                 // Se lo spazio non basta (libreria aperta, finestra stretta) si accorcia invece di andare a capo
                 ViewThatFits(in: .horizontal) {
                     Text("Separa voce e strumenti di qualsiasi canzone")
                     Text("Voce e strumenti separati")
+                    Text("")
                 }
                 .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
             }
-            Spacer()
+            .layoutPriority(1)
+            Spacer(minLength: 8)
             // Versione nuova: un tasto ben visibile, un clic e si installa
             if let rel = updateNotice.available {
                 Button { Task { await UpdateCheck.installNow(rel) } } label: {
                     HStack(spacing: 6) {
                         if updateNotice.downloading { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.down.circle.fill") }
-                        Text(updateNotice.downloading ? "Scarico la \(rel.version)…" : "Aggiornamento disponibile · \(rel.version)")
+                        // Con poco spazio il testo si accorcia: il tasto resta sempre visibile e intero
+                        Text(updateNotice.downloading ? (compact ? rel.version : "Scarico la \(rel.version)…")
+                             : compact ? "Aggiorna · \(rel.version)" : "Aggiornamento disponibile · \(rel.version)")
                             .lineLimit(1)
                     }
                     .font(.system(size: 12.5, weight: .semibold))
@@ -166,8 +171,19 @@ struct ContentView: View {
                 .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
                 .transition(.scale.combined(with: .opacity))
             }
-            Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
-                .help("La canzone non viene caricata su internet")
+            // Con poco spazio resta solo il lucchetto (il testo compare passandoci sopra)
+            Group {
+                if compact {
+                    Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.green)
+                        .frame(width: 28, height: 24)
+                        .background(Capsule().fill(Theme.green.opacity(0.14)))
+                        .overlay(Capsule().strokeBorder(Theme.green.opacity(0.35)))
+                } else {
+                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
+                }
+            }
+            .help("Tutto sul tuo Mac: la canzone non viene caricata su internet")
+            .accessibilityLabel("Tutto sul tuo Mac")
             HStack(spacing: 2) {
                 toolButton(showLibrary ? "sidebar.left" : "sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
                     showLibrary.toggle()

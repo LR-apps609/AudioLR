@@ -300,7 +300,19 @@ enum UpdateCheck {
     @MainActor
     static func quietCheck() async {
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
-        if let rel = worthShowing(try? await latest(), current: current) { UpdateNotice.shared.available = rel }
+        // Senza risposta (niente internet) il tasto resta com'era; con una risposta si aggiorna sempre,
+        // così dopo ore di app aperta mostra l'ultima versione uscita e non una vecchia
+        guard let found = try? await latest() else { return }
+        UpdateNotice.shared.available = worthShowing(found, current: current)
+    }
+
+    /// Quando si torna su AudioLR: se l'ultimo controllo è di più di 30 minuti fa, se ne fa uno nuovo.
+    @MainActor
+    static func checkIfStale(now: Date = Date()) {
+        guard UserDefaults.standard.object(forKey: autoKey) as? Bool != false else { return }
+        let last = UserDefaults.standard.double(forKey: lastKey)
+        guard now.timeIntervalSince1970 - last > 30 * 60 else { return }
+        Task { await quietCheck() }
     }
 
     /// Il tasto compare solo per una versione davvero più nuova di quella installata.
@@ -319,7 +331,13 @@ enum UpdateCheck {
         }
         UpdateNotice.shared.downloading = true
         defer { UpdateNotice.shared.downloading = false }
-        await download(rel)
+        // Si installa sempre l'ultima versione uscita, anche se il tasto è comparso ore fa per una precedente
+        var target = rel
+        if let fresh = worthShowing(try? await latest(), current: current), News.newer(fresh.version, than: rel.version) {
+            target = fresh
+            UpdateNotice.shared.available = fresh
+        }
+        await download(target)
     }
 
     @MainActor
