@@ -223,7 +223,11 @@ if q16 < 30:
     assert q32 > 40, "conversione non fedele"
     precision, qbest = "32", q32
 # Pesi a 8 bit: metà dello spazio da scaricare (circa 230 MB invece di 450). Si tiene solo se resta fedele.
+# SENZA_W8=1: niente compressione. Sulla grafica dei Mac recenti i pesi compressi possono essere decompressi
+# a ogni pezzo della canzone, e il modello diventa molte volte più lento (misurato: la voce di Studio su un M2).
 try:
+    if os.environ.get("SENZA_W8"):
+        raise RuntimeError("compressione a 8 bit esclusa (SENZA_W8)")
     import coremltools.optimize.coreml as cto
     cfg8 = cto.OptimizationConfig(global_config=cto.OpLinearQuantizerConfig(mode="linear_symmetric", weight_threshold=2048))
     mlm8 = cto.linear_quantize_weights(mlm, config=cfg8)
