@@ -59,7 +59,7 @@ final class EndToEndTests: XCTestCase {
     }
 
     func testSeparationMatchesDemucs() async throws {
-        executionTimeAllowance = 400
+        executionTimeAllowance = 1200
         let (mix, expected) = try await fixture()
 
         // Il modello esattamente come lo usa l'app (scaricato e preparato da ModelStore, tutte le unità di calcolo)

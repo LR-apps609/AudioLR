@@ -27,7 +27,8 @@ final class PipelineTests: XCTestCase {
 
     /// Studio dall'inizio alla fine: voce viperx, SW sugli strumenti e il basso dal Demucs specializzato.
     func testStudioFromStartToFinish() async throws {
-        executionTimeAllowance = 3000
+        // Sul Mac di GitHub (senza Neural Engine) va da 25 a 50 minuti secondo la macchina: margine ampio
+        executionTimeAllowance = 5400
         let q = Quality.studio
         for m in q.allModels {
             do { _ = try await ModelStore.shared.mlModel(m) { _ in } } catch { throw XCTSkip("\(m) non raggiungibile") }

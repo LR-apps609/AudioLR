@@ -84,7 +84,7 @@ jobs:
           # perl alarm: se tutto si blocca, dopo 110 minuti si ferma e si vede dove
           # TEST_RUNNER_AUDIOLR_CI arriva ai test come AUDIOLR_CI (xcodebuild passa così le variabili ai test)
           TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 10200 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 3000 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 5400 \
             -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             > test.log 2>&1 || status=$?
           grep -E "Test Case .*(passed|failed)|Executed|\*\* TEST" test.log | tail -n 80 || true
