@@ -629,10 +629,16 @@ struct ContentView: View {
     /// La barra del mixer: se Tutto/Karaoke/Solo voce non ci stanno affiancati, diventano un menu.
     /// Niente viene mai stretto sotto la misura delle sue parole (e quindi niente si sovrappone).
     private var transportBar: some View {
-        ViewThatFits(in: .horizontal) {
-            transportRow(segmented: true)
-            transportRow(segmented: false)
-        }
+        transportRow(segmented: segmentsFit)
+    }
+
+    /// Ci stanno i tasti affiancati? Lo spazio della barra (la colonna meno i margini) contro quello che serve
+    /// agli altri tasti più ai segmenti, con le misure di macOS 26 (controlli più grandi) e un po' di margine.
+    private var segmentsFit: Bool {
+        let available = mainWidth - 108
+        let others: CGFloat = compact ? 360 : 600
+        let segments: CGFloat = mixer.keys.contains("lead") ? 350 : 260
+        return available >= others + segments
     }
 
     @ViewBuilder
