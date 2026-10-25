@@ -146,14 +146,14 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
         XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"], "Massima: un solo modello, SW")
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
-        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio3", "StrumentiSW2", "HTDemucsFT-1"], "Studio: il basso da Demucs")
+        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1", "HTDemucs"],
+                       "Studio: voce da Revive, Kim e SW; strumenti da SW e Demucs; basso anche da Demucs FT")
         XCTAssertNil(Quality.best.bassModel, "Massima resta con SW da solo")
-        // La seconda voce di Studio solo se scelta nelle Impostazioni
-        let old = UserDefaults.standard.object(forKey: Prefs.doubleVoiceKey)
-        UserDefaults.standard.set(true, forKey: Prefs.doubleVoiceKey)
-        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio3", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1"])
         XCTAssertNil(Quality.best.secondVoice)
-        UserDefaults.standard.set(old, forKey: Prefs.doubleVoiceKey)
+        XCTAssertFalse(Quality.best.swOnMix)
+        XCTAssertNil(Quality.best.helperModel)
+        XCTAssertTrue(Quality.studio.swOnMix)
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceRevive"), "VoceRoFormer9")
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio3"), "VoceRoFormer9")
         XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer9"), "VoceRoFormer")
         XCTAssertNil(Quality.fallbackVoice(for: "VoceRoFormer"))
@@ -165,7 +165,7 @@ final class VoiceTests: XCTestCase {
 
     func testInstrumentsMatchSW() async throws { try await matchesOriginal("StrumentiSW2", label: "Strumenti SW") }
 
-    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio3", label: "Voce Studio") }
+    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceRevive", label: "Voce Studio (Revive)") }
 
     func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori3", label: "Voce e cori") }
 

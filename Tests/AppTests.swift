@@ -47,6 +47,19 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
     }
 
+    /// Studio: le medie degli strumenti. «Tutto il resto» somma altro, chitarra e piano; la media è campione per campione.
+    func testInstrumentTeamAverages() {
+        let one: [[Float]] = [[1, 1], [1, 1]], two: [[Float]] = [[2, 2], [2, 2]], four: [[Float]] = [[4, 4], [4, 4]]
+        let t = SeparationJob.instrumentTotals(["vocals", "drums", "bass", "guitar", "piano", "other"], [one, one, two, one, two, four])
+        XCTAssertEqual(t["drums"]?[0], [1, 1])
+        XCTAssertEqual(t["bass"]?[1], [2, 2])
+        XCTAssertEqual(t["rest"]?[0], [7, 7], "altro + chitarra + piano")
+        XCTAssertNil(SeparationJob.instrumentTotals(["vocals"], [one])["rest"])
+        XCTAssertEqual(SeparationJob.average([one, two, four.map { $0.map { $0 - 1 } }])[0], [2, 2])
+        // Una traccia più corta non fa uscire dai limiti
+        XCTAssertEqual(SeparationJob.average([[[3, 3, 3], [3, 3, 3]], [[1], [1]]])[0], [2, 1.5, 1.5])
+    }
+
     /// La barra nel Dock: sale con il lavoro e sparisce quando non c'è niente in corso.
     func testDockProgressFraction() {
         XCTAssertNil(DockProgress.fraction(.idle))

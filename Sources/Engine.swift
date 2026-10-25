@@ -8,8 +8,11 @@ import CoreML
 //    chitarra, pianoforte e altro. Sulla voce vale quanto un modello voce a
 //    parte (11,46 contro 11,53 dB sulle 50 canzoni di MUSDB) e ci mette metà
 //    del tempo. Se SW non si può usare, i modelli htdemucs_ft. È quella di serie.
-//  • Studio: la voce dal modello più pulito (BS-RoFormer viperx), poi SW
-//    sugli strumenti della base. La più pulita, la più lenta.
+//  • Studio: ogni traccia da una squadra di modelli (banco «al massimo», 50
+//    canzoni di MUSDB). Voce: media di Revive V3e, Kim e SW sulla canzone intera
+//    (12,20 dB contro 11,93 di viperx da solo, e lascia fuori pad e tastiere
+//    tenute). Strumenti: SW sulla base senza voce, in squadra con Demucs sulla
+//    base e con SW sulla canzone intera. La più pulita.
 //  • Il motore: al primo uso di ogni modello AudioLR prova un pezzo della
 //    canzone sia con il Neural Engine sia con la grafica. Se i due risultati
 //    non coincidono, il Neural Engine di questo Mac è impreciso con quel
@@ -38,7 +41,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return nil
         case .best: return nil
-        case .studio: return "VoceStudio3"
+        case .studio: return "VoceRevive"
         }
     }
 
@@ -55,9 +58,16 @@ enum Quality: String, CaseIterable, Identifiable {
     /// sulle 50 canzoni di MUSDB 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW. Se non c'è, resta quello di SW.
     var bassModel: String? { self == .studio ? "HTDemucsFT-1" : nil }
 
-    /// In Studio, se scelto nelle Impostazioni, un secondo modello voce: la media di viperx e Kim
-    /// è più pulita di ognuno dei due (12,15 dB contro 11,93 sulle 50 canzoni di MUSDB).
-    var secondVoice: String? { self == .studio && Prefs.doubleVoice ? "VoceRoFormer9" : nil }
+    /// In Studio il secondo modello voce, Kim: in squadra con Revive e SW.
+    var secondVoice: String? { self == .studio ? "VoceRoFormer9" : nil }
+
+    /// In Studio SW passa anche sulla canzone intera: la sua voce è il terzo membro della squadra
+    /// e i suoi strumenti entrano nelle medie di batteria, basso e altro.
+    var swOnMix: Bool { self == .studio }
+
+    /// In Studio Demucs (quello di Veloce) sulla base senza voce, per le medie degli strumenti:
+    /// batteria 11,19 dB contro 11,09, altro 7,97 contro 7,77 (media con SW sulla base e sulla canzone).
+    var helperModel: String? { self == .studio ? ModelStore.name : nil }
 
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
@@ -68,7 +78,7 @@ enum Quality: String, CaseIterable, Identifiable {
     /// Se un modello voce non riesce su questo Mac (memoria, Mac più vecchio), quello più leggero da provare.
     static func fallbackVoice(for name: String) -> String? {
         switch name {
-        case "VoceStudio3": return "VoceRoFormer9"
+        case "VoceRevive", "VoceStudio3": return "VoceRoFormer9"
         case "VoceRoFormer9": return lightVoice
         default: return nil
         }
@@ -76,7 +86,7 @@ enum Quality: String, CaseIterable, Identifiable {
 
     /// Tutto quello che va scaricato per questa qualità (i modelli Demucs di riserva solo se servono).
     var allModels: [String] {
-        let extra = [voiceModel, secondVoice, instrumentModel, bassModel].compactMap { $0 }
+        let extra = [voiceModel, secondVoice, instrumentModel, bassModel, helperModel].compactMap { $0 }
         return instrumentModel == nil ? extra + models : extra
     }
 
@@ -111,7 +121,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
         case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
-        case .studio: return "La voce più pulita (BS-RoFormer viperx), SW sugli strumenti, basso da due modelli · la più lenta"
+        case .studio: return "Ogni traccia da una squadra di modelli: la voce da tre, gli strumenti da tre · la più pulita, la più lenta"
         }
     }
 
@@ -120,7 +130,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "circa 80 MB"
         case .best: return "circa 330 MB"
-        case .studio: return "circa 540 MB"
+        case .studio: return "circa 1 GB"
         }
     }
 }
