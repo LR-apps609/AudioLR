@@ -125,3 +125,10 @@ details p { margin-top: 8px; color: var(--muted); }
 .desktop .web-only { display: none; }
 footer { padding-block: 34px 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; }
+
+/* Pulsante di download: grande e ben visibile */
+.btn.big { font-size: 17px; padding: 14px 26px; justify-self: start; box-shadow: 0 6px 18px color-mix(in srgb, var(--brass) 35%, transparent); }
+.steps { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
+details.alt summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+details.alt code { margin-top: 8px; }
+.grid2 .card .chip { justify-self: start; }
