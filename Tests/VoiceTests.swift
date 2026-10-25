@@ -173,6 +173,9 @@ final class VoiceTests: XCTestCase {
     private func matchesOriginal(_ name: String, label: String) async throws {
         // Sul Mac di GitHub (senza Neural Engine) i modelli grandi impiegano anche 20 minuti per un pezzo
         executionTimeAllowance = 5400
+        // I modelli aperti dalle prove precedenti occupano GB: si liberano prima e dopo (come fa l'app con 8 GB)
+        ModelStore.shared.forget()
+        defer { ModelStore.shared.forget() }
         let (data, resp) = try await EndToEndTests.fixture("\(name)-prova.f32")
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("\(name) non ancora pubblicato") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }

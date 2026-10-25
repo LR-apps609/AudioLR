@@ -60,6 +60,7 @@ final class PipelineTests: XCTestCase {
         let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
         job.reset()
+        ModelStore.shared.forget()
     }
 
     func testMassimaFromStartToFinish() async throws {
@@ -99,5 +100,6 @@ final class PipelineTests: XCTestCase {
         try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
         XCTAssertGreaterThan(q, 30, "base e voce devono ridare la canzone")
         job.reset()
+        ModelStore.shared.forget()
     }
 }
