@@ -46,5 +46,9 @@ final class WaitTests: XCTestCase {
         UserDefaults.standard.set("grafica", forKey: Prefs.engineModeKey)
         XCTAssertEqual(EngineChoice.current("StrumentiSW2")?.units, .cpuAndGPU)
         UserDefaults.standard.set(old, forKey: Prefs.engineModeKey)
+        XCTAssertEqual(EngineChoice.Decision(units: .cpuAndGPU, agreement: EngineChoice.lowMemoryGPU).text,
+                       "Grafica (la più rapida su un Mac con 8 GB)")
+        XCTAssertTrue(EngineChoice.isLarge("StrumentiSW2"))
+        XCTAssertFalse(EngineChoice.isLarge("HTDemucsFT-1"))
     }
 }

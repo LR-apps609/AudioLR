@@ -29,6 +29,8 @@ final class Warmup: ObservableObject {
             let q = await MainActor.run { Quality.current }
             let names = [q.voiceModel, q.instrumentModel].compactMap { $0 }
                 .filter { ModelStore.shared.isReady($0) && !UserDefaults.standard.bool(forKey: Warmup.preparedKey($0)) }
+                // Solo i modelli che useranno davvero il Neural Engine (con 8 GB i grandi vanno sulla grafica)
+                .filter { EngineChoice.current($0)?.units != .cpuAndGPU }
             if SeparationJob.hasNeuralEngine && !Prefs.gpuOnly {
                 for name in names {
                     await self?.set("Preparo AudioLR per il Neural Engine di questo Mac (solo la prima volta, qualche minuto)…")

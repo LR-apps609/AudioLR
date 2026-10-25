@@ -249,8 +249,9 @@ struct BugReport {
             String(format: "Memoria: %.0f GB · processori: %d", Double(p.physicalMemory) / 1_073_741_824, p.activeProcessorCount),
             "Qualità: \(Quality.current.title) · formato: \(Prefs.format.title) · voce: \(Prefs.voiceOverlap == 4 ? "precisione" : "equilibrio")",
         ]
-        for name in [ModelStore.name] + Quality.studio.everyModel + Quality.best.everyModel {
-            if let d = EngineChoice.stored(name) { lines.append("Motore \(name): \(d.text)") }
+        var seen = Set<String>()
+        for name in [ModelStore.name] + Quality.studio.everyModel + Quality.best.everyModel where seen.insert(name).inserted {
+            if let d = EngineChoice.current(name) { lines.append("Motore \(name): \(d.text)") }
         }
         if case .failed(let msg) = job.phase { lines.append("Ultimo errore: \(msg)") }
         if !job.timings.isEmpty {

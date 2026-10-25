@@ -2,6 +2,7 @@ Novità della 0.17.0 «Tutto pronto»:
 • La prima installazione è un file .dmg con dentro tutti i modelli di IA (Veloce, Massima, Studio, batteria divisa, voce e cori): trascini AudioLR in Applicazioni e funziona subito, anche senza internet
 • Al primo avvio AudioLR installa i modelli e prepara il Neural Engine in sottofondo, mentre già puoi usarla: la prima canzone non aspetta più
 • Gli aggiornamenti restano leggeri (pochi MB): i modelli non si riscaricano
+• Mac con 8 GB: i modelli grandi lavorano direttamente sulla grafica, senza aspettare il Neural Engine (che su questi Mac impiega oltre 4 minuti solo ad aprirli). Misurato su un MacBook Air M2: Massima su una canzone di 4:40 in circa 2 minuti e mezzo, prima circa 15
 • Un modello che si sta già aprendo non si apre una seconda volta (meno memoria, meno attesa)
 
 Novità della 0.16.0 «Rampa»:

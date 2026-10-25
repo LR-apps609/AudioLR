@@ -146,6 +146,7 @@ enum EngineChoice {
             if agreement > 0 { return String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement) }
             if agreement == EngineChoice.chosenGPU { return "Grafica (scelta nelle Impostazioni)" }
             if agreement == EngineChoice.slowANE { return "Grafica (il Neural Engine era troppo lento ad aprire il modello)" }
+            if agreement == EngineChoice.lowMemoryGPU { return "Grafica (la più rapida su un Mac con 8 GB)" }
             return "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
         }
     }
@@ -155,11 +156,21 @@ enum EngineChoice {
     /// Valori speciali di `agreement`: Neural Engine troppo lento ad aprire il modello; grafica scelta nelle Impostazioni.
     static let slowANE = -1.0
     static let chosenGPU = -2.0
+    static let lowMemoryGPU = -3.0
 
     /// La scelta da usare adesso per un modello: quella delle Impostazioni («Solo grafica»), o quella ricordata.
     static func current(_ model: String) -> Decision? {
-        Prefs.gpuOnly ? Decision(units: .cpuAndGPU, agreement: chosenGPU) : stored(model)
+        if Prefs.gpuOnly { return Decision(units: .cpuAndGPU, agreement: chosenGPU) }
+        // Con 8 GB il Neural Engine non apre in tempi utili i modelli grandi (misurato su un MacBook Air M2:
+        // oltre 4 minuti), mentre la grafica li apre in un secondo e separa una canzone di 4:40 in 2,5 minuti
+        if Prefs.lowMemory && SeparationJob.hasNeuralEngine && isLarge(model) {
+            return Decision(units: .cpuAndGPU, agreement: lowMemoryGPU)
+        }
+        return stored(model)
     }
+
+    /// I modelli grandi (RoFormer e batteria divisa, centinaia di MB); i Demucs (80 MB) seguono la prova del motore.
+    static func isLarge(_ model: String) -> Bool { !model.hasPrefix("HTDemucs") }
 
     static func stored(_ model: String, defaults: UserDefaults = .standard) -> Decision? {
         guard let d = defaults.dictionary(forKey: key(model)),
