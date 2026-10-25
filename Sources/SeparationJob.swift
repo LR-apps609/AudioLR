@@ -100,6 +100,8 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var duration: Double = 0
     /// La qualità della separazione in corso (o dell'ultima).
     @Published private(set) var quality: Quality = .best
+    /// Le canzoni trascinate o scelte ma non ancora avviate: prima si sceglie la qualità, poi «Separa».
+    @Published private(set) var pending: [URL] = []
     /// Le canzoni che aspettano il loro turno (trascinate insieme, per esempio un album).
     @Published private(set) var queue: [URL] = []
     /// Le ultime separazioni, per riaprirle.
@@ -229,6 +231,26 @@ final class SeparationJob: ObservableObject {
     }
 
     func clearQueue() { queue = []; queuedQuality = [:] }
+
+    /// Canzoni appena trascinate o scelte: non partono da sole. La finestra le mostra con la qualità da scegliere
+    /// e il tasto «Separa», così non si avvia per sbaglio un lavoro lungo con la qualità sbagliata.
+    /// Durante una separazione si aggiungono alla coda, con la qualità scelta in quel momento.
+    func prepare(_ urls: [URL], quality: Quality = .current) {
+        let songs = Self.songs(in: urls)
+        guard !songs.isEmpty else { return }
+        if isBusy { enqueue(songs, quality: quality); return }
+        if phase != .idle { reset() }
+        pending = songs
+    }
+
+    /// «Separa»: parte la prima canzone pronta, le altre vanno in coda.
+    func startPending(quality: Quality) {
+        let songs = pending
+        pending = []
+        enqueue(songs, quality: quality)
+    }
+
+    func clearPending() { pending = [] }
 
     /// Le estensioni delle canzoni che macOS sa aprire.
     nonisolated static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "flac", "caf", "alac"]

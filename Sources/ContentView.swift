@@ -62,7 +62,7 @@ struct ContentView: View {
         .dropDestination(for: URL.self) { urls, _ in
             guard !urls.isEmpty else { return false }
             player.stop()
-            job.enqueue(urls, quality: quality)
+            job.prepare(urls, quality: quality)
             return true
         } isTargeted: { dropping = $0 }
         .onAppear { news = WhatsNew.pending() }
@@ -204,18 +204,22 @@ struct ContentView: View {
                 .opacity(dropping ? 1 : 0.9)
                 .scaleEffect(dropping ? 1.06 : 1)
                 .animation(.spring(response: 0.35), value: dropping)
-            VStack(spacing: 6) {
-                Text(dropping ? "Lascia pure" : "Trascina qui una canzone")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                Text("Anche più canzoni insieme · MP3, M4A, WAV, AIFF, FLAC")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            if job.pending.isEmpty {
+                VStack(spacing: 6) {
+                    Text(dropping ? "Lascia pure" : "Trascina qui una canzone")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    Text("Anche più canzoni insieme · MP3, M4A, WAV, AIFF, FLAC")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                Button { choose() } label: {
+                    Label("Scegli una canzone…", systemImage: "music.note.list").padding(.horizontal, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                pendingSong
             }
-            Button { choose() } label: {
-                Label("Scegli una canzone…", systemImage: "music.note.list").padding(.horizontal, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            // Qualità: Massima (di serie) o Veloce
+            // Qualità: Veloce, Massima (di serie) o Studio
             VStack(spacing: 6) {
                 Picker("Qualità", selection: $qualityRaw) {
                     ForEach(Quality.allCases) { q in Text(q.title).tag(q.rawValue) }
@@ -226,6 +230,18 @@ struct ContentView: View {
                 Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
+            // Canzone pronta: parte solo da qui
+            if !job.pending.isEmpty {
+                Button { player.stop(); job.startPending(quality: quality) } label: {
+                    Label(job.pending.count == 1 ? "Separa · \(quality.title)" : "Separa \(job.pending.count) canzoni · \(quality.title)",
+                          systemImage: "play.fill")
+                        .padding(.horizontal, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .help("Avvia la separazione con la qualità scelta (Invio)")
+            }
             // Primo avvio: modelli che si installano e Neural Engine che si prepara (si può già separare)
             if let w = warmup.text {
                 HStack(spacing: 8) {
@@ -259,6 +275,33 @@ struct ContentView: View {
                 .foregroundStyle(dropping ? Theme.brass : Theme.stroke)
                 .padding(12)
         )
+    }
+
+    /// La canzone trascinata o scelta, in attesa di «Separa»: si vede bene cosa partirà.
+    private var pendingSong: some View {
+        VStack(spacing: 6) {
+            Text(job.pending.count == 1 ? "CANZONE PRONTA" : "\(job.pending.count) CANZONI PRONTE")
+                .font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+            HStack(spacing: 10) {
+                Image(systemName: job.pending.count == 1 ? "music.note" : "music.note.list")
+                    .font(.system(size: 18)).foregroundStyle(Theme.brass)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(job.pending[0].deletingPathExtension().lastPathComponent)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded)).lineLimit(1).truncationMode(.middle)
+                    if job.pending.count > 1 {
+                        Text("e altre \(job.pending.count - 1)").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    }
+                }
+                Button { job.clearPending() } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 15)) }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary)
+                    .help("Togli la canzone").accessibilityLabel("Togli la canzone")
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .frame(maxWidth: 460)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.stroke))
+            Text("Scegli la qualità, poi premi «Separa»").font(.system(size: 12)).foregroundStyle(.secondary)
+        }
     }
 
     /// Le ultime separazioni: un clic le riapre.
@@ -739,7 +782,7 @@ struct ContentView: View {
         panel.message = "Scegli una o più canzoni, o una cartella intera, da separare"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             player.stop()
-            job.enqueue(panel.urls, quality: quality)
+            job.prepare(panel.urls, quality: quality)
         }
     }
 }

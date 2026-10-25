@@ -47,6 +47,26 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
     }
 
+    /// Una canzone trascinata non parte da sola: aspetta la qualità e «Separa».
+    @MainActor
+    func testDroppedSongWaitsForSepara() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pronta-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let song = dir.appendingPathComponent("Canzone.wav")
+        try Data([0]).write(to: song)
+        let job = SeparationJob.shared
+        guard !job.isBusy else { throw XCTSkip("una separazione è già in corso") }
+        job.prepare([song])
+        XCTAssertEqual(job.pending, [song])
+        XCTAssertEqual(job.phase, .idle, "non deve partire prima di «Separa»")
+        XCTAssertTrue(job.queue.isEmpty)
+        job.clearPending()
+        XCTAssertTrue(job.pending.isEmpty)
+        job.prepare([dir.appendingPathComponent("non-esiste.wav")])
+        XCTAssertTrue(job.pending.isEmpty, "niente da preparare se il file non c'è")
+    }
+
     /// Il tasto «Aggiornamento disponibile» compare solo per una versione più nuova.
     func testUpdateButtonOnlyForNewerVersion() {
         let u = URL(string: "https://example.com/a.audiolr")!

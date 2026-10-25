@@ -1,3 +1,8 @@
+Novità della 0.20.0 «Prima scegli»:
+• Trascinare (o scegliere) una canzone non avvia più subito la separazione: la canzone appare come «pronta», scegli la qualità con calma e poi premi «Separa» (o Invio). Niente più lavori lunghi partiti per sbaglio
+• Il tasto mostra cosa partirà: «Separa · Studio». Con la ✕ togli la canzone senza separarla
+• Durante una separazione, le canzoni trascinate si mettono in coda come prima
+
 Novità della 0.19.0 «Sempre aggiornata»:
 • Quando esce una versione nuova compare in alto a destra il tasto «Aggiornamento disponibile»: un clic, AudioLR si scarica, si installa e si riapre. Niente più ricerche nel menu
 • Il controllo avviene all'apertura e poi ogni 3 ore, in silenzio, senza finestre che interrompono

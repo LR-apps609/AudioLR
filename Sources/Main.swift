@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard !files.isEmpty else { return }
             NSApp.activate()
-            SeparationJob.shared.enqueue(files)
+            SeparationJob.shared.prepare(files)
         }
     }
 
