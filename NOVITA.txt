@@ -1,3 +1,11 @@
+Novità della 0.23.1 «Revisione completa»:
+• Corretto: con la finestra non molto larga e il tasto «Aggiornamento disponibile» in alto, la finestra usciva dai bordi, il nome AudioLR spariva e i risultati restavano schiacciati. Ora con poco spazio i tasti si accorciano e niente esce mai dalla finestra; aprendo la libreria in una finestra stretta, la finestra si allarga
+• Il tasto dell'aggiornamento mostra sempre l'ultima versione uscita (anche dopo una notte con l'app aperta) e rispetta «Salta questa versione»
+• Una sfumatura o una pausa molto piana non fa più fallire la separazione con «il calcolo su questo Mac dà risultati sbagliati»
+• Studio usa molta meno memoria sui Mac da 8 GB e, se il Neural Engine sbaglia un passaggio, lo rifà sulla grafica invece di saltarlo
+• I file 5.1 a 48 kHz si aprono; collegando o togliendo le cuffie il mixer si rimette a posto da solo
+• Con una coda di canzoni AudioLR torna in primo piano solo alla fine dell'ultima; Invio nella ricerca della libreria non avvia più per sbaglio una separazione
+
 Novità della 0.23.0 «Studio in squadra»:
 • STUDIO PIÙ PULITA: ogni traccia nasce da una squadra di modelli che lavorano insieme, scelti misurando oltre 4.000 combinazioni sulle 50 canzoni di prova di MUSDB18
 • Voce: media di tre modelli (Revive V3e, Kim e SW). Più pulita di prima (12,20 dB contro 11,93) e senza i «fantasmi»: pad, organi e tastiere tenute che prima finivano per sbaglio nella voce
