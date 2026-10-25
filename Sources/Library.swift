@@ -135,6 +135,13 @@ struct GuideView: View {
     ]
 
     var body: some View {
+        // Sui Mac con lo schermo piccolo la guida è più alta dello spazio: scorre invece di essere tagliata
+        ScrollView { guide }
+            .frame(width: 330)
+            .frame(maxHeight: 620)
+    }
+
+    private var guide: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 LogoMark(size: 30)
@@ -168,7 +175,6 @@ struct GuideView: View {
                 .buttonStyle(.link)
         }
         .padding(18)
-        .frame(width: 330)
     }
 }
 
