@@ -1,3 +1,6 @@
+Novità della 0.22.0:
+• Corretto: con la libreria aperta e la finestra non molto larga, la schermata dei risultati usciva dai bordi e veniva tagliata a sinistra. Ora, se lo spazio è poco, i tasti mostrano solo l'icona (il nome compare passandoci sopra) e la finestra non si stringe oltre il necessario
+
 Novità della 0.21.0 «Dal Dock»:
 • Mentre AudioLR separa, sotto l'icona nel Dock c'è una barra che si riempie: vedi a che punto è anche mentre usi altre app
 • Quando finisce (con una coda, alla fine dell'ultima canzone) AudioLR torna da sola in primo piano con i risultati

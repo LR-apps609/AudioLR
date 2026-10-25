@@ -13,7 +13,7 @@ struct AudioLRApp: App {
         Window("AudioLR", id: "main") {
             ContentView()
                 .environmentObject(job)
-                .frame(minWidth: 860, minHeight: 560)
+                .frame(minHeight: 560)
         }
         .defaultSize(width: 1020, height: 680)
         .commands { AudioLRCommands(job: job) }

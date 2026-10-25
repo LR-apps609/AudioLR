@@ -33,6 +33,9 @@ struct ContentView: View {
     @StateObject private var mixer = MixPlayer()
     @ObservedObject private var warmup = Warmup.shared
     @ObservedObject private var updateNotice = UpdateNotice.shared
+    /// Larghezza della parte principale: sotto la soglia i tasti mostrano solo l'icona, così niente esce dalla finestra.
+    @State private var mainWidth: CGFloat = 1200
+    private var compact: Bool { mainWidth < 980 }
     @State private var exported: URL?
     @State private var makingStemFile = false
     @State private var stemFileError: String?
@@ -57,6 +60,8 @@ struct ContentView: View {
             main
         }
         .animation(.easeInOut(duration: 0.2), value: showLibrary)
+        // Con la libreria aperta serve più spazio: la finestra non si stringe oltre il punto in cui i tasti escono
+        .frame(minWidth: showLibrary ? 940 : 700)
         .background(StudioBackground())
         .foregroundStyle(Theme.ink)
         .dropDestination(for: URL.self) { urls, _ in
@@ -123,6 +128,7 @@ struct ContentView: View {
             footer
         }
         .padding(22)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { mainWidth = $0 }
     }
 
     // MARK: Testata
@@ -405,7 +411,8 @@ struct ContentView: View {
                 Spacer()
                 Button { showDetails = true } label: { Label("Dettagli", systemImage: "info.circle") }
                     .popover(isPresented: $showDetails, arrowEdge: .bottom) { DetailsView().environmentObject(job) }
-                    .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone")
+                    .help("Dettagli: tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone")
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 Menu {
                     ForEach(job.midiStems) { s in
                         Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
@@ -417,12 +424,15 @@ struct ContentView: View {
                         Label("MIDI", systemImage: "pianokeys")
                     }
                 }
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .fixedSize()
                 .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
                 .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da trascinare in GarageBand o Logic")
                 Button {
                     if let f = job.folder { NSWorkspace.shared.activateFileViewerSelecting([f]) }
                 } label: { Label("Mostra nel Finder", systemImage: "folder") }
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .help("Mostra nel Finder")
                 Button {
                     player.stop()
                     mixer.stop()
@@ -583,6 +593,7 @@ struct ContentView: View {
             }
             Toggle(isOn: $showPractice) { Label("Prove", systemImage: "music.note.house") }
                 .toggleStyle(.button).controlSize(.small)
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
                 .accessibilityLabel("Sala prove")
             Picker("Scorciatoie", selection: Binding(
@@ -592,14 +603,17 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: mixer.keys.contains("lead") ? 340 : 250)
+            .frame(width: (mixer.keys.contains("lead") ? 340 : 250) * (compact ? 0.8 : 1))
             withoutMenu
             Spacer()
             Menu {
                 Button("Esporta il mix (⌘E)") { exportMix() }
                 Button("Esporta per DJ: .stem.mp4 · anteprima (⌥⌘E)") { exportStemFile() }
             } label: {
-                if mixer.exporting || makingStemFile { ProgressView().controlSize(.small) } else { Label("Esporta il mix", systemImage: "square.and.arrow.up") }
+                if mixer.exporting || makingStemFile { ProgressView().controlSize(.small) } else {
+                    Label("Esporta il mix", systemImage: "square.and.arrow.up")
+                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                }
             } primaryAction: { exportMix() }
             .menuStyle(.button)
             .fixedSize()
@@ -738,6 +752,7 @@ struct ContentView: View {
         } label: {
             Label(mixer.state.without?.without ?? "Senza…", systemImage: "music.note.list")
                 .lineLimit(1)
+                .labelStyle(compact && mixer.state.without == nil ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -1031,4 +1046,11 @@ struct MixerRow: View {
         .help(help)
         .accessibilityLabel("\(help) \(stem.name)")
     }
+}
+
+/// Uno stile di etichetta scelto al volo (solo icona quando lo spazio è poco).
+struct AnyLabelStyle: LabelStyle {
+    private let make: (Configuration) -> AnyView
+    init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
