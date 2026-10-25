@@ -38,7 +38,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return nil
         case .best: return nil
-        case .studio: return "VoceStudio2"
+        case .studio: return "VoceStudio3"
         }
     }
 
@@ -57,7 +57,7 @@ enum Quality: String, CaseIterable, Identifiable {
 
     /// In Studio, se scelto nelle Impostazioni, un secondo modello voce: la media di viperx e Kim
     /// è più pulita di ognuno dei due (12,15 dB contro 11,93 sulle 50 canzoni di MUSDB).
-    var secondVoice: String? { self == .studio && Prefs.doubleVoice ? "VoceRoFormer8" : nil }
+    var secondVoice: String? { self == .studio && Prefs.doubleVoice ? "VoceRoFormer9" : nil }
 
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
@@ -68,8 +68,8 @@ enum Quality: String, CaseIterable, Identifiable {
     /// Se un modello voce non riesce su questo Mac (memoria, Mac più vecchio), quello più leggero da provare.
     static func fallbackVoice(for name: String) -> String? {
         switch name {
-        case "VoceStudio2": return "VoceRoFormer8"
-        case "VoceRoFormer8": return lightVoice
+        case "VoceStudio3": return "VoceRoFormer9"
+        case "VoceRoFormer9": return lightVoice
         default: return nil
         }
     }
@@ -120,7 +120,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "circa 80 MB"
         case .best: return "circa 330 MB"
-        case .studio: return "circa 470 MB"
+        case .studio: return "circa 540 MB"
         }
     }
 }

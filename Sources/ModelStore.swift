@@ -121,7 +121,7 @@ final class ModelStore: @unchecked Sendable {
     }
 
     /// Il modello voce RoFormer, pronto (scaricato e preparato se serve).
-    func voice(_ name: String = Quality.best.voiceModel ?? "VoceRoFormer8", units: MLComputeUnits = .all,
+    func voice(_ name: String = Quality.best.voiceModel ?? "VoceRoFormer9", units: MLComputeUnits = .all,
                progress: @escaping (Double) -> Void) async throws -> VoiceRoFormer {
         try await roformer(name, units: units, progress: progress)
     }
@@ -162,7 +162,9 @@ final class ModelStore: @unchecked Sendable {
     }
 
     /// Modelli di versioni passate, sostituiti da altri: si tolgono dal disco all'avvio (centinaia di MB).
-    static let obsolete = ["StrumentiSW", "VoceStudio", "VoceCori"]
+    static let obsolete = ["StrumentiSW", "VoceStudio", "VoceCori",
+                                   // Le voci con i pesi compressi a 8 bit: molto lente sulla grafica (0.18)
+                                   "VoceStudio2", "VoceCori2", "VoceRoFormer8"]
 
     /// Toglie dal disco i modelli che nessuna versione attuale usa più.
     @discardableResult

@@ -156,7 +156,7 @@ jobs:
           ditto build/Build/Products/Release/AudioLR.app full/AudioLR/AudioLR.app
           M=full/AudioLR/AudioLR.app/Contents/Resources/Modelli
           mkdir -p "$M"
-          for n in HTDemucs StrumentiSW2 VoceStudio2 HTDemucsFT-1 BatteriaDrumSep VoceCori2; do
+          for n in HTDemucs StrumentiSW2 VoceStudio3 HTDemucsFT-1 BatteriaDrumSep VoceCori3; do
             gh release download modelli-1 --repo "$GITHUB_REPOSITORY" --dir modelli --pattern "$n.mlpackage.zip" --pattern "$n.json" --clobber
             ditto -x -k "modelli/$n.mlpackage.zip" modelli/
             xcrun coremlcompiler compile "modelli/$n.mlpackage" "$M/" > /dev/null

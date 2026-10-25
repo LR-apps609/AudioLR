@@ -1,3 +1,8 @@
+Novità della 0.18.0 «Studio veloce»:
+• STUDIO MOLTO PIÙ VELOCE: i modelli voce non hanno più i pesi compressi a 8 bit, che sulla grafica dei Mac recenti venivano decompressi a ogni pezzo della canzone (Studio su un MacBook Air M2: oltre un'ora prevista per una canzone di 4:40)
+• Anche più fedeli ai modelli originali: la voce di Studio da 56 a 79 dB. Si scaricano una volta (circa 70 MB in più per Studio); i vecchi si tolgono da soli
+• Il tempo che manca si calcola dal primo pezzo, non dal clic: niente più stime gonfiate all'inizio
+
 Novità della 0.17.0 «Tutto pronto»:
 • La prima installazione è un file .dmg con dentro tutti i modelli di IA (Veloce, Massima, Studio, batteria divisa, voce e cori): trascini AudioLR in Applicazioni e funziona subito, anche senza internet
 • Al primo avvio AudioLR installa i modelli e prepara il Neural Engine in sottofondo, mentre già puoi usarla: la prima canzone non aspetta più

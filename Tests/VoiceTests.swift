@@ -146,16 +146,16 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
         XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"], "Massima: un solo modello, SW")
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
-        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio2", "StrumentiSW2", "HTDemucsFT-1"], "Studio: il basso da Demucs")
+        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio3", "StrumentiSW2", "HTDemucsFT-1"], "Studio: il basso da Demucs")
         XCTAssertNil(Quality.best.bassModel, "Massima resta con SW da solo")
         // La seconda voce di Studio solo se scelta nelle Impostazioni
         let old = UserDefaults.standard.object(forKey: Prefs.doubleVoiceKey)
         UserDefaults.standard.set(true, forKey: Prefs.doubleVoiceKey)
-        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio2", "VoceRoFormer8", "StrumentiSW2", "HTDemucsFT-1"])
+        XCTAssertEqual(Quality.studio.allModels, ["VoceStudio3", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1"])
         XCTAssertNil(Quality.best.secondVoice)
         UserDefaults.standard.set(old, forKey: Prefs.doubleVoiceKey)
-        XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio2"), "VoceRoFormer8")
-        XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer8"), "VoceRoFormer")
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceStudio3"), "VoceRoFormer9")
+        XCTAssertEqual(Quality.fallbackVoice(for: "VoceRoFormer9"), "VoceRoFormer")
         XCTAssertNil(Quality.fallbackVoice(for: "VoceRoFormer"))
         XCTAssertTrue(Quality.studio.everyModel.contains("VoceRoFormer"), "i modelli di riserva si dimenticano anche loro")
         XCTAssertEqual(Theme.stems(for: .studio, split: true).count, 6)
@@ -165,9 +165,9 @@ final class VoiceTests: XCTestCase {
 
     func testInstrumentsMatchSW() async throws { try await matchesOriginal("StrumentiSW2", label: "Strumenti SW") }
 
-    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio2", label: "Voce Studio") }
+    func testStudioVoiceMatchesBSRoFormer() async throws { try await matchesOriginal("VoceStudio3", label: "Voce Studio") }
 
-    func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori2", label: "Voce e cori") }
+    func testLeadVoiceMatchesKaraokeRoFormer() async throws { try await matchesOriginal("VoceCori3", label: "Voce e cori") }
 
     /// Un pezzo di prova separato dall'app e dal modello originale (Tools/convert_roformer.py): tutti gli strumenti insieme.
     private func matchesOriginal(_ name: String, label: String) async throws {
@@ -204,7 +204,7 @@ final class VoiceTests: XCTestCase {
 
     func testVoiceMatchesRoFormer() async throws {
         executionTimeAllowance = 600
-        let (data, resp) = try await EndToEndTests.fixture("VoceRoFormer8-prova.f32")
+        let (data, resp) = try await EndToEndTests.fixture("VoceRoFormer9-prova.f32")
         guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 8 else { throw XCTSkip("modello voce non ancora pubblicato") }
         let all: [Float] = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         let n = Int(all[0])
