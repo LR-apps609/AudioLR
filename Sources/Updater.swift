@@ -225,6 +225,14 @@ final class Updater: ObservableObject, @unchecked Sendable {
 
 // MARK: - Controllo automatico
 
+/// Il tasto in alto a destra: c'è una versione nuova da installare.
+@MainActor
+final class UpdateNotice: ObservableObject {
+    static let shared = UpdateNotice()
+    @Published var available: UpdateCheck.Release?
+    @Published var downloading = false
+}
+
 enum UpdateCheck {
     struct Release: Equatable {
         let version: String
@@ -275,12 +283,43 @@ enum UpdateCheck {
         return parseList(data)
     }
 
-    /// All'avvio, dopo qualche secondo: in silenzio, parla solo se c'è una versione nuova.
+    /// All'avvio (dopo qualche secondo) e poi ogni 3 ore, in silenzio: se c'è una versione nuova compare
+    /// il tasto «Aggiornamento disponibile» in alto a destra, senza finestre che interrompono.
     static func autoCheckSoon() {
-        guard shouldAutoCheck() else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
-            Task { @MainActor in await check(userInitiated: false) }
+        guard UserDefaults.standard.object(forKey: autoKey) as? Bool != false else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            while true {
+                await quietCheck()
+                try? await Task.sleep(nanoseconds: 3 * 3600 * 1_000_000_000)
+            }
         }
+    }
+
+    /// Controllo silenzioso: aggiorna solo il tasto in alto a destra.
+    @MainActor
+    static func quietCheck() async {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
+        if let rel = worthShowing(try? await latest(), current: current) { UpdateNotice.shared.available = rel }
+    }
+
+    /// Il tasto compare solo per una versione davvero più nuova di quella installata.
+    static func worthShowing(_ rel: Release?, current: String) -> Release? {
+        guard let rel, News.newer(rel.version, than: current) else { return nil }
+        return rel
+    }
+
+    /// Dal tasto «Aggiornamento disponibile»: scarica e installa (AudioLR si riapre da sola).
+    @MainActor
+    static func installNow(_ rel: Release) async {
+        guard !Updater.shared.busy else { return }
+        if SeparationJob.shared.isWorking {
+            info("Prima finisce la separazione", "AudioLR si aggiorna appena la canzone in corso è pronta: premi di nuovo il tasto dopo.")
+            return
+        }
+        UpdateNotice.shared.downloading = true
+        defer { UpdateNotice.shared.downloading = false }
+        await download(rel)
     }
 
     @MainActor
@@ -300,6 +339,7 @@ enum UpdateCheck {
             if userInitiated { info("Hai già l'ultima versione", "AudioLR \(current) è la più recente.") }
             return
         }
+        UpdateNotice.shared.available = rel
         // Una versione saltata non si ripropone da sola (ma «Controlla aggiornamenti» sì)
         if !userInitiated, UserDefaults.standard.string(forKey: skipKey) == rel.version { return }
         // Durante una separazione non si interrompe: ci si riprova al prossimo avvio

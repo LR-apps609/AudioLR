@@ -47,6 +47,16 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
     }
 
+    /// Il tasto «Aggiornamento disponibile» compare solo per una versione più nuova.
+    func testUpdateButtonOnlyForNewerVersion() {
+        let u = URL(string: "https://example.com/a.audiolr")!
+        let rel = UpdateCheck.Release(version: "0.19.0", asset: u, page: u)
+        XCTAssertEqual(UpdateCheck.worthShowing(rel, current: "0.18.0"), rel)
+        XCTAssertNil(UpdateCheck.worthShowing(rel, current: "0.19.0"))
+        XCTAssertNil(UpdateCheck.worthShowing(rel, current: "0.20.1"))
+        XCTAssertNil(UpdateCheck.worthShowing(nil, current: "0.18.0"))
+    }
+
     func testFindUpdatePackage() throws {
         let d = try tempDir()
         XCTAssertNil(Updater.findPackage(in: d))

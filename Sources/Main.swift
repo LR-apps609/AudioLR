@@ -155,7 +155,7 @@ struct AudioLRCommands: Commands {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UpdateCheck.autoCheckSoon()          // una volta al giorno, in silenzio
+        UpdateCheck.autoCheckSoon()          // all'avvio e ogni 3 ore, in silenzio: tasto in alto a destra
         Prefs.applyAppearance()
         // I modelli sostituiti da versioni nuove non servono più: spazio libero sul disco
         DispatchQueue.global(qos: .utility).async { ModelStore.removeObsolete() }

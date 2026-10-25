@@ -1,3 +1,7 @@
+Novità della 0.19.0 «Sempre aggiornata»:
+• Quando esce una versione nuova compare in alto a destra il tasto «Aggiornamento disponibile»: un clic, AudioLR si scarica, si installa e si riapre. Niente più ricerche nel menu
+• Il controllo avviene all'apertura e poi ogni 3 ore, in silenzio, senza finestre che interrompono
+
 Novità della 0.18.0 «Studio veloce»:
 • STUDIO MOLTO PIÙ VELOCE: i modelli voce non hanno più i pesi compressi a 8 bit, che sulla grafica dei Mac recenti venivano decompressi a ogni pezzo della canzone (Studio su un MacBook Air M2: oltre un'ora prevista per una canzone di 4:40)
 • Anche più fedeli ai modelli originali: la voce di Studio da 56 a 79 dB. Si scaricano una volta (circa 70 MB in più per Studio); i vecchi si tolgono da soli

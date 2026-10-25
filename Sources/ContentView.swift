@@ -32,6 +32,7 @@ struct ContentView: View {
     @StateObject private var player = StemPlayer()
     @StateObject private var mixer = MixPlayer()
     @ObservedObject private var warmup = Warmup.shared
+    @ObservedObject private var updateNotice = UpdateNotice.shared
     @State private var exported: URL?
     @State private var makingStemFile = false
     @State private var stemFileError: String?
@@ -139,6 +140,26 @@ struct ContentView: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
+            // Versione nuova: un tasto ben visibile, un clic e si installa
+            if let rel = updateNotice.available {
+                Button { Task { await UpdateCheck.installNow(rel) } } label: {
+                    HStack(spacing: 6) {
+                        if updateNotice.downloading { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.down.circle.fill") }
+                        Text(updateNotice.downloading ? "Scarico la \(rel.version)…" : "Aggiornamento disponibile · \(rel.version)")
+                            .lineLimit(1)
+                    }
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Capsule().fill(Theme.brass.gradient))
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .disabled(updateNotice.downloading)
+                .help("Hai la \(UpdateCheck.current): clic per scaricare e installare la \(rel.version). AudioLR si riapre da sola.")
+                .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
+                .transition(.scale.combined(with: .opacity))
+            }
             Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
                 .help("La canzone non viene caricata su internet")
             HStack(spacing: 2) {
