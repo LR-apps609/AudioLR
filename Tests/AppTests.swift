@@ -47,6 +47,15 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, defaults: d))
     }
 
+    /// La barra nel Dock: sale con il lavoro e sparisce quando non c'è niente in corso.
+    func testDockProgressFraction() {
+        XCTAssertNil(DockProgress.fraction(.idle))
+        XCTAssertNil(DockProgress.fraction(.done))
+        let a = DockProgress.fraction(.reading)!, b = DockProgress.fraction(.separating(0.5))!, c = DockProgress.fraction(.saving)!
+        XCTAssertLessThan(a, b); XCTAssertLessThan(b, c); XCTAssertLessThanOrEqual(c, 1)
+        XCTAssertEqual(DockProgress.fraction(.separating(2))!, 0.96, accuracy: 1e-9)
+    }
+
     /// Una canzone trascinata non parte da sola: aspetta la qualità e «Separa».
     @MainActor
     func testDroppedSongWaitsForSepara() throws {

@@ -161,6 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { ModelStore.removeObsolete() }
         // Versione completa: i modelli inclusi si installano e il Neural Engine si prepara, in sottofondo
         Task { @MainActor in Warmup.shared.start() }
+        // Nel Dock la barra del lavoro in corso
+        Task { @MainActor in DockProgress.shared.start() }
     }
 
     /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone

@@ -1,3 +1,7 @@
+Novità della 0.21.0 «Dal Dock»:
+• Mentre AudioLR separa, sotto l'icona nel Dock c'è una barra che si riempie: vedi a che punto è anche mentre usi altre app
+• Quando finisce (con una coda, alla fine dell'ultima canzone) AudioLR torna da sola in primo piano con i risultati
+
 Novità della 0.20.0 «Prima scegli»:
 • Trascinare (o scegliere) una canzone non avvia più subito la separazione: la canzone appare come «pronta», scegli la qualità con calma e poi premi «Separa» (o Invio). Niente più lavori lunghi partiti per sbaglio
 • Il tasto mostra cosa partirà: «Separa · Studio». Con la ✕ togli la canzone senza separarla
