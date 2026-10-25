@@ -41,6 +41,16 @@ enum AudioIO {
         var channels: [[Float]]
         if inFormat.sampleRate == sampleRate {
             channels = Self.channels(of: inBuf)
+        } else if inFormat.channelCount > 2 {
+            // 5.1 e simili a un'altra frequenza: si tengono i primi due canali, poi si cambia la frequenza
+            let all = Self.channels(of: inBuf)
+            guard let two = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inFormat.sampleRate, channels: 2, interleaved: false),
+                  let buf = AVAudioPCMBuffer(pcmFormat: two, frameCapacity: inBuf.frameLength), let dst = buf.floatChannelData else {
+                throw SeparationError("non riesco a convertire questo audio")
+            }
+            buf.frameLength = inBuf.frameLength
+            for c in 0..<2 { all[c].withUnsafeBufferPointer { dst[c].update(from: $0.baseAddress!, count: all[c].count) } }
+            channels = try resample(buf)
         } else {
             channels = try resample(inBuf)
         }

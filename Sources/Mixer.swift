@@ -169,8 +169,26 @@ final class MixPlayer: ObservableObject {
         engine.connect(engine.mainMixerNode, to: timePitch, format: fmt)
         engine.connect(timePitch, to: l, format: fmt)
         engine.connect(l, to: engine.outputNode, format: fmt)
+        // Cuffie collegate o tolte, uscita cambiata: macOS ferma il motore audio. Si mette in pausa
+        // (il tasto torna a «suona») e si ricollega la catena con il formato della nuova uscita
+        configObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
+                                                                 queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.outputChanged() }
+        }
         return l
     }()
+    private var configObserver: NSObjectProtocol?
+
+    private func outputChanged() {
+        if isPlaying { pause() }
+        let fmt = engine.outputNode.inputFormat(forBus: 0)
+        engine.disconnectNodeOutput(engine.mainMixerNode)
+        engine.disconnectNodeOutput(timePitch)
+        engine.disconnectNodeOutput(limiter)
+        engine.connect(engine.mainMixerNode, to: timePitch, format: fmt)
+        engine.connect(timePitch, to: limiter, format: fmt)
+        engine.connect(limiter, to: engine.outputNode, format: fmt)
+    }
     private var players: [String: AVAudioPlayerNode] = [:]
     private var files: [String: AVAudioFile] = [:]
     private var startPosition: Double = 0

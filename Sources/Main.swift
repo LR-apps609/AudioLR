@@ -108,7 +108,6 @@ struct AudioLRCommands: Commands {
                 .keyboardShortcut("k", modifiers: [.command, .shift])
                 .disabled(job.phase != .done)
             Divider()
-            Divider()
             Toggle("Sala prove", isOn: $showPractice)
                 .keyboardShortcut("p", modifiers: [.command, .option])
             Button("Inizio del passaggio da ripetere") { post(.audiolrLoop, "A") }
@@ -154,6 +153,11 @@ struct AudioLRCommands: Commands {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Tornando su AudioLR dopo tanto tempo, il tasto dell'aggiornamento si rinfresca.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in UpdateCheck.checkIfStale() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         UpdateCheck.autoCheckSoon()          // all'avvio e ogni 3 ore, in silenzio: tasto in alto a destra
         Prefs.applyAppearance()
