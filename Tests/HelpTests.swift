@@ -42,7 +42,7 @@ final class HelpTests: XCTestCase {
 
     @MainActor func testSystemInfoHasTheBasics() {
         let s = BugReport.systemInfo()
-        XCTAssertTrue(s.contains("AudioLR"))
+        XCTAssertTrue(s.contains("IsoLR"))
         XCTAssertTrue(s.contains("macOS"))
         XCTAssertTrue(s.contains("Memoria"))
     }
