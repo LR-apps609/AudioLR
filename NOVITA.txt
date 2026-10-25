@@ -1,3 +1,9 @@
+Novità della 0.17.0 «Tutto pronto»:
+• La prima installazione è un file .dmg con dentro tutti i modelli di IA (Veloce, Massima, Studio, batteria divisa, voce e cori): trascini AudioLR in Applicazioni e funziona subito, anche senza internet
+• Al primo avvio AudioLR installa i modelli e prepara il Neural Engine in sottofondo, mentre già puoi usarla: la prima canzone non aspetta più
+• Gli aggiornamenti restano leggeri (pochi MB): i modelli non si riscaricano
+• Un modello che si sta già aprendo non si apre una seconda volta (meno memoria, meno attesa)
+
 Novità della 0.16.0 «Rampa»:
 • Sala prove: «Rampa» fa ripartire il passaggio A-B ogni volta un po' più veloce, dal 70% al 100% (+5% a giro). Il modo classico per imparare un brano difficile
 

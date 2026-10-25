@@ -33,7 +33,7 @@ enum FAQ {
         Entry(topic: "Primi passi", question: "Posso separare una cartella intera?",
               answer: "Sì: trascina la cartella nella finestra, oppure scegli «Apri una canzone…» (⌘O) e seleziona la cartella. AudioLR mette in coda tutte le canzoni che contiene, anche nelle sottocartelle, in ordine di nome, e le separa una dopo l'altra mentre fai altro. Le tracce già create da AudioLR nella cartella vengono saltate."),
         Entry(topic: "Primi passi", question: "Perché la prima volta ci mette di più?",
-              answer: "Al primo uso AudioLR scarica i modelli di IA (circa 330 MB per Massima, 470 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
+              answer: "Con la versione completa (il file .dmg) i modelli sono già dentro l'app: al primo avvio AudioLR li installa e prepara il Neural Engine in sottofondo, una volta sola. Con la versione leggera, al primo uso AudioLR scarica i modelli di IA (circa 330 MB per Massima, 470 MB per Studio, 80 MB per Veloce) e prova il motore del tuo Mac per scegliere il più preciso. Succede una volta sola: poi funziona anche senza internet."),
         Entry(topic: "Primi passi", question: "Dove ritrovo le canzoni già separate?",
               answer: "Nella libreria a sinistra (⌘L per mostrarla o nasconderla): un clic riapre la separazione con il mixer, senza rifarla. Nella Cronologia (⌘Y, o il tasto con l'orologio in alto) trovi tutte le separazioni con data, qualità, durata, tempo impiegato, BPM e tonalità; doppio clic per riaprirne una."),
         Entry(topic: "Qualità", question: "Che differenza c'è tra Massima e Veloce?",

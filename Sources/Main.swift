@@ -159,6 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Prefs.applyAppearance()
         // I modelli sostituiti da versioni nuove non servono più: spazio libero sul disco
         DispatchQueue.global(qos: .utility).async { ModelStore.removeObsolete() }
+        // Versione completa: i modelli inclusi si installano e il Neural Engine si prepara, in sottofondo
+        Task { @MainActor in Warmup.shared.start() }
     }
 
     /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone

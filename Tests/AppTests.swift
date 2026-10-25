@@ -180,6 +180,31 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(MixPlayer.exportName(state: m, title: "Brano"), "Brano – Mix")
     }
 
+    /// Versione completa: i modelli inclusi nell'app si copiano una volta sola, senza toccare quelli già presenti.
+    func testInstallBundledModels() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("Inclusi \(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let src = root.appendingPathComponent("App/Modelli"), dst = root.appendingPathComponent("Supporto/Modelli")
+        try fm.createDirectory(at: src.appendingPathComponent("StrumentiSW2.mlmodelc"), withIntermediateDirectories: true)
+        try Data("pesi".utf8).write(to: src.appendingPathComponent("StrumentiSW2.mlmodelc/model.mil"))
+        try Data("{}".utf8).write(to: src.appendingPathComponent("StrumentiSW2.json"))
+        try fm.createDirectory(at: src.appendingPathComponent("HTDemucs.mlmodelc"), withIntermediateDirectories: true)
+        try Data("nuovo".utf8).write(to: src.appendingPathComponent("leggimi.txt"))
+        // Un modello già presente (scaricato prima) resta com'è
+        try fm.createDirectory(at: dst.appendingPathComponent("HTDemucs.mlmodelc"), withIntermediateDirectories: true)
+        try Data("già qui".utf8).write(to: dst.appendingPathComponent("HTDemucs.mlmodelc/segno"))
+
+        let copied = ModelStore.installBundled(from: src, to: dst)
+        XCTAssertEqual(Set(copied), ["StrumentiSW2"], "solo quello che manca (modello e descrizione)")
+        XCTAssertTrue(fm.fileExists(atPath: dst.appendingPathComponent("StrumentiSW2.mlmodelc/model.mil").path))
+        XCTAssertTrue(fm.fileExists(atPath: dst.appendingPathComponent("StrumentiSW2.json").path))
+        XCTAssertTrue(fm.fileExists(atPath: dst.appendingPathComponent("HTDemucs.mlmodelc/segno").path), "il modello già presente non si tocca")
+        XCTAssertFalse(fm.fileExists(atPath: dst.appendingPathComponent("leggimi.txt").path), "solo modelli e descrizioni")
+        XCTAssertTrue(ModelStore.installBundled(from: src, to: dst).isEmpty, "la seconda volta non c'è niente da copiare")
+        XCTAssertTrue(ModelStore.installBundled(from: nil, to: dst).isEmpty, "nell'app leggera non ci sono modelli")
+    }
+
     /// Una cartella intera: le canzoni anche nelle sottocartelle, in ordine, senza file nascosti, non audio
     /// o già creati da AudioLR.
     func testSongsInFolder() throws {

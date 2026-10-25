@@ -31,6 +31,7 @@ struct ContentView: View {
     @EnvironmentObject private var job: SeparationJob
     @StateObject private var player = StemPlayer()
     @StateObject private var mixer = MixPlayer()
+    @ObservedObject private var warmup = Warmup.shared
     @State private var exported: URL?
     @State private var makingStemFile = false
     @State private var stemFileError: String?
@@ -204,6 +205,14 @@ struct ContentView: View {
                 Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
+            // Primo avvio: modelli che si installano e Neural Engine che si prepara (si può già separare)
+            if let w = warmup.text {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(w).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+                .transition(.opacity)
+            }
             Spacer(minLength: 0)
             if job.history.isEmpty || showLibrary {
                 VStack(spacing: 8) {

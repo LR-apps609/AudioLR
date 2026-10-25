@@ -144,6 +144,30 @@ jobs:
           du -h "dist/AudioLR $VERSION.audiolr"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
+      # La versione completa per la prima installazione: l'app con dentro tutti i modelli (Veloce, Massima,
+      # Studio, batteria divisa, voce e cori), in un .dmg da trascinare in Applicazioni. Pronta all'uso, anche senza internet.
+      - name: App completa con i modelli (.dmg)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p full/AudioLR modelli
+          ditto build/Build/Products/Release/AudioLR.app full/AudioLR/AudioLR.app
+          M=full/AudioLR/AudioLR.app/Contents/Resources/Modelli
+          mkdir -p "$M"
+          for n in HTDemucs StrumentiSW2 VoceStudio2 HTDemucsFT-1 BatteriaDrumSep VoceCori2; do
+            gh release download modelli-1 --repo "$GITHUB_REPOSITORY" --dir modelli --pattern "$n.mlpackage.zip" --pattern "$n.json" --clobber
+            ditto -x -k "modelli/$n.mlpackage.zip" modelli/
+            xcrun coremlcompiler compile "modelli/$n.mlpackage" "$M/" > /dev/null
+            cp "modelli/$n.json" "$M/"
+            test -d "$M/$n.mlmodelc"
+          done
+          codesign --force --deep -s - full/AudioLR/AudioLR.app
+          ln -s /Applications full/AudioLR/Applicazioni
+          hdiutil create -volname "AudioLR $VERSION" -srcfolder full/AudioLR -ov -format UDZO "dist/AudioLR $VERSION.dmg"
+          echo "::notice::App completa: $(du -h "dist/AudioLR $VERSION.dmg" | cut -f1) ($(ls "$M" | grep -c mlmodelc) modelli inclusi)"
+
       - uses: actions/upload-artifact@v6
         with:
           name: AudioLR-${{ env.VERSION }}
@@ -158,11 +182,12 @@ jobs:
           TAG="v$VERSION"
           FILE="dist/AudioLR $VERSION.audiolr"
           ZIP="dist/AudioLR $VERSION.zip"
+          DMG="dist/AudioLR $VERSION.dmg"
           # Una versione già pubblicata non si sovrascrive: le modifiche in corso non arrivano a chi aggiorna.
           # Per ripubblicarla apposta: commit con «[ripubblica]» nel messaggio.
           if gh release view "$TAG" >/dev/null 2>&1; then
             if echo "$COMMIT_MSG" | grep -q "\[ripubblica\]"; then
-              gh release upload "$TAG" "$FILE" "$ZIP" --clobber
+              gh release upload "$TAG" "$FILE" "$ZIP" "$DMG" --clobber
             else
               echo "La release $TAG esiste già: non la tocco."
             fi
@@ -174,7 +199,7 @@ jobs:
             if [ "$TOP" != "$VERSION" ]; then
               echo "::notice::Esiste già la $TOP, più nuova: la $VERSION non si pubblica."
             else
-              gh release create "$TAG" "$FILE" "$ZIP" --title "AudioLR $VERSION" --notes-file NOVITA.txt
+              gh release create "$TAG" "$FILE" "$ZIP" "$DMG" --title "AudioLR $VERSION" --notes-file NOVITA.txt
             fi
           fi
 

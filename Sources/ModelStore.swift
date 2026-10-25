@@ -31,6 +31,8 @@ final class ModelStore: @unchecked Sendable {
     private var models: [String: MLModel] = [:]
     /// Aperture che si è smesso di aspettare: quando finiscono, il modello non si tiene.
     private var abandoned: Set<String> = []
+    /// Le aperture in corso, per non aprire due volte lo stesso modello.
+    private var inflight: [String: Task<MLModel, Error>] = [:]
     private let lock = NSLock()
 
     /// Il modello pronto all'uso: lo scarica e lo prepara se serve. `progress` riceve 0…1 durante lo scaricamento.
@@ -56,7 +58,22 @@ final class ModelStore: @unchecked Sendable {
     func mlModel(_ name: String, units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> MLModel {
         let key = "\(name)#\(units.rawValue)"
         if let m = lock.withLock({ models[key] }) { return m }
-        if !isReady(name) { try await download(name, progress: progress) }
+        // Se lo stesso modello si sta già aprendo (es. la preparazione al primo avvio), si aspetta quello:
+        // due aperture insieme raddoppierebbero memoria e tempo
+        let task: Task<MLModel, Error> = lock.withLock {
+            if let t = inflight[key] { return t }
+            let t = Task { () throws -> MLModel in
+                if !self.isReady(name) { try await self.download(name, progress: progress) }
+                return try await self.open(name, units: units, key: key)
+            }
+            inflight[key] = t
+            return t
+        }
+        defer { lock.withLock { if inflight[key] == task { inflight[key] = nil } } }
+        return try await task.value
+    }
+
+    private func open(_ name: String, units: MLComputeUnits, key: String) async throws -> MLModel {
         let cfg = MLModelConfiguration()
         cfg.computeUnits = units
         let url = Self.compiled(name)
@@ -113,6 +130,35 @@ final class ModelStore: @unchecked Sendable {
     func roformer(_ name: String, units: MLComputeUnits = .all, progress: @escaping (Double) -> Void) async throws -> RoFormer {
         let cfg = try JSONDecoder().decode(RoFormerConfig.self, from: try await config(name))
         return RoFormer(model: try await mlModel(name, units: units, progress: progress), config: cfg)
+    }
+
+    /// I modelli inclusi nell'app (versione completa, file .dmg): stanno in Contents/Resources/Modelli.
+    static var bundled: URL? { Bundle.main.resourceURL?.appendingPathComponent("Modelli", isDirectory: true) }
+
+    /// Al primo avvio i modelli inclusi nell'app si copiano nella cartella dei modelli: così gli aggiornamenti
+    /// (che portano solo l'app, pochi MB) li trovano già lì. Restituisce i nomi dei modelli copiati.
+    @discardableResult
+    static func installBundled(from source: URL? = bundled, to folder: URL = ModelStore.folder) -> [String] {
+        let fm = FileManager.default
+        guard let source, let items = try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) else { return [] }
+        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        var copied: [String] = []
+        for item in items where ["mlmodelc", "json"].contains(item.pathExtension) {
+            let target = folder.appendingPathComponent(item.lastPathComponent)
+            guard !fm.fileExists(atPath: target.path) else { continue }
+            // Prima in una cartella provvisoria, poi al suo posto: un avvio interrotto non lascia un modello a metà
+            let tmp = folder.appendingPathComponent(".copia-\(UUID().uuidString)-" + item.lastPathComponent)
+            do {
+                try fm.copyItem(at: item, to: tmp)
+                try fm.moveItem(at: tmp, to: target)
+                copied.append(item.deletingPathExtension().lastPathComponent)
+            } catch {
+                try? fm.removeItem(at: tmp)
+                AppLog.write("Modello incluso non copiato \(item.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        if !copied.isEmpty { AppLog.write("Modelli inclusi installati: " + copied.joined(separator: ", ")) }
+        return copied
     }
 
     /// Modelli di versioni passate, sostituiti da altri: si tolgono dal disco all'avvio (centinaia di MB).
