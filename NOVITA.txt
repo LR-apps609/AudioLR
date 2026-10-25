@@ -2,6 +2,8 @@ Novità della 0.24.0 «IsoLR»:
 • AudioLR adesso si chiama IsoLR: nel Dock, nei menu, nel Finder e in tutta l'app. Il logo resta lo stesso
 • La cartella delle tracce passa da Musica › AudioLR a Musica › IsoLR: si sposta da sola al primo avvio, con tutte le canzoni già separate e la cronologia
 • Il lucchetto in alto è un tasto: un clic spiega che le canzoni restano sul tuo Mac
+• Corretto: nella barra del mixer «Tutto · Karaoke · Solo voce» poteva finire sopra i tasti accanto (macOS 26). Ora non viene mai stretto: se non c'è spazio diventa un menu
+• Impostazioni più larghe; Dettagli e guida «Come si usa» scorrono invece di essere tagliati sugli schermi piccoli
 
 Novità della 0.23.1 «Revisione completa»:
 • Corretto: con la finestra non molto larga e il tasto «Aggiornamento disponibile» in alto, la finestra usciva dai bordi, il nome AudioLR spariva e i risultati restavano schiacciati. Ora con poco spazio i tasti si accorciano e niente esce mai dalla finestra; aprendo la libreria in una finestra stretta, la finestra si allarga
