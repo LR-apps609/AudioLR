@@ -118,7 +118,11 @@ final class ScreenshotTests: XCTestCase {
         job.showcase(title: "TENDER_WIP_2 versione lunga del titolo", stems: stems, folder: dir, quality: .studio, duration: 280,
                      analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8), elapsed: 536,
                      engine: "Grafica (scelta nelle Impostazioni)", timings: [])
+        // Con la Sala prove aperta: la barra più lunga
+        let practice = UserDefaults.standard.object(forKey: "showPractice")
+        UserDefaults.standard.set(true, forKey: "showPractice")
         try shot(ContentView().environmentObject(job), "11-aggiornamento-risultati-stretta", width: 940, height: 640)
+        UserDefaults.standard.set(practice, forKey: "showPractice")
         try shot(ContentView().environmentObject(job), "12-aggiornamento-risultati", width: 1020, height: 680)
     }
 
