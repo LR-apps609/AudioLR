@@ -33,7 +33,7 @@ final class Warmup: ObservableObject {
                 .filter { EngineChoice.current($0)?.units != .cpuAndGPU }
             if SeparationJob.hasNeuralEngine && !Prefs.gpuOnly {
                 for name in names {
-                    await self?.set("Preparo AudioLR per il Neural Engine di questo Mac (solo la prima volta, qualche minuto)…")
+                    await self?.set("Preparo IsoLR per il Neural Engine di questo Mac (solo la prima volta, qualche minuto)…")
                     let units: MLComputeUnits = SeparationJob.useDual ? .cpuAndNeuralEngine : .all
                     let ok = (try? await withTimeout(SeparationJob.aneLimit, { try await ModelStore.shared.mlModel(name, units: units) { _ in } })) ?? nil
                     if ok != nil {

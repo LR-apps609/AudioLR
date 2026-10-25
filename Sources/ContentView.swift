@@ -44,6 +44,7 @@ struct ContentView: View {
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
+    @State private var showPrivacy = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
     @Environment(\.openWindow) private var openWindow
@@ -160,7 +161,7 @@ struct ContentView: View {
             LogoMark(size: 38, animated: job.isBusy)
             VStack(alignment: .leading, spacing: 1) {
                 // Il nome non si accorcia mai: è il primo a cui si dà spazio
-                Text("AudioLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
+                Text("IsoLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
                 // Se lo spazio non basta (libreria aperta, finestra stretta) si accorcia invece di andare a capo
                 ViewThatFits(in: .horizontal) {
                     Text("Separa voce e strumenti di qualsiasi canzone")
@@ -189,23 +190,35 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .fixedSize()
                 .disabled(updateNotice.downloading)
-                .help("Hai la \(UpdateCheck.current): clic per scaricare e installare la \(rel.version). AudioLR si riapre da sola.")
+                .help("Hai la \(UpdateCheck.current): clic per scaricare e installare la \(rel.version). IsoLR si riapre da sola.")
                 .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
                 .transition(.scale.combined(with: .opacity))
             }
-            // Con poco spazio resta solo il lucchetto (il testo compare passandoci sopra)
-            Group {
+            // Con poco spazio resta solo il lucchetto. È un tasto: un clic spiega cosa vuol dire
+            // (i suggerimenti al passaggio del mouse su macOS compaiono in modo affidabile solo sui tasti)
+            Button { showPrivacy.toggle() } label: {
                 if compact {
                     Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.green)
                         .frame(width: 28, height: 24)
                         .background(Capsule().fill(Theme.green.opacity(0.14)))
                         .overlay(Capsule().strokeBorder(Theme.green.opacity(0.35)))
+                        .contentShape(Capsule())
                 } else {
-                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green)
+                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green).contentShape(Capsule())
                 }
             }
+            .buttonStyle(.plain)
             .help("Tutto sul tuo Mac: la canzone non viene caricata su internet")
             .accessibilityLabel("Tutto sul tuo Mac")
+            .popover(isPresented: $showPrivacy, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Tutto sul tuo Mac", systemImage: "lock.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
+                    Text("Le canzoni vengono separate qui, sul tuo Mac. Non vengono caricate su internet e nessuno le ascolta: nemmeno noi.")
+                        .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(width: 280)
+            }
             HStack(spacing: 2) {
                 toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
                     showLibrary.toggle()
@@ -270,7 +283,10 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 360)
+                // Mai più stretto delle sue parole (testo grande nelle Impostazioni di Sistema compreso):
+                // un controllo costretto in poco spazio disegna fuori dai bordi, sopra i vicini
+                .frame(minWidth: 360)
+                .fixedSize()
                 Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .padding(.top, 4)
@@ -610,7 +626,51 @@ struct ContentView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
+    /// La barra del mixer: se Tutto/Karaoke/Solo voce non ci stanno affiancati, diventano un menu.
+    /// Niente viene mai stretto sotto la misura delle sue parole (e quindi niente si sovrappone).
     private var transportBar: some View {
+        transportRow(segmented: segmentsFit)
+    }
+
+    /// Ci stanno i tasti affiancati? Lo spazio della barra (la colonna meno i margini) contro quello che serve
+    /// agli altri tasti più ai segmenti, con le misure di macOS 26 (controlli più grandi) e un po' di margine.
+    private var segmentsFit: Bool {
+        let available = mainWidth - 108
+        let others: CGFloat = compact ? 360 : 600
+        let segments: CGFloat = mixer.keys.contains("lead") ? 350 : 260
+        return available >= others + segments
+    }
+
+    @ViewBuilder
+    private func presetControl(segmented: Bool) -> some View {
+        let presets = MixState.Preset.allCases.filter { $0 != .backing || mixer.keys.contains("lead") }
+        if segmented {
+            Picker("Scorciatoie", selection: Binding(
+                get: { mixer.state.preset?.rawValue ?? "" },
+                set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
+                ForEach(presets) { p in Text(p.title).tag(p.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(minWidth: compact ? 0 : (mixer.keys.contains("lead") ? 340 : 250))
+            .fixedSize()
+        } else {
+            Menu {
+                ForEach(presets) { p in
+                    Button { mixer.state.apply(p) } label: {
+                        if mixer.state.preset == p { Label(p.title, systemImage: "checkmark") } else { Text(p.title) }
+                    }
+                }
+            } label: {
+                Text(mixer.state.preset?.title ?? "Mix personale").lineLimit(1)
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help("Tutto, Karaoke, Solo voce")
+        }
+    }
+
+    private func transportRow(segmented: Bool) -> some View {
         HStack(spacing: 12) {
             Button {
                 player.stop()
@@ -638,14 +698,7 @@ struct ContentView: View {
                 .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
                 .accessibilityLabel("Sala prove")
-            Picker("Scorciatoie", selection: Binding(
-                get: { mixer.state.preset?.rawValue ?? "" },
-                set: { if let p = MixState.Preset(rawValue: $0) { mixer.state.apply(p) } })) {
-                ForEach(MixState.Preset.allCases.filter { $0 != .backing || mixer.keys.contains("lead") }) { p in Text(p.title).tag(p.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: (mixer.keys.contains("lead") ? 340 : 250) * (compact ? 0.72 : 1))
+            presetControl(segmented: segmented)
             withoutMenu
             Spacer()
             Menu {
@@ -965,7 +1018,7 @@ struct WhatsNewSheet: View {
             HStack(spacing: 12) {
                 LogoMark(size: 44, animated: true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("AudioLR è aggiornata").font(.system(size: 18, weight: .bold, design: .rounded))
+                    Text("IsoLR è aggiornata").font(.system(size: 18, weight: .bold, design: .rounded))
                     Text("Versione \(UpdateCheck.current)").font(.system(size: 12)).foregroundStyle(Theme.brass)
                 }
             }

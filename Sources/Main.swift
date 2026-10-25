@@ -8,9 +8,14 @@ struct AudioLRApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var job = SeparationJob.shared
 
+    init() {
+        // Prima di leggere la cronologia: Musica › AudioLR diventa Musica › IsoLR (una volta sola)
+        Paths.migrateOutput()
+    }
+
     var body: some Scene {
         // Una finestra unica: «Apri con» e il ponte con OrbitLR riportano davanti quella che c'è
-        Window("AudioLR", id: "main") {
+        Window("IsoLR", id: "main") {
             ContentView()
                 .environmentObject(job)
                 .frame(minHeight: 560)
@@ -147,13 +152,13 @@ struct AudioLRCommands: Commands {
             Button("Segnala un bug…") { openWindow(id: "bug") }
                 .keyboardShortcut("b", modifiers: [.command, .option])
             Divider()
-            Link("AudioLR su GitHub", destination: BugReport.repo)
+            Link("IsoLR su GitHub", destination: BugReport.repo)
         }
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Tornando su AudioLR dopo tanto tempo, il tasto dell'aggiornamento si rinfresca.
+    /// Tornando su IsoLR dopo tanto tempo, il tasto dell'aggiornamento si rinfresca.
     func applicationDidBecomeActive(_ notification: Notification) {
         Task { @MainActor in UpdateCheck.checkIfStale() }
     }
@@ -169,8 +174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in DockProgress.shared.start() }
     }
 
-    /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → AudioLR» su una canzone
-    /// (e, più avanti, «Apri in AudioLR» da OrbitLR).
+    /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → IsoLR» su una canzone
+    /// (e, più avanti, «Apri in IsoLR» da OrbitLR).
     func application(_ application: NSApplication, open urls: [URL]) {
         let files = urls.filter { $0.isFileURL }
         Task { @MainActor in

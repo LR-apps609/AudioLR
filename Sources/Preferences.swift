@@ -66,7 +66,7 @@ enum Prefs {
         OutputFormat(rawValue: UserDefaults.standard.string(forKey: formatKey) ?? "") ?? .wav24
     }
 
-    /// La cartella delle tracce: Musica › AudioLR, se non ne è stata scelta un'altra (che esista ancora).
+    /// La cartella delle tracce: Musica › IsoLR, se non ne è stata scelta un'altra (che esista ancora).
     static var folder: URL {
         if let p = UserDefaults.standard.string(forKey: folderKey), !p.isEmpty {
             var dir: ObjCBool = false
@@ -123,9 +123,9 @@ enum Prefs {
     static var revealWhenDone: Bool { UserDefaults.standard.bool(forKey: revealKey) }
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }
 
-    /// «Musica › AudioLR» oppure il percorso abbreviato della cartella scelta.
+    /// «Musica › IsoLR» oppure il percorso abbreviato della cartella scelta.
     static func displayName(of url: URL) -> String {
-        if url.standardizedFileURL == Paths.output.standardizedFileURL { return "Musica › AudioLR" }
+        if url.standardizedFileURL == Paths.output.standardizedFileURL { return "Musica › IsoLR" }
         let home = Paths.home.path
         let p = url.path
         let short = p.hasPrefix(home) ? String(p.dropFirst(home.count + 1)) : p

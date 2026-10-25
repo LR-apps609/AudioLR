@@ -60,6 +60,26 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(SeparationJob.average([[[3, 3, 3], [3, 3, 3]], [[1], [1]]])[0], [2, 1.5, 1.5])
     }
 
+    /// IsoLR: la cartella delle tracce si sposta una volta sola e la cronologia segue.
+    func testOutputFolderMigration() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("migra-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let old = root.appendingPathComponent("AudioLR"), new = root.appendingPathComponent("IsoLR")
+        let song = old.appendingPathComponent("Canzone")
+        try fm.createDirectory(at: song, withIntermediateDirectories: true)
+        let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
+        History.add(song: nil, folder: song, quality: .best, defaults: d)
+        d.set(old.path, forKey: Prefs.folderKey)
+        XCTAssertTrue(Paths.migrateOutput(from: old, to: new, defaults: d))
+        XCTAssertTrue(fm.fileExists(atPath: new.appendingPathComponent("Canzone").path))
+        XCTAssertFalse(fm.fileExists(atPath: old.path))
+        XCTAssertEqual(History.all(defaults: d).first?.folder, new.appendingPathComponent("Canzone").path)
+        XCTAssertEqual(d.string(forKey: Prefs.folderKey), new.path)
+        // Una seconda volta non fa niente
+        XCTAssertFalse(Paths.migrateOutput(from: old, to: new, defaults: d))
+    }
+
     /// La barra nel Dock: sale con il lavoro e sparisce quando non c'è niente in corso.
     func testDockProgressFraction() {
         XCTAssertNil(DockProgress.fraction(.idle))
@@ -420,7 +440,7 @@ final class AppTests: XCTestCase {
     }
 
     func testFolderNames() {
-        XCTAssertEqual(Prefs.displayName(of: Paths.output), "Musica › AudioLR")
+        XCTAssertEqual(Prefs.displayName(of: Paths.output), "Musica › IsoLR")
         XCTAssertEqual(Prefs.displayName(of: Paths.home.appendingPathComponent("Desktop/Tracce")), "Desktop › Tracce")
     }
 

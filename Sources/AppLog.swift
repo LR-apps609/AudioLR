@@ -1,7 +1,7 @@
 import Foundation
 
 // ════════════════════════════════════════════════════════════════════
-//  Il registro di AudioLR: ogni passo di una separazione con l'ora, in
+//  Il registro di IsoLR: ogni passo di una separazione con l'ora, in
 //  ~/Library/Logs/AudioLR/AudioLR.log. Resta sul Mac; finisce in una
 //  segnalazione solo se l'utente la manda (Aiuto › Segnala un problema).
 // ════════════════════════════════════════════════════════════════════

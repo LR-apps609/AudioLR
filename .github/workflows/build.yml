@@ -147,10 +147,10 @@ jobs:
           # L'app già compilata: «Costruisci e installa» e gli aggiornamenti la installano direttamente (pochi secondi).
           mkdir -p dist/AudioLR/Prebuilt
           ditto build/Build/Products/Release/AudioLR.app dist/AudioLR/Prebuilt/AudioLR.app
-          ditto -c -k --keepParent dist/AudioLR "dist/AudioLR $VERSION.audiolr"
+          ditto -c -k --keepParent dist/AudioLR "dist/IsoLR $VERSION.audiolr"
           # La stessa cosa in .zip, per la prima installazione (prima che il Mac conosca i file .audiolr)
-          cp "dist/AudioLR $VERSION.audiolr" "dist/AudioLR $VERSION.zip"
-          du -h "dist/AudioLR $VERSION.audiolr"
+          cp "dist/IsoLR $VERSION.audiolr" "dist/IsoLR $VERSION.zip"
+          du -h "dist/IsoLR $VERSION.audiolr"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       # La versione completa per la prima installazione: l'app con dentro tutti i modelli (Veloce, Massima,
@@ -161,9 +161,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          mkdir -p full/AudioLR modelli
-          ditto build/Build/Products/Release/AudioLR.app full/AudioLR/AudioLR.app
-          M=full/AudioLR/AudioLR.app/Contents/Resources/Modelli
+          mkdir -p full/IsoLR modelli
+          ditto build/Build/Products/Release/AudioLR.app full/IsoLR/AudioLR.app
+          M=full/IsoLR/AudioLR.app/Contents/Resources/Modelli
           mkdir -p "$M"
           for n in HTDemucs StrumentiSW2 VoceRevive VoceRoFormer9 HTDemucsFT-1 BatteriaDrumSep VoceCori3; do
             gh release download modelli-1 --repo "$GITHUB_REPOSITORY" --dir modelli --pattern "$n.mlpackage.zip" --pattern "$n.json" --clobber
@@ -172,10 +172,10 @@ jobs:
             cp "modelli/$n.json" "$M/"
             test -d "$M/$n.mlmodelc"
           done
-          codesign --force --deep -s - full/AudioLR/AudioLR.app
-          ln -s /Applications full/AudioLR/Applicazioni
-          hdiutil create -volname "AudioLR $VERSION" -srcfolder full/AudioLR -ov -format UDZO "dist/AudioLR $VERSION.dmg"
-          echo "::notice::App completa: $(du -h "dist/AudioLR $VERSION.dmg" | cut -f1) ($(ls "$M" | grep -c mlmodelc) modelli inclusi)"
+          codesign --force --deep -s - full/IsoLR/AudioLR.app
+          ln -s /Applications full/IsoLR/Applicazioni
+          hdiutil create -volname "IsoLR $VERSION" -srcfolder full/IsoLR -ov -format UDZO "dist/IsoLR $VERSION.dmg"
+          echo "::notice::App completa: $(du -h "dist/IsoLR $VERSION.dmg" | cut -f1) ($(ls "$M" | grep -c mlmodelc) modelli inclusi)"
 
       - uses: actions/upload-artifact@v6
         with:
@@ -189,9 +189,9 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           TAG="v$VERSION"
-          FILE="dist/AudioLR $VERSION.audiolr"
-          ZIP="dist/AudioLR $VERSION.zip"
-          DMG="dist/AudioLR $VERSION.dmg"
+          FILE="dist/IsoLR $VERSION.audiolr"
+          ZIP="dist/IsoLR $VERSION.zip"
+          DMG="dist/IsoLR $VERSION.dmg"
           # Una versione già pubblicata non si sovrascrive: le modifiche in corso non arrivano a chi aggiorna.
           # Per ripubblicarla apposta: commit con «[ripubblica]» nel messaggio.
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -208,7 +208,7 @@ jobs:
             if [ "$TOP" != "$VERSION" ]; then
               echo "::notice::Esiste già la $TOP, più nuova: la $VERSION non si pubblica."
             else
-              gh release create "$TAG" "$FILE" "$ZIP" "$DMG" --title "AudioLR $VERSION" --notes-file NOVITA.txt
+              gh release create "$TAG" "$FILE" "$ZIP" "$DMG" --title "IsoLR $VERSION" --notes-file NOVITA.txt
             fi
           fi
 

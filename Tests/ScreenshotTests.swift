@@ -93,7 +93,7 @@ final class ScreenshotTests: XCTestCase {
         try shot(DetailsView().environmentObject(job), "3-dettagli", width: 320, height: 620)
     }
 
-    func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 520, height: 470) }
+    func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 660, height: 470) }
     func testShotAccount() throws { try shot(AccountView().environmentObject(SeparationJob.shared), "5-account", width: 480, height: 600) }
     func testShotFAQ() throws { try skipOnVirtualMac(); try shot(FAQView(), "6-domande", width: 620, height: 620) }
     func testShotBugReport() throws { try skipOnVirtualMac(); try shot(BugReportView(), "7-segnala", width: 520, height: 600) }

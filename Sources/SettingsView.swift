@@ -16,7 +16,8 @@ struct SettingsView: View {
             UpdateSettings().tabItem { Label("Aggiornamenti", systemImage: "arrow.down.circle") }
             AboutSettings().tabItem { Label("Informazioni", systemImage: "info.circle") }
         }
-        .frame(width: 520)
+        // Su macOS 26 le cinque schede in alto hanno bisogno di più spazio: più stretta, finirebbero nascoste dietro «»»
+        .frame(width: 660)
         .tint(Theme.brass)
     }
 }
@@ -51,7 +52,7 @@ struct TracksSettings: View {
                             .lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
                         Button("Scegli…") { chooseFolder() }
                         if !folder.isEmpty {
-                            Button("Predefinita") { folder = "" }.help("Torna a Musica › AudioLR")
+                            Button("Predefinita") { folder = "" }.help("Torna a Musica › IsoLR")
                         }
                     }
                 }
@@ -114,7 +115,7 @@ struct EngineSettings: View {
             } header: {
                 Text("Motore")
             } footer: {
-                Text("Al primo uso di ogni modello AudioLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso.")
+                Text("Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -176,11 +177,11 @@ struct UpdateSettings: View {
                     Task { @MainActor in await UpdateCheck.check(userInitiated: true) }
                 }
             } footer: {
-                Text("Gli aggiornamenti si installano in pochi secondi e AudioLR si riapre da sola. Puoi anche fare doppio clic su un file .audiolr.")
+                Text("Gli aggiornamenti si installano in pochi secondi e IsoLR si riapre da sola. Puoi anche fare doppio clic su un file .audiolr.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Link("Pagina di AudioLR su GitHub", destination: BugReport.repo)
+                Link("Pagina di IsoLR su GitHub", destination: BugReport.repo)
                 Button("Segnala un bug…") { openWindow(id: "bug") }
             }
         }
@@ -241,7 +242,7 @@ struct AboutSettings: View {
                 HStack(spacing: 14) {
                     LogoMark(size: 56, animated: true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AudioLR").font(.system(size: 20, weight: .bold, design: .rounded))
+                        Text("IsoLR").font(.system(size: 20, weight: .bold, design: .rounded))
                         Text("Versione \(UpdateCheck.current) · famiglia LR").font(.system(size: 12)).foregroundStyle(.secondary)
                         Text("Separa voce e strumenti, tutto sul tuo Mac.").font(.system(size: 12)).foregroundStyle(.secondary)
                     }

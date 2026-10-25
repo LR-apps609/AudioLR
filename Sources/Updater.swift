@@ -4,8 +4,8 @@ import SwiftUI
 
 // ════════════════════════════════════════════════════════════════════
 //  Aggiornamenti con un doppio clic, come in OrbitLR.
-//  «AudioLR x.y.z.audiolr» contiene l'app già pronta (cartella Prebuilt):
-//  AudioLR controlla che sia integra e adatta a questo Mac, la prepara
+//  «IsoLR x.y.z.audiolr» contiene l'app già pronta (cartella Prebuilt):
+//  IsoLR controlla che sia integra e adatta a questo Mac, la prepara
 //  accanto a quella attuale, si chiude, viene sostituita e si riapre.
 //  Se qualcosa va storto, la versione attuale torna al suo posto.
 // ════════════════════════════════════════════════════════════════════
@@ -20,7 +20,7 @@ final class Updater: ObservableObject, @unchecked Sendable {
             switch self {
             case .check: return "Controllo la nuova versione…"
             case .prepare: return "Preparo l'installazione…"
-            case .done: return "Fatto! Riapro AudioLR…"
+            case .done: return "Fatto! Riapro IsoLR…"
             }
         }
     }
@@ -61,7 +61,7 @@ final class Updater: ObservableObject, @unchecked Sendable {
         try? fm.createDirectory(at: work, withIntermediateDirectories: true)
         guard sh("/usr/bin/ditto", ["-x", "-k", file.path, work.path]) == 0, let pkg = Self.findPackage(in: work) else {
             busy = false
-            alert("Questo file non è un aggiornamento di AudioLR valido.", "")
+            alert("Questo file non è un aggiornamento di IsoLR valido.", "")
             return
         }
         let version = (try? String(contentsOf: pkg.appendingPathComponent("version.txt"), encoding: .utf8))?
@@ -76,8 +76,8 @@ final class Updater: ObservableObject, @unchecked Sendable {
         }
         if !confirmed {
             let a = NSAlert()
-            a.messageText = "Installare AudioLR \(version)?"
-            a.informativeText = "Versione attuale: \(currentVersion).\n\nAudioLR si chiude e si riapre da sola, già aggiornata, in pochi secondi."
+            a.messageText = "Installare IsoLR \(version)?"
+            a.informativeText = "Versione attuale: \(currentVersion).\n\nIsoLR si chiude e si riapre da sola, già aggiornata, in pochi secondi."
             let items = News.items(since: currentVersion, in: news, maxVersions: 8)
             if !items.isEmpty { a.accessoryView = Self.scrollingText(items.map { "• " + $0 }.joined(separator: "\n\n")) }
             a.addButton(withTitle: "Installa")
@@ -325,7 +325,7 @@ enum UpdateCheck {
         UpdateNotice.shared.available = worthShowing(found, current: current).flatMap { $0.version == skipped ? nil : $0 }
     }
 
-    /// Quando si torna su AudioLR: se l'ultimo controllo è di più di 30 minuti fa, se ne fa uno nuovo.
+    /// Quando si torna su IsoLR: se l'ultimo controllo è di più di 30 minuti fa, se ne fa uno nuovo.
     @MainActor
     static func checkIfStale(now: Date = Date(), after seconds: Double = 30 * 60) {
         guard autoEnabled else { return }
@@ -340,12 +340,12 @@ enum UpdateCheck {
         return rel
     }
 
-    /// Dal tasto «Aggiornamento disponibile»: scarica e installa (AudioLR si riapre da sola).
+    /// Dal tasto «Aggiornamento disponibile»: scarica e installa (IsoLR si riapre da sola).
     @MainActor
     static func installNow(_ rel: Release) async {
         guard !Updater.shared.busy else { return }
         if SeparationJob.shared.isWorking {
-            info("Prima finisce la separazione", "AudioLR si aggiorna appena la canzone in corso è pronta: premi di nuovo il tasto dopo.")
+            info("Prima finisce la separazione", "IsoLR si aggiorna appena la canzone in corso è pronta: premi di nuovo il tasto dopo.")
             return
         }
         UpdateNotice.shared.downloading = true
@@ -357,7 +357,7 @@ enum UpdateCheck {
         if let found = try? await latest() {
             guard let fresh = worthShowing(found, current: current) else {
                 UpdateNotice.shared.available = nil
-                info("Hai già l'ultima versione", "AudioLR \(current) è la più recente.")
+                info("Hai già l'ultima versione", "IsoLR \(current) è la più recente.")
                 return
             }
             target = fresh
@@ -380,7 +380,7 @@ enum UpdateCheck {
             return
         }
         guard News.newer(rel.version, than: current) else {
-            if userInitiated { info("Hai già l'ultima versione", "AudioLR \(current) è la più recente.") }
+            if userInitiated { info("Hai già l'ultima versione", "IsoLR \(current) è la più recente.") }
             return
         }
         UpdateNotice.shared.available = rel
@@ -389,8 +389,8 @@ enum UpdateCheck {
         // Durante una separazione non si interrompe: ci si riprova al prossimo avvio
         if !userInitiated, SeparationJob.shared.isWorking { UserDefaults.standard.set(0.0, forKey: lastKey); return }
         let a = NSAlert()
-        a.messageText = "È disponibile AudioLR \(rel.version)"
-        a.informativeText = "Hai la \(current). La scarico e la installo? Ci vogliono pochi secondi e AudioLR si riapre da sola."
+        a.messageText = "È disponibile IsoLR \(rel.version)"
+        a.informativeText = "Hai la \(current). La scarico e la installo? Ci vogliono pochi secondi e IsoLR si riapre da sola."
         a.addButton(withTitle: "Scarica e installa")
         a.addButton(withTitle: "Più tardi")
         a.addButton(withTitle: "Salta questa versione")
@@ -492,7 +492,7 @@ struct UpdateView: View {
             LogoMark(size: 92, animated: updater.error == nil)
                 .padding(.top, 30)
             VStack(spacing: 4) {
-                Text(updater.error == nil ? "Aggiorno AudioLR" : "Aggiornamento non riuscito")
+                Text(updater.error == nil ? "Aggiorno IsoLR" : "Aggiornamento non riuscito")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                 Text("\(updater.fromVersion)  →  \(updater.toVersion)")
                     .font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Theme.brass)

@@ -12,7 +12,7 @@ enum Drawing {
     static var flat = false
 }
 
-/// Il marchio di AudioLR, come l'icona: sette barre arrotondate a forma d'onda, dal corallo al verde acqua,
+/// Il marchio di IsoLR, come l'icona: sette barre arrotondate a forma d'onda, dal corallo al verde acqua,
 /// su un riquadro prugna scuro. Animato, le barre «suonano» piano.
 struct LogoMark: View {
     var size: CGFloat = 32

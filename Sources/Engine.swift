@@ -13,7 +13,7 @@ import CoreML
 //    (12,20 dB contro 11,93 di viperx da solo, e lascia fuori pad e tastiere
 //    tenute). Strumenti: SW sulla base senza voce, in squadra con Demucs sulla
 //    base e con SW sulla canzone intera. La più pulita.
-//  • Il motore: al primo uso di ogni modello AudioLR prova un pezzo della
+//  • Il motore: al primo uso di ogni modello IsoLR prova un pezzo della
 //    canzone sia con il Neural Engine sia con la grafica. Se i due risultati
 //    non coincidono, il Neural Engine di questo Mac è impreciso con quel
 //    modello e da lì in poi si usa la grafica.

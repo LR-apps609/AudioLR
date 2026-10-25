@@ -6,7 +6,7 @@
 <!-- Niente esce da questa pagina: solo file di questo sito (modello compreso), nessun servizio esterno -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>AudioLR · Separa voce e strumenti, sul tuo computer</title>
+<title>IsoLR · Separa voce e strumenti, sul tuo computer</title>
 <meta name="description" content="Separa voce, batteria, basso e strumenti di qualsiasi canzone. Tutto sul tuo computer: nessun caricamento, nessun account, nessun dato raccolto.">
 <link rel="icon" href="img/logo.png">
 <link rel="stylesheet" href="style.css">
@@ -14,7 +14,7 @@
 <body>
 <nav class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="img/logo.png" alt="">AudioLR</a>
+    <a class="brand" href="#"><img src="img/logo.png" alt="">IsoLR</a>
     <div class="links">
       <a href="#prova">Prova</a>
       <a href="#confronto">Sito o app</a>
@@ -45,7 +45,7 @@
     <div class="row" style="justify-content:space-between;margin-bottom:16px">
       <div style="display:grid;gap:6px">
         <span class="label web-only">Prova nel browser · qualità Veloce</span>
-        <span class="label desktop-only">AudioLR per Windows · anteprima · qualità Veloce</span>
+        <span class="label desktop-only">IsoLR per Windows · anteprima · qualità Veloce</span>
         <h2>Trascina una canzone</h2>
       </div>
       <span class="chip" id="backend" hidden></span>
@@ -144,10 +144,10 @@
       <div class="card">
         <h3>Mac</h3>
         <p class="muted">macOS 14 o successivo, chip Apple (M1, M2, M3, M4) o Intel. Con tutti i modelli di IA già dentro: si installa e funziona subito, anche senza internet.</p>
-        <a class="btn big" href="https://github.com/LR-apps609/AudioLR/releases/latest" rel="noopener">Scarica AudioLR per Mac</a>
+        <a class="btn big" href="https://github.com/LR-apps609/AudioLR/releases/latest" rel="noopener">Scarica IsoLR per Mac</a>
         <ol class="steps muted">
-          <li>Nella pagina che si apre, scarica il file <b>AudioLR … .dmg</b> (circa 1,2 GB, una volta sola).</li>
-          <li>Aprilo e trascina AudioLR sulla cartella <b>Applicazioni</b>.</li>
+          <li>Nella pagina che si apre, scarica il file <b>IsoLR … .dmg</b> (circa 1,8 GB, una volta sola).</li>
+          <li>Aprilo e trascina IsoLR sulla cartella <b>Applicazioni</b>.</li>
           <li>La prima volta: se macOS la blocca, <b>Impostazioni di Sistema › Privacy e sicurezza › Apri comunque</b>.</li>
         </ol>
         <details class="alt"><summary>Preferisci il Terminale?</summary>
@@ -170,13 +170,13 @@
     <details><summary>Perché la prima volta è lenta?</summary><p>Il browser scarica il modello (circa 170 MB) una volta sola e lo tiene in memoria. Dopo parte subito, anche senza internet.</p></details>
     <details><summary>Quanto ci mette?</summary><p>Con una scheda grafica recente (Chrome, Edge, Safari 26) pochi secondi per minuto di musica. Senza, il processore ci mette di più: per le canzoni lunghe conviene l'app.</p></details>
     <details><summary>Posso usare le tracce di canzoni famose?</summary><p>Per uso personale (studio, pratica, karaoke) sì. Pubblicare o vendere tracce di brani altrui richiede il permesso di chi ne ha i diritti.</p></details>
-    <details><summary>Chi c'è dietro?</summary><p>AudioLR fa parte della famiglia LR Apps. I modelli sono open source (Demucs di Meta, licenza MIT, nel browser; RoFormer e altri nell'app).</p></details>
+    <details><summary>Chi c'è dietro?</summary><p>IsoLR fa parte della famiglia LR Apps. I modelli sono open source (Demucs di Meta, licenza MIT, nel browser; RoFormer e altri nell'app).</p></details>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <span>AudioLR · famiglia LR Apps</span>
+    <span>IsoLR · famiglia LR Apps</span>
     <span>Nessun cookie · nessuna statistica · nessun dato raccolto</span>
     <a href="https://github.com/LR-apps609/AudioLR" rel="noopener">Codice su GitHub</a>
   </div>

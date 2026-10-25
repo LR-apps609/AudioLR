@@ -120,7 +120,7 @@ struct LibraryRow: View {
 struct GuideView: View {
     var openFAQ: () -> Void = {}
     private let tips: [(String, String, String)] = [
-        ("square.and.arrow.down", "Trascina una o più canzoni", "Anche un album intero: AudioLR le separa una dopo l'altra."),
+        ("square.and.arrow.down", "Trascina una o più canzoni", "Anche un album intero: IsoLR le separa una dopo l'altra."),
         ("sparkles", "Veloce, Massima o Studio", "Massima separa anche chitarra e piano; Studio ha la voce più pulita; Veloce è la più rapida."),
         ("slider.horizontal.3", "Il mixer", "Muto (M), solo (S) e volume per ogni traccia; Karaoke e Solo voce in un clic."),
         ("square.and.arrow.up", "Esporta il mix", "Salva quello che senti, accanto alle tracce."),
@@ -135,6 +135,13 @@ struct GuideView: View {
     ]
 
     var body: some View {
+        // Sui Mac con lo schermo piccolo la guida è più alta dello spazio: scorre invece di essere tagliata
+        ScrollView { guide }
+            .frame(width: 330)
+            .frame(maxHeight: 620)
+    }
+
+    private var guide: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 LogoMark(size: 30)
@@ -168,7 +175,6 @@ struct GuideView: View {
                 .buttonStyle(.link)
         }
         .padding(18)
-        .frame(width: 330)
     }
 }
 
@@ -178,6 +184,13 @@ struct DetailsView: View {
     @EnvironmentObject private var job: SeparationJob
 
     var body: some View {
+        // Più lunghi dello schermo sui Mac piccoli: scorrono invece di essere tagliati
+        ScrollView { details }
+            .frame(width: 320)
+            .frame(maxHeight: 640)
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(job.title).font(.system(size: 15, weight: .bold, design: .rounded)).lineLimit(2)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
@@ -266,7 +279,6 @@ struct DetailsView: View {
             }
         }
         .padding(18)
-        .frame(width: 320)
     }
 
     @ViewBuilder
