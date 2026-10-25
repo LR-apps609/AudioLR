@@ -162,7 +162,7 @@ final class ModelStore: @unchecked Sendable {
     }
 
     /// Modelli di versioni passate, sostituiti da altri: si tolgono dal disco all'avvio (centinaia di MB).
-    static let obsolete = ["StrumentiSW", "VoceStudio", "VoceCori",
+    static let obsolete = ["StrumentiSW", "VoceStudio", "VoceStudio3", "VoceCori",
                                    // Le voci con i pesi compressi a 8 bit: molto lente sulla grafica (0.18)
                                    "VoceStudio2", "VoceCori2", "VoceRoFormer8"]
 

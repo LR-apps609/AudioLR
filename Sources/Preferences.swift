@@ -95,9 +95,6 @@ enum Prefs {
     /// altrimenti macOS usa il disco come memoria e tutto rallenta molto.
     static let lowMemory = ProcessInfo.processInfo.physicalMemory <= 9 * 1024 * 1024 * 1024
 
-    /// Studio con la voce da due modelli (viperx e Kim, in media): +0,22 dB, circa un terzo più lenta.
-    static let doubleVoiceKey = "studioDoubleVoice"
-    static var doubleVoice: Bool { UserDefaults.standard.bool(forKey: doubleVoiceKey) }
 
     /// «Solo grafica»: niente Neural Engine (se su un Mac apre i modelli troppo lentamente o dà problemi).
     static let engineModeKey = "engineMode"

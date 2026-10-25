@@ -87,7 +87,6 @@ struct EngineSettings: View {
     @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
     @AppStorage(Prefs.engineModeKey) private var engineMode = "auto"
     @AppStorage(Prefs.dualKey) private var dual = true
-    @AppStorage(Prefs.doubleVoiceKey) private var doubleVoice = false
 
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)),
@@ -130,7 +129,6 @@ struct EngineSettings: View {
                 }
                 Toggle("Neural Engine e grafica insieme", isOn: $dual)
                     .disabled(!SeparationJob.hasNeuralEngine || engineMode == "grafica" || Prefs.lowMemory)
-                Toggle("Studio: voce da due modelli (più pulita, circa un terzo più lenta)", isOn: $doubleVoice)
             } footer: {
                 Text(Prefs.lowMemory && SeparationJob.hasNeuralEngine
                      ? "Questo Mac ha 8 GB di memoria: ogni modello si apre una volta sola (Neural Engine o grafica), perché due copie insieme lo rallenterebbero. «Solo grafica» evita l'attesa del primo adattamento al Neural Engine. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
@@ -226,12 +224,12 @@ struct GeneralSettings: View {
 /// Versione, modelli installati, licenze.
 struct AboutSettings: View {
     private let models: [(String, String, String)] = [
-        ("HTDemucs", "Veloce", "Demucs v4 · Meta · licenza MIT"),
+        ("HTDemucs", "Veloce; Studio · strumenti (in squadra)", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori3", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
-        ("VoceRoFormer9", "Studio · seconda voce (se scelta); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
-        ("VoceStudio3", "Studio · voce", "BS-RoFormer ep 317 · pesi di viperx · codice MIT"),
-        ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
+        ("VoceRevive", "Studio · voce", "BS-RoFormer Vocals Revive V3e · pesi di unwa · codice MIT"),
+        ("VoceRoFormer9", "Studio · voce (in squadra); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
+        ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro; Studio · voce (in squadra)", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-1", "Studio · basso; riserva", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),

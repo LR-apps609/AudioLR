@@ -358,11 +358,14 @@ final class SeparationJob: ObservableObject {
                 var voiceName = wantedVoice
                 var swName = wantedInstruments
                 var bassName = quality.bassModel
+                var helperName = quality.helperModel
                 var secondName = quality.secondVoice
                 // Cosa è stato fatto davvero, per dire se la qualità è quella piena
                 var voiceUsed: String? = nil
                 var bassApplied = false
                 var secondApplied = false
+                var helperApplied = false
+                var swMixApplied = false
                 for (k, name) in downloads.enumerated() {
                     if !ModelStore.shared.isReady(name) {
                         await say("Scarico il modello \(k + 1) di \(downloads.count) (\(name))…")
@@ -391,8 +394,11 @@ final class SeparationJob: ObservableObject {
                             next = Quality.fallbackVoice(for: n)
                         }
                     } catch _ where name == quality.secondVoice {
-                        // La seconda voce è un di più: senza, resta quella di viperx
+                        // La seconda voce è un di più: senza, la squadra ha un membro in meno
                         secondName = nil
+                    } catch _ where name == quality.helperModel {
+                        // Demucs per le medie degli strumenti è un di più: senza, restano quelli di SW
+                        helperName = nil
                     } catch _ where name == quality.bassModel {
                         // Il basso di Demucs è un di più: senza, resta quello di SW
                         bassName = nil
@@ -435,19 +441,19 @@ final class SeparationJob: ObservableObject {
                     decisions[name] = d
                     if cancel.isSet { throw CancellationError() }
                 }
-                // Il basso di Studio è un di più: se la prova del motore non riesce, resta il basso di SW
-                if swName != nil, let b = bassName {
-                    if let d = EngineChoice.current(b) {
-                        decisions[b] = d
+                // Il basso e gli aiutanti Demucs di Studio sono un di più: se la prova del motore non riesce, restano quelli di SW
+                for extra in [bassName, helperName].compactMap({ $0 }) where swName != nil {
+                    if let d = EngineChoice.current(extra) {
+                        decisions[extra] = d
                     } else {
                         await self?.set(cancel, .tuning)
                         do {
-                            let d = try await SeparationJob.tune(b, mix: mix)
-                            EngineChoice.store(d, for: b)
-                            decisions[b] = d
+                            let d = try await SeparationJob.tune(extra, mix: mix)
+                            EngineChoice.store(d, for: extra)
+                            decisions[extra] = d
                         } catch {
                             if cancel.isSet { throw CancellationError() }
-                            bassName = nil
+                            if extra == bassName { bassName = nil } else { helperName = nil }
                         }
                     }
                     if cancel.isSet { throw CancellationError() }
@@ -472,9 +478,12 @@ final class SeparationJob: ObservableObject {
                 await self?.set(cancel, .separating(0))
                 let began = Date()
                 // Quanta parte della barra spetta alla voce
-                let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : secondName == nil ? 0.45 : 0.6
-                // Con due modelli voce, metà della parte della voce a ognuno
-                let firstShare = secondName == nil ? 1.0 : 0.5
+                // Studio: SW passa anche sulla canzone intera, per la squadra della voce e degli strumenti
+                let swMix = quality.swOnMix && swName != nil && voiceName != nil
+                let voiceShare = voiceName == nil ? 0.0 : swName == nil ? 0.35 : swMix ? 0.65 : secondName == nil ? 0.45 : 0.6
+                // Come si divide la parte della voce: primo modello, secondo, SW sulla canzone intera
+                let (firstShare, secondShare): (Double, Double) = swMix ? (secondName == nil ? (0.7, 0) : (0.55, 0.15))
+                    : (secondName == nil ? (1.0, 0) : (0.5, 0.5))
                 // Il tempo che manca si misura dal primo pezzo calcolato, non dal clic: l'apertura dei modelli
                 // (a volte minuti la prima volta) non deve gonfiare la stima di tutta la canzone
                 let pace = Pace()
@@ -489,6 +498,8 @@ final class SeparationJob: ObservableObject {
                 }
                 var voiceOut: [[Float]]?
                 var instrumentsInput = mix
+                // Studio: batteria, basso e altro (tutto il resto) di SW sulla canzone intera, per le medie
+                var mixParts: [String: [[Float]]] = [:]
                 if let v = voiceName {
                     var d = EngineChoice.current(v) ?? EngineChoice.decide(agreement: 99)
                     // Il modello voce davvero usato: se quello scelto non riesce si passa al più leggero
@@ -521,18 +532,21 @@ final class SeparationJob: ObservableObject {
                     done(used)
                     lap("Voce (RoFormer)")
                     var vo2 = vo
-                    // La seconda voce (Studio): la media dei due modelli è più pulita di ognuno
+                    // Quanti modelli sono nella squadra della voce (si sommano, poi si divide)
+                    var members: Float = 1
+                    // La seconda voce (Studio): la media dei modelli è più pulita di ognuno
                     if let s = secondName, s != used, let sd = EngineChoice.current(s) {
                         do {
                             let (second, helpers) = try await SeparationJob.workers(s, units: sd.units, label: "della seconda voce", say: say)
                             await say("Seconda voce: primo pezzo della canzone…")
                             second.overlap = Prefs.voiceOverlapValue
-                            let other = try second.separate(mix, helpers: helpers, progress: { report(voiceShare * (firstShare + (1 - firstShare) * $0)) },
+                            let other = try second.separate(mix, helpers: helpers, progress: { report(voiceShare * (firstShare + secondShare * $0)) },
                                                             isCancelled: { cancel.isSet })
                             for c in 0..<2 {
                                 let n = min(vo2[c].count, other[c].count)
-                                for k in 0..<n { vo2[c][k] = 0.5 * (vo2[c][k] + other[c][k]) }
+                                for k in 0..<n { vo2[c][k] += other[c][k] }
                             }
+                            members += 1
                             decisions[s] = sd
                             secondApplied = true
                             done(s)
@@ -541,6 +555,35 @@ final class SeparationJob: ObservableObject {
                             // Se non riesce resta la voce del primo modello
                             if cancel.isSet { throw CancellationError() }
                         }
+                    }
+                    // Studio: SW sulla canzone intera. La sua voce è il terzo membro della squadra; i suoi strumenti
+                    // entrano dopo nelle medie di batteria, basso e altro
+                    if swMix, let w = swName, let wd = EngineChoice.current(w) {
+                        do {
+                            let (model, helpers) = try await SeparationJob.workers(w, units: wd.units, label: "degli strumenti", say: say)
+                            await say("Voce, terzo modello (SW sulla canzone intera): primo pezzo…")
+                            model.overlap = Prefs.instrumentOverlap
+                            let all = try model.separateAll(mix, helpers: helpers,
+                                                            progress: { report(voiceShare * (firstShare + secondShare + (1 - firstShare - secondShare) * $0)) },
+                                                            isCancelled: { cancel.isSet })
+                            let names = model.config.sources
+                            if let v = names.firstIndex(of: "vocals") {
+                                for c in 0..<2 {
+                                    let n = min(vo2[c].count, all[v][c].count)
+                                    for k in 0..<n { vo2[c][k] += all[v][c][k] }
+                                }
+                                members += 1
+                            }
+                            mixParts = SeparationJob.instrumentTotals(names, all)
+                            swMixApplied = true
+                            lap("Terza voce e strumenti (SW sulla canzone)")
+                        } catch {
+                            if cancel.isSet { throw CancellationError() }
+                        }
+                    }
+                    if members > 1 {
+                        let inv = 1 / members
+                        for c in 0..<2 { for k in vo2[c].indices { vo2[c][k] *= inv } }
                     }
                     voiceOut = vo2
                     // Gli strumenti si cercano nella base senza voce: ogni modello fa quello in cui è migliore
@@ -552,8 +595,9 @@ final class SeparationJob: ObservableObject {
                 // 4. Gli strumenti: con SW un modello solo per tutti; con htdemucs_ft ogni modello dà il suo strumento
                 var out: [[[Float]]] = []
                 var sources: [String] = []
-                // Quanta parte della barra degli strumenti spetta a SW (il resto al basso di Demucs, se c'è)
-                let swShare = bassName == nil ? 1.0 : 0.85
+                // Quanta parte della barra degli strumenti spetta a SW (il resto ai Demucs di Studio, se ci sono)
+                let extras = [bassName, helperName].compactMap { $0 }
+                let swShare = 1.0 - 0.15 * Double(extras.count)
                 if let w = swName {
                     var d = EngineChoice.current(w) ?? EngineChoice.decide(agreement: 99)
                     let input = instrumentsInput
@@ -578,47 +622,67 @@ final class SeparationJob: ObservableObject {
                     done(w)
                     lap("Strumenti (BS-RoFormer SW)")
 
-                    // In Studio il basso dal Demucs specializzato, sulla stessa base: più pieno e più pulito di quello di SW
-                    if let b = bassName, let i = sources.firstIndex(of: "bass"), let d = decisions[b] {
-                        await say("Basso: secondo modello (Demucs) sulla base…")
+                    // Studio: i Demucs sulla stessa base (il basso specializzato, e quello di Veloce per tutti gli strumenti).
+                    // Un di più: se un modello non si carica o il calcolo non riesce, restano le tracce di SW
+                    var demucs: [String: (sources: [String], audio: [[[Float]]])] = [:]
+                    for (j, name) in extras.enumerated() {
+                        guard let d = decisions[name] else { continue }
+                        await say(name == bassName ? "Basso: secondo modello (Demucs) sulla base…" : "Strumenti: modello Demucs sulla base, per la squadra…")
+                        let from = swShare + 0.15 * Double(j)
                         func run(_ core: CoreMLSeparationCore) throws -> [[[Float]]] {
                             try Separator(core: core).separate(input, progress: { p in
-                                report(voiceShare + (1 - voiceShare) * (swShare + (1 - swShare) * p))
+                                report(voiceShare + (1 - voiceShare) * (from + 0.15 * p))
                             }, isCancelled: { cancel.isSet })
                         }
-                        // Un di più: se il modello non si carica o il calcolo non riesce, resta il basso di SW
                         var result: [[[Float]]]?
-                        var bassSources: [String] = []
+                        var found: [String] = []
                         var implausible = false
                         for units in d.units == .cpuAndGPU ? [MLComputeUnits.cpuAndGPU] : [d.units, .cpuAndGPU] where result == nil {
-                            guard let core = try? await ModelStore.shared.load(b, units: units, progress: { _ in }) else { continue }
+                            guard let core = try? await ModelStore.shared.load(name, units: units, progress: { _ in }) else { continue }
                             do {
                                 result = try run(core)
-                                bassSources = core.sources
+                                found = core.sources
                                 // Solo se il Neural Engine ha dato un risultato sbagliato si ricorda la grafica
                                 if units != d.units && implausible {
                                     let g = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
-                                    EngineChoice.store(g, for: b)
-                                    decisions[b] = g
+                                    EngineChoice.store(g, for: name)
+                                    decisions[name] = g
                                 }
                             } catch is CancellationError { throw CancellationError() } catch is ImplausibleResult {
                                 implausible = true
                             } catch {}
                         }
-                        done(b)
+                        done(name)
                         if cancel.isSet { throw CancellationError() }
-                        // Se il calcolo non riesce resta il basso di SW
-                        // La media dei due bassi è la più pulita: 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW
-                        // (mediana sulle 50 canzoni di MUSDB, banco delle combinazioni)
-                        if let r = result, let j = bassSources.firstIndex(of: "bass") {
-                            for c in 0..<2 {
-                                let n = min(out[i][c].count, r[j][c].count)
-                                for k in 0..<n { out[i][c][k] = 0.5 * (out[i][c][k] + r[j][c][k]) }
-                            }
-                            bassApplied = true
-                            lap("Basso (Demucs)")
+                        if let r = result { demucs[name] = (found, r); lap(name == bassName ? "Basso (Demucs)" : "Strumenti (Demucs)") }
+                    }
+                    // Le medie (banco «al massimo», mediana sulle 50 canzoni di MUSDB):
+                    // batteria SW base + Demucs + SW canzone 11,19 dB (SW da solo 11,09);
+                    // basso SW base + Demucs FT + Demucs + SW canzone 9,84 (SW + FT 9,80, SW da solo 8,67);
+                    // altro (con chitarra e piano) SW base + Demucs + SW canzone 7,97 (SW da solo 7,77)
+                    let own = SeparationJob.instrumentTotals(sources, out)
+                    func part(_ name: String?, _ key: String) -> [[Float]]? {
+                        guard let n = name, let e = demucs[n] else { return nil }
+                        if key == "rest" { return SeparationJob.instrumentTotals(e.sources, e.audio)["rest"] }
+                        return e.sources.firstIndex(of: key).map { e.audio[$0] }
+                    }
+                    for key in ["drums", "bass", "rest"] {
+                        guard let mine = own[key] else { continue }
+                        var team = [mine]
+                        if key == "bass", let b = part(bassName, "bass") { team.append(b); bassApplied = true }
+                        if let h = part(helperName, key) { team.append(h); helperApplied = true }
+                        if let m = mixParts[key] { team.append(m) }
+                        guard team.count > 1 else { continue }
+                        let avg = SeparationJob.average(team)
+                        if key == "rest" {
+                            // Chitarra e piano restano quelli di SW: la differenza va in «altro»
+                            guard let o = sources.firstIndex(of: "other") else { continue }
+                            for c in 0..<2 { for k in out[o][c].indices where k < avg[c].count { out[o][c][k] += avg[c][k] - mine[c][k] } }
+                        } else if let i = sources.firstIndex(of: key) {
+                            out[i] = avg
                         }
                     }
+                    mixParts = [:]
                 }
                 for (k, name) in instrumentModels.enumerated() {
                     let span = (Double(k), Double(k + 1))
@@ -679,7 +743,9 @@ final class SeparationJob: ObservableObject {
                 if let v = wantedVoice, voiceUsed != v { reduced.append(voiceUsed == nil ? "voce senza il suo modello" : "voce dal modello di riserva") }
                 if wantedInstruments != nil && swName == nil { reduced.append("strumenti dai modelli di riserva") }
                 if quality.bassModel != nil && swName != nil && !bassApplied { reduced.append("basso da un solo modello") }
-                if quality.secondVoice != nil && voiceUsed == wantedVoice && !secondApplied { reduced.append("voce da un solo modello") }
+                if quality.secondVoice != nil && voiceUsed == wantedVoice && !secondApplied { reduced.append("voce senza il secondo modello") }
+                if quality.swOnMix && swName != nil && voiceUsed != nil && !swMixApplied { reduced.append("voce e strumenti senza SW sulla canzone intera") }
+                if quality.helperModel != nil && swName != nil && !helperApplied { reduced.append("strumenti senza Demucs in squadra") }
                 let note = reduced.isEmpty ? nil : "Qualità ridotta su questo Mac: " + reduced.joined(separator: ", ")
                 await self?.finish(cancel, dir: dir, stems: stems, engine: engine, took: took, timings: all, analysis: analysis, note: note)
             } catch is CancellationError {
@@ -773,6 +839,28 @@ final class SeparationJob: ObservableObject {
 
     /// Le tracce finali dagli strumenti di SW: la voce dal suo modello (se c'è), chitarra e pianoforte
     /// in tracce proprie oppure dentro «Altri strumenti». La voce che SW trova nella base (residui) si scarta.
+    /// Batteria, basso e «tutto il resto» (altro con chitarra e piano) di un modello, per le medie di Studio.
+    nonisolated static func instrumentTotals(_ names: [String], _ audio: [[[Float]]]) -> [String: [[Float]]] {
+        var out: [String: [[Float]]] = [:]
+        for k in ["drums", "bass"] { if let i = names.firstIndex(of: k) { out[k] = audio[i] } }
+        let rest = ["other", "guitar", "piano"].compactMap { names.firstIndex(of: $0) }
+        if let first = rest.first {
+            var sum = audio[first]
+            for i in rest.dropFirst() { for c in 0..<2 { for k in sum[c].indices where k < audio[i][c].count { sum[c][k] += audio[i][c][k] } } }
+            out["rest"] = sum
+        }
+        return out
+    }
+
+    /// La media campione per campione (lunghezza della prima traccia).
+    nonisolated static func average(_ team: [[[Float]]]) -> [[Float]] {
+        var out = team[0]
+        for t in team.dropFirst() { for c in 0..<2 { for k in out[c].indices where k < t[c].count { out[c][k] += t[c][k] } } }
+        let inv = 1 / Float(team.count)
+        for c in 0..<2 { for k in out[c].indices { out[c][k] *= inv } }
+        return out
+    }
+
     nonisolated static func arrange(_ names: [String], _ audio: [[[Float]]], voice: [[Float]]?, split: Bool) -> ([String], [[[Float]]]) {
         func get(_ k: String) -> [[Float]]? { names.firstIndex(of: k).map { audio[$0] } }
         func sum(_ parts: [[[Float]]]) -> [[Float]] {
