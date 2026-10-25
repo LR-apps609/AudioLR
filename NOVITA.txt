@@ -1,3 +1,10 @@
+Novità della 0.23.0 «Studio in squadra»:
+• STUDIO PIÙ PULITA: ogni traccia nasce da una squadra di modelli che lavorano insieme, scelti misurando oltre 4.000 combinazioni sulle 50 canzoni di prova di MUSDB18
+• Voce: media di tre modelli (Revive V3e, Kim e SW). Più pulita di prima (12,20 dB contro 11,93) e senza i «fantasmi»: pad, organi e tastiere tenute che prima finivano per sbaglio nella voce
+• Batteria, basso e altri strumenti: la media di SW con Demucs e con SW sulla canzone intera (altro +0,20 dB, batteria +0,10)
+• La prima volta Studio scarica circa 550 MB di modelli nuovi; poi funziona senza internet. Il modello voce di prima si toglie da solo dal disco
+• L'opzione «voce da due modelli» non serve più: la squadra è sempre attiva
+
 Novità della 0.22.0:
 • Corretto: con la libreria aperta e la finestra non molto larga, la schermata dei risultati usciva dai bordi e veniva tagliata a sinistra. Ora, se lo spazio è poco, i tasti mostrano solo l'icona (il nome compare passandoci sopra) e la finestra non si stringe oltre il necessario
 
