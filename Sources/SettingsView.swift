@@ -171,7 +171,7 @@ struct UpdateSettings: View {
         Form {
             Section {
                 LabeledContent("Versione", value: UpdateCheck.current)
-                Toggle("Controlla da sola una volta al giorno", isOn: $auto)
+                Toggle("Controlla da sola gli aggiornamenti", isOn: $auto)
                 Button("Controlla adesso") {
                     Task { @MainActor in await UpdateCheck.check(userInitiated: true) }
                 }

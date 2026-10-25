@@ -68,6 +68,12 @@ final class Updater: ObservableObject, @unchecked Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "nuova"
         let news = (try? String(contentsOf: pkg.appendingPathComponent("NOVITA.txt"), encoding: .utf8)) ?? ""
 
+        // Dal tasto o dal controllo automatico si installa solo una versione più nuova: mai un ritorno indietro
+        if confirmed, version != "nuova", !News.newer(version, than: currentVersion) {
+            busy = false
+            alert("Hai già l'ultima versione", "Il file scaricato è la \(version), uguale o più vecchia della \(currentVersion) che hai.")
+            return
+        }
         if !confirmed {
             let a = NSAlert()
             a.messageText = "Installare AudioLR \(version)?"
@@ -231,6 +237,8 @@ final class UpdateNotice: ObservableObject {
     static let shared = UpdateNotice()
     @Published var available: UpdateCheck.Release?
     @Published var downloading = false
+    /// Il numero dell'ultimo controllo partito: le risposte dei controlli precedenti si ignorano.
+    var generation = 0
 }
 
 enum UpdateCheck {
@@ -252,7 +260,9 @@ enum UpdateCheck {
     static func parse(_ data: Data) -> Release? {
         guard let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tag = j["tag_name"] as? String,
-              let assets = j["assets"] as? [[String: Any]] else { return nil }
+              let assets = j["assets"] as? [[String: Any]],
+              // Le versioni di prova e le bozze non si propongono a tutti
+              j["prerelease"] as? Bool != true, j["draft"] as? Bool != true else { return nil }
         let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         guard let a = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".audiolr") == true }),
               let s = a["browser_download_url"] as? String, let u = URL(string: s) else { return nil }
@@ -286,32 +296,41 @@ enum UpdateCheck {
     /// All'avvio (dopo qualche secondo) e poi ogni 3 ore, in silenzio: se c'è una versione nuova compare
     /// il tasto «Aggiornamento disponibile» in alto a destra, senza finestre che interrompono.
     static func autoCheckSoon() {
-        guard UserDefaults.standard.object(forKey: autoKey) as? Bool != false else { return }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 8_000_000_000)
+            if autoEnabled { await quietCheck() }
+            // Passi brevi misurati sull'orologio vero: dopo che il Mac ha dormito la notte il controllo arriva
+            // al risveglio, non dopo altre 3 ore di Mac acceso. Spegnendo il controllo nelle Impostazioni si ferma subito
             while true {
-                await quietCheck()
-                try? await Task.sleep(nanoseconds: 3 * 3600 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000)
+                checkIfStale(after: 3 * 3600)
             }
         }
     }
+
+    /// Il controllo automatico è acceso (di serie sì).
+    static var autoEnabled: Bool { UserDefaults.standard.object(forKey: autoKey) as? Bool != false }
 
     /// Controllo silenzioso: aggiorna solo il tasto in alto a destra.
     @MainActor
     static func quietCheck() async {
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
+        // Se nel frattempo parte un controllo più recente, vale quello: una risposta lenta non riporta indietro il tasto
+        UpdateNotice.shared.generation += 1
+        let mine = UpdateNotice.shared.generation
         // Senza risposta (niente internet) il tasto resta com'era; con una risposta si aggiorna sempre,
         // così dopo ore di app aperta mostra l'ultima versione uscita e non una vecchia
-        guard let found = try? await latest() else { return }
-        UpdateNotice.shared.available = worthShowing(found, current: current)
+        guard let found = try? await latest(), mine == UpdateNotice.shared.generation else { return }
+        let skipped = UserDefaults.standard.string(forKey: skipKey)
+        UpdateNotice.shared.available = worthShowing(found, current: current).flatMap { $0.version == skipped ? nil : $0 }
     }
 
     /// Quando si torna su AudioLR: se l'ultimo controllo è di più di 30 minuti fa, se ne fa uno nuovo.
     @MainActor
-    static func checkIfStale(now: Date = Date()) {
-        guard UserDefaults.standard.object(forKey: autoKey) as? Bool != false else { return }
+    static func checkIfStale(now: Date = Date(), after seconds: Double = 30 * 60) {
+        guard autoEnabled else { return }
         let last = UserDefaults.standard.double(forKey: lastKey)
-        guard now.timeIntervalSince1970 - last > 30 * 60 else { return }
+        guard now.timeIntervalSince1970 - last > seconds else { return }
         Task { await quietCheck() }
     }
 
@@ -331,9 +350,16 @@ enum UpdateCheck {
         }
         UpdateNotice.shared.downloading = true
         defer { UpdateNotice.shared.downloading = false }
-        // Si installa sempre l'ultima versione uscita, anche se il tasto è comparso ore fa per una precedente
+        // Si installa sempre l'ultima versione uscita, anche se il tasto è comparso ore fa per un'altra.
+        // Se GitHub risponde, vale la sua risposta; solo senza internet si usa quella del tasto
+        UpdateNotice.shared.generation += 1
         var target = rel
-        if let fresh = worthShowing(try? await latest(), current: current), News.newer(fresh.version, than: rel.version) {
+        if let found = try? await latest() {
+            guard let fresh = worthShowing(found, current: current) else {
+                UpdateNotice.shared.available = nil
+                info("Hai già l'ultima versione", "AudioLR \(current) è la più recente.")
+                return
+            }
             target = fresh
             UpdateNotice.shared.available = fresh
         }
@@ -371,7 +397,9 @@ enum UpdateCheck {
         NSApp.activate()
         switch a.runModal() {
         case .alertFirstButtonReturn: await download(rel)
-        case .alertThirdButtonReturn: UserDefaults.standard.set(rel.version, forKey: skipKey)
+        case .alertThirdButtonReturn:
+            UserDefaults.standard.set(rel.version, forKey: skipKey)
+            UpdateNotice.shared.available = nil
         default: break
         }
     }
