@@ -216,6 +216,11 @@ final class VoiceRoFormer {
         var out = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: S)
         var count = [Float](repeating: 0, count: length)
         let starts = Array(stride(from: 0, to: length, by: step))
+        // Un pezzo molto più piano del resto della canzone (sfumature, pause) non dice niente sul calcolo:
+        // la soglia è relativa al volume medio della canzone, non solo assoluta
+        var energy = 0.0
+        for c in 0..<2 { for i in 0..<length { energy += Double(mix[c][i]) * Double(mix[c][i]) } }
+        let quiet = max(1e-6, 1e-3 * energy / Double(max(1, 2 * length)))
         let lock = NSLock()
         var next = 0, done = 0
         var failure: Error?
@@ -234,7 +239,7 @@ final class VoiceRoFormer {
                 let v: [[[Float]]]
                 do {
                     v = try runners[r](piece)
-                    guard plausible(piece: piece, stems: v) else { throw ImplausibleResult() }
+                    guard plausible(piece: piece, stems: v, quiet: quiet) else { throw ImplausibleResult() }
                 } catch {
                     lock.withLock { failure = failure ?? error }
                     return
@@ -255,12 +260,13 @@ final class VoiceRoFormer {
     }
 
     /// Nessuno strumento può essere più forte della canzone stessa, né contenere numeri non validi.
-    static func plausible(piece: [[Float]], stems: [[[Float]]]) -> Bool {
-        stems.allSatisfy { plausible(piece: piece, voice: $0) }
+    static func plausible(piece: [[Float]], stems: [[[Float]]], quiet: Double = 1e-6) -> Bool {
+        stems.allSatisfy { plausible(piece: piece, voice: $0, quiet: quiet) }
     }
 
     /// La voce non può essere più forte della canzone stessa, né contenere numeri non validi.
-    static func plausible(piece: [[Float]], voice: [[Float]]) -> Bool {
+    /// `quiet`: energia media per campione sotto la quale il pezzo è troppo piano per giudicare.
+    static func plausible(piece: [[Float]], voice: [[Float]], quiet: Double = 1e-6) -> Bool {
         var a = 0.0, b = 0.0
         for c in 0..<2 {
             for i in piece[c].indices {
@@ -271,7 +277,7 @@ final class VoiceRoFormer {
             }
         }
         // Un pezzo quasi muto (inizio o fine della canzone) non dice niente: si accetta
-        if a < 1e-6 * Double(piece[0].count) { return true }
+        if a < quiet * Double(piece[0].count) { return true }
         return b / a < 2
     }
 }

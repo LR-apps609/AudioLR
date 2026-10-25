@@ -181,7 +181,8 @@ final class Separator {
                 stem += Double(part) * Double(part)
             }
         }
-        if signal == 0 { return true }
+        // Un pezzo quasi muto (silenzio con un po' di fruscio o qualche clic) non dice niente: si accetta
+        if signal < 1e-6 * Double(2 * piece[0].count) { return true }
         if kept.count == all.count { return error / signal < 0.25 }
         return stem / signal < 2
     }
