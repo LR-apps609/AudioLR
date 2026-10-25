@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write        # per pubblicare la «Release» con il file .audiolr
 
+# Le prove con i modelli veri (separazioni complete, confronti con gli originali) sul Mac Intel di GitHub
+# durano ore: girano in un lavoro a parte che non blocca il rilascio. I modelli sono già verificati
+# quando si convertono; il rilascio dipende dalle prove rapide (codice, audio, interfaccia, file).
+env:
+  PROVE_PESANTI: "AudioLRTests/PipelineTests AudioLRTests/EndToEndTests/testSeparationMatchesDemucs AudioLRTests/EndToEndTests/testStepsMatchDemucs AudioLRTests/EndToEndTests/testBestQualityMatchesDemucs AudioLRTests/DrumTests/testDrumsMatchDrumSep AudioLRTests/VoiceTests/testInstrumentsMatchSW AudioLRTests/VoiceTests/testStudioVoiceMatchesBSRoFormer AudioLRTests/VoiceTests/testLeadVoiceMatchesKaraokeRoFormer AudioLRTests/VoiceTests/testVoiceMatchesRoFormer"
+
 jobs:
   build:
     # I Mac Apple Silicon di GitHub sono spesso esauriti: si usa il Mac Intel, che compila lo stesso per entrambi
@@ -80,12 +86,15 @@ jobs:
         timeout-minutes: 270
         run: |
           status=0
+          # Nel lavoro principale solo le prove rapide; le pesanti nel lavoro «prove-pesanti»
+          SKIP=""
+          if [ "${{ github.job }}" = "build" ]; then for t in $PROVE_PESANTI; do SKIP="$SKIP -skip-testing:$t"; done; fi
           # Ogni test ha al massimo 3 minuti: uno bloccato fallisce con il suo nome, invece di fermare tutto
           # perl alarm: se tutto si blocca, dopo 110 minuti si ferma e si vede dove
           # TEST_RUNNER_AUDIOLR_CI arriva ai test come AUDIOLR_CI (xcodebuild passa così le variabili ai test)
           TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 15600 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 5400 \
-            -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= $SKIP \
             > test.log 2>&1 || status=$?
           grep -E "Test Case .*(passed|failed)|Executed|\*\* TEST" test.log | tail -n 80 || true
           if [ $status -ne 0 ] && ! grep -q "Executed [0-9]* tests" test.log; then
@@ -221,3 +230,37 @@ jobs:
         with:
           name: registro-compilazione
           path: build.log
+
+  # Le prove con i modelli veri, in parallelo: non bloccano il rilascio, ma i risultati (fedeltà e tempi)
+  # si leggono come annotazioni e un fallimento si vede subito
+  prove-pesanti:
+    runs-on: macos-15-intel
+    timeout-minutes: 300
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Xcode più recente disponibile
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+      - name: XcodeGen
+        run: brew install xcodegen
+      - name: Progetto
+        run: xcodegen generate
+      - name: Prove con i modelli veri
+        timeout-minutes: 280
+        run: |
+          status=0
+          ONLY=""
+          for t in $PROVE_PESANTI; do ONLY="$ONLY -only-testing:$t"; done
+          TEST_RUNNER_AUDIOLR_CI=1 perl -e 'alarm shift; exec @ARGV' 16200 xcodebuild test -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 5400 \
+            -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= $ONLY \
+            > test.log 2>&1 || status=$?
+          grep -E "Test Case .*(passed|failed)|Executed|\*\* TEST" test.log | tail -n 40 || true
+          grep -E "^/.*:[0-9]+: error: -\[" test.log | sort -u | head -n 10 | while IFS= read -r l; do echo "::error::$l"; done
+          awk '/Test Case .* started/ {cur=$0} /Test Case .* (passed|failed|skipped)/ {cur=""} /Restarting after unexpected exit/ {if (cur!="") print "::error::Interrotto: " cur; cur=""}' test.log | sort -u | head -n 5
+          echo "::notice::Prove pesanti superate: $(grep -cE "Test Case .* passed" test.log || true) · fallite: $(grep -cE "Test Case .* failed" test.log || true)"
+          [ -f /tmp/audiolr-fedelta.txt ] && echo "::notice::$(cat /tmp/audiolr-fedelta.txt)"
+          [ -f /tmp/audiolr-passi.txt ] && echo "::notice::$(tr '\n' '|' < /tmp/audiolr-passi.txt)"
+          exit $status
