@@ -1,0 +1,92 @@
+# Banco severo (Tools/banco_severo.py): Studio, Massima e Veloce sulle 50 canzoni INTERE di prova di MUSDB18-HQ
+# (scaricate a pezzi dallo zip su Zenodo), con SDR globale, SDR su finestre da 1 s, museval v4, SI-SDR, bleedless e
+# fullness di MVSep. Le canzoni sono divise in parti di durata simile, una per lavoro (CPU, < 6 ore ciascuna).
+# Risultati: in questa pagina e nella release «banco-di-prova» (severo.md, severo.json); ogni corsa si confronta
+# con la precedente (severo.json di prima, salvato come severo_precedente.json).
+# Per rifarlo: Actions → «Banco severo» → Run workflow (oppure «Re-run all jobs» sull'ultima corsa).
+name: Banco severo
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/banco_severo.py, Tools/banco_severo_tabella.py, .github/workflows/banco-severo.yml]
+
+permissions:
+  contents: write
+
+env:
+  PARTI: "25"
+  PROVA: "1"           # "1" = solo la canzone più corta, per misurare i tempi
+
+jobs:
+  misura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [0]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/audio-separator-models
+            ~/.cache/torch/hub/checkpoints
+          key: modelli-severo-v1
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" soundfile remotezip museval
+          pip install -q --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install -q dora-search einops julius omegaconf pyyaml tqdm
+      - name: Separazione e misura
+        run: |
+          SHARD=${{ matrix.parte }}/$PARTI python Tools/banco_severo.py musdb severo_${{ matrix.parte }}.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: severo_${{ matrix.parte }}
+          path: severo_*.json
+
+  riepilogo:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: severo_*
+          merge-multiple: true
+          path: parti
+      - name: Corsa precedente
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release download banco-di-prova -p severo.json -O precedente.json || echo "nessuna corsa precedente"
+      - name: Tabella
+        run: |
+          python Tools/banco_severo_tabella.py parti precedente.json severo.json severo.md
+          { echo "## Banco severo"; echo; cat severo.md; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Nella release «banco-di-prova»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ -n "$PROVA" ]; then
+            cp severo.md severo_prova.md; cp severo.json severo_prova.json
+            gh release upload banco-di-prova severo_prova.md severo_prova.json --clobber
+          elif [ "$(python -c "import json; print(len(json.load(open('severo.json'))['canzoni']))")" -lt 50 ]; then
+            # Corsa incompleta: non prende il posto di quella buona
+            cp severo.md severo_parziale.md; cp severo.json severo_parziale.json
+            gh release upload banco-di-prova severo_parziale.md severo_parziale.json --clobber
+            echo "::warning::corsa incompleta, salvata come severo_parziale"
+          else
+            [ -f precedente.json ] && cp precedente.json severo_precedente.json && gh release upload banco-di-prova severo_precedente.json --clobber
+            gh release upload banco-di-prova severo.md severo.json --clobber
+          fi
