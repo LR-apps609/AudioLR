@@ -21,12 +21,15 @@ jobs:
         include:
           - nome: StrumentiSW
             file: BS-Roformer-SW
+            yaml: BS-Roformer-SW.yaml
             pezzo: 352768
-          - nome: VoceStudio
-            file: model_bs_roformer_ep_317_sdr_12.9755
+          - nome: VoceRevive
+            file: bs_roformer_vocals_revive_v3e_unwa
+            yaml: config_bs_roformer_vocals_revive_unwa.yaml
             pezzo: 352800
-          - nome: VoceRoFormer8
+          - nome: VoceRoFormer9
             file: vocals_mel_band_roformer
+            yaml: vocals_mel_band_roformer.yaml
             pezzo: 352800
     steps:
       - uses: actions/checkout@v5
@@ -45,7 +48,7 @@ jobs:
         run: |
           B=https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs
           curl -fL --retry 3 -o m.ckpt "$B/${{ matrix.file }}.ckpt"
-          curl -fL --retry 3 -o m.yaml "$B/${{ matrix.file }}.yaml" || curl -fL --retry 3 -o m.yaml "$B/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+          curl -fL --retry 3 -o m.yaml "$B/${{ matrix.yaml }}"
       - name: Conversione e prova
         shell: bash {0}
         run: |

@@ -99,33 +99,56 @@ function netFor(name) {
   return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
 }
 
-// Massima: SW su tutta la canzone. Studio: la voce da viperx, poi SW sulla base senza voce.
+// Massima: SW su tutta la canzone. Studio come sul Mac: la voce è la media di Revive, Kim e SW sulla
+// canzone; gli strumenti la media di SW sulla base senza voce e di SW sulla canzone.
 // La base è sempre la canzone meno la voce, come nell'app per Mac.
 async function separateRoformer(quality, left, right) {
   const t0 = performance.now();
   const mix = [left, right], n = left.length;
-  const sw = roformers.StrumentiSW;
-  let voice = null, input = mix, share = 0;
-  if (quality === "studio") {
-    share = 0.45;
-    const v = roformers.VoceStudio;
-    const out = await AudioLRRoFormer.separateAll(mix, v.cfg, netFor("VoceStudio"), {
-      onProgress: (p) => post("progress", { progress: p * share, step: "Voce" }), isCancelled: () => cancelled });
-    voice = out[v.cfg.sources.indexOf("vocals") >= 0 ? v.cfg.sources.indexOf("vocals") : 0];
-    input = [new Float32Array(n), new Float32Array(n)];
-    for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) input[c][k] = mix[c][k] - voice[c][k];
+  const sw = roformers.StrumentiSW, names = sw.cfg.sources;
+  const studio = quality === "studio";
+  // Quanto pesa ogni passaggio sulla barra: Studio ne fa quattro
+  const steps = studio ? [["VoceRevive", "Voce 1 di 3"], ["VoceRoFormer9", "Voce 2 di 3"], ["StrumentiSW", "Voce 3 di 3"], ["StrumentiSW", "Strumenti"]]
+                       : [["StrumentiSW", "Strumenti"]];
+  let done = 0;
+  const run = async (name, input, step) => {
+    const m = roformers[name];
+    const out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
+      onProgress: (p) => post("progress", { progress: (done + p) / steps.length, step }), isCancelled: () => cancelled });
+    done += 1;
+    return out;
+  };
+  const pick = (m, out) => out[Math.max(0, roformers[m].cfg.sources.indexOf("vocals"))];
+  let voice, tracks;
+  if (studio) {
+    // Le voci si sommano man mano: in memoria resta una sola canzone per volta (le canzoni lunghe pesano)
+    voice = pick("VoceRevive", await run("VoceRevive", mix, steps[0][1]));
+    {
+      const kim = pick("VoceRoFormer9", await run("VoceRoFormer9", mix, steps[1][1]));
+      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) voice[c][k] += kim[c][k];
+    }
+    const onMix = await run("StrumentiSW", mix, steps[2][1]);
+    const swVoice = onMix[names.indexOf("vocals")];
+    for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) voice[c][k] = (voice[c][k] + swVoice[c][k]) / 3;
+    const base = [new Float32Array(n), new Float32Array(n)];
+    for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = mix[c][k] - voice[c][k];
+    const onBase = await run("StrumentiSW", base, steps[3][1]);
+    tracks = names.map((_, i) => {
+      if (names[i] === "vocals") return null;
+      const t = onBase[i];
+      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) t[c][k] = (t[c][k] + onMix[i][c][k]) / 2;
+      return t;
+    });
+  } else {
+    const stems = await run("StrumentiSW", mix, steps[0][1]);
+    voice = stems[names.indexOf("vocals")];
+    tracks = stems.map((s, i) => (names[i] === "vocals" ? null : s));
   }
-  const stems = await AudioLRRoFormer.separateAll(input, sw.cfg, netFor("StrumentiSW"), {
-    onProgress: (p) => post("progress", { progress: share + (1 - share) * p, step: "Strumenti" }), isCancelled: () => cancelled });
-  const names = sw.cfg.sources, keys = [], tracks = [];
-  for (let i = 0; i < names.length; i++) {
-    if (names[i] === "vocals") continue;           // la voce che SW trova nella base (Studio) o la voce di Massima: sotto
-    keys.push(names[i]); tracks.push(stems[i]);
-  }
-  if (!voice) voice = stems[names.indexOf("vocals")];
+  const keys = [], kept = [];
+  for (let i = 0; i < names.length; i++) if (tracks[i]) { keys.push(names[i]); kept.push(tracks[i]); }
   const base = [new Float32Array(n), new Float32Array(n)];
   for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = mix[c][k] - voice[c][k];
-  const all = [voice, ...tracks, base];
+  const all = [voice, ...kept, base];
   const gain = AudioLREngine.safeGain(all);
   const buffers = all.flat().map((a) => { if (gain !== 1) for (let k = 0; k < a.length; k++) a[k] *= gain; return a; });
   post("done", { keys: ["vocals", ...keys, "instrumental"], channels: buffers, seconds: (performance.now() - t0) / 1000, backend: sw.backend },

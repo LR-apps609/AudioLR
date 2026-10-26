@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 const BASE: &str = "https://github.com/LR-apps609/AudioLR/releases/download/modelli-windows/";
 /// I modelli che si possono scaricare (nessun altro indirizzo è raggiungibile da qui).
-const MODELS: &[&str] = &["StrumentiSW", "VoceStudio", "VoceRoFormer8"];
+const MODELS: &[&str] = &["StrumentiSW", "VoceRevive", "VoceRoFormer9"];
 
 fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("Modelli");

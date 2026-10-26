@@ -28,7 +28,7 @@
   const QUALITY = {
     fast: { models: [], note: "Un modello per tutto, già nell'app: il più rapido." },
     best: { models: ["StrumentiSW"], note: "Sei tracce con BS-RoFormer SW, chitarra e pianoforte comprese. La prima volta scarica circa 330 MB." },
-    studio: { models: ["VoceStudio", "StrumentiSW"], note: "La voce più pulita (BS-RoFormer viperx) più SW sugli strumenti: la più lenta. La prima volta scarica circa 650 MB." },
+    studio: { models: ["VoceRevive", "VoceRoFormer9", "StrumentiSW"], note: "Come Studio sul Mac: la voce è la media di tre modelli, gli strumenti di due passaggi. La più pulita e la più lenta. La prima volta scarica circa 1 GB." },
   };
   let quality = "fast";
   if (DESKTOP) {
