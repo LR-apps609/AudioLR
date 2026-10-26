@@ -28,6 +28,14 @@ final class RecorderTests: XCTestCase {
         return url
     }
 
+    /// Un passo della prova: se fallisce, il nome del passo e l'errore completo finiscono nel messaggio.
+    private func step<T>(_ name: String, _ f: () throws -> T) throws -> T {
+        do { return try f() } catch {
+            XCTFail("\(name): \(error) · \((error as NSError).userInfo)")
+            throw error
+        }
+    }
+
     private func loudest(_ url: URL) throws -> Double {
         let a = try AudioIO.read(url)
         var best = 0, m: Float = 0
@@ -37,20 +45,20 @@ final class RecorderTests: XCTestCase {
     }
 
     func testPlaceAtSongTime() throws {
-        let raw = try rawClick(at: 0.5, length: 1.5)
+        let raw = try step("rawClick") { try rawClick(at: 0.5, length: 1.5) }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("take-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: raw); try? FileManager.default.removeItem(at: out) }
-        try TakeRecorder.place(raw: raw, startingAt: 2, rate: 1, semitones: 0, length: 6, to: out)
+        try step("place") { try TakeRecorder.place(raw: raw, startingAt: 2, rate: 1, semitones: 0, length: 6, to: out) }
         XCTAssertEqual(try loudest(out), 2.5, accuracy: 0.02)
         XCTAssertEqual(Double(try AudioIO.read(out)[0].count) / AudioIO.sampleRate, 6, accuracy: 0.01)
     }
 
     func testSlowTakeBackToSongSpeed() throws {
         // Registrata a metà velocità: il tic a 1 s veri è a 0,5 s di canzone
-        let raw = try rawClick(at: 1, length: 2)
+        let raw = try step("rawClick lenta") { try rawClick(at: 1, length: 2) }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("take-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: raw); try? FileManager.default.removeItem(at: out) }
-        try TakeRecorder.place(raw: raw, startingAt: 1, rate: 0.5, semitones: 0, length: 4, to: out)
+        try step("place lenta") { try TakeRecorder.place(raw: raw, startingAt: 1, rate: 0.5, semitones: 0, length: 4, to: out) }
         XCTAssertEqual(try loudest(out), 1.5, accuracy: 0.06)
     }
 }
