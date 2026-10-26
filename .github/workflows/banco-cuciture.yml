@@ -60,8 +60,8 @@ jobs:
           keys = sorted({k for r in songs.values() for k in r})
           rows = {}
           for k in keys:
-              v = [r[k] for r in songs.values() if k in r]
-              if len(v) >= 0.9 * len(songs):
+              v = [r[k] for r in songs.values() if r.get(k) is not None]
+              if len(v) >= 3:
                   rows[k] = (round(st.median(v), 2), round(st.mean(v), 2), len(v))
           names = {"vocals": "Voce", "fantasma": "Fantasma (più basso = meglio)", "drums": "Batteria", "bass": "Basso", "other": "Altro"}
           md = [f"SDR (dB) sulle {len(songs)} canzoni di prova di MUSDB18 (estratti da 7 s). Più alto = più pulito.", "",
