@@ -58,7 +58,7 @@ enum Analysis {
         let key = self.key(energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything)
         let bpm = tempo(rhythm)
         let bass = mono { $0 == "bass" }
-        let vocal = mono { $0 == "vocals" || $0 == "lead" || $0 == "backing" }
+        let vocal = mono { MixState.voices.contains($0) }
         let structure = Rhythm.structure(rhythm: rhythm, low: energy(bass) > 1e-4 * energy(everything) ? bass : rhythm,
                                          harmonic: energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything,
                                          vocal: vocal, all: everything, bpm: bpm)

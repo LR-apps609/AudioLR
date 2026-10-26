@@ -104,23 +104,56 @@ extension ModelStore {
 
 /// Le divisioni in più, a richiesta dopo la separazione: la batteria nelle sue parti, la voce in solista e cori.
 enum ExtraSplit: String, CaseIterable, Identifiable {
-    case vocals, drums
+    case vocals, gender, drums
     var id: String { rawValue }
 
     /// La traccia che si divide.
     var source: String { self == .drums ? "drums" : "vocals" }
     /// Le tracce che ne escono.
-    var parts: [String] { self == .drums ? DrumSplitter.parts : ["lead", "backing"] }
-    var modelName: String { self == .drums ? DrumSplitter.modelName : "VoceCori3" }
-
-    var title: String { self == .drums ? "Dividi la batteria" : "Separa voce e cori" }
-    var detail: String {
-        self == .drums ? "Cassa, rullante, tom, charleston, ride e crash in corsie proprie"
-                       : "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori"
+    var parts: [String] {
+        switch self {
+        case .drums: return DrumSplitter.parts
+        case .vocals: return ["lead", "backing"]
+        case .gender: return ["male", "female"]
+        }
     }
-    var symbol: String { self == .drums ? "square.split.2x2" : "person.2.wave.2" }
-    var working: String { self == .drums ? "Divido la batteria" : "Separo voce e cori" }
-    var downloadSize: String { self == .drums ? "circa 200 MB" : "circa 200 MB" }
+    var modelName: String {
+        switch self {
+        case .drums: return DrumSplitter.modelName
+        case .vocals: return "VoceCori3"
+        case .gender: return "VoceDuetto"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .drums: return "Dividi la batteria"
+        case .vocals: return "Separa voce e cori"
+        case .gender: return "Separa voce maschile e femminile"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .drums: return "Cassa, rullante, tom, charleston, ride e crash in corsie proprie"
+        case .vocals: return "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori"
+        case .gender: return "Nei duetti la voce di uomo da una parte, quella di donna dall'altra: canti solo la tua parte"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .drums: return "square.split.2x2"
+        case .vocals: return "person.2.wave.2"
+        case .gender: return "person.2.fill"
+        }
+    }
+    var working: String {
+        switch self {
+        case .drums: return "Divido la batteria"
+        case .vocals: return "Separo voce e cori"
+        case .gender: return "Separo le voci di uomo e di donna"
+        }
+    }
+    var downloadSize: String { self == .gender ? "circa 270 MB" : "circa 200 MB" }
 
     /// Divide la traccia: (nomi delle parti, parti).
     func run(_ audio: [[Float]], units: MLComputeUnits, progress: @escaping (Double) -> Void,
@@ -136,6 +169,14 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
             // I cori sono la voce meno la voce principale
             let backing = (0..<2).map { c in zip(audio[c], lead[c]).map { $0 - $1 } }
             return (["lead", "backing"], [lead, backing])
+        case .gender:
+            let model = try await ModelStore.shared.roformer(modelName, units: units) { p in progress(p * 0.2) }
+            let parts = try model.separateAll(audio, progress: { progress(0.2 + 0.78 * $0) }, isCancelled: isCancelled)
+            let names = model.config.sources.map { $0.lowercased() }
+            guard let m = names.firstIndex(of: "male"), let f = names.firstIndex(of: "female") else {
+                throw SeparationError("il modello delle voci non ha le tracce attese")
+            }
+            return (["male", "female"], [parts[m], parts[f]])
         }
     }
 }

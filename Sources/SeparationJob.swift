@@ -45,13 +45,15 @@ struct Stem: Identifiable, Equatable {
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
     /// Tutte le tracce che IsoLR può creare, nell'ordine della libreria.
-    static let allKeys = ["vocals", "lead", "backing", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
+    static let allKeys = ["vocals", "lead", "backing", "male", "female", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
 
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
         switch key {
         case "vocals": return ("Voce", "music.mic", 0)
         case "lead": return ("Voce solista", "music.mic.circle", 1)
         case "backing": return ("Cori", "person.3.fill", 2)
+        case "male": return ("Voce maschile", "person.fill", 1)
+        case "female": return ("Voce femminile", "person.fill", 2)
         case "drums": return ("Batteria", "metronome.fill", 3)
         case "bass": return ("Basso", "guitars", 10)
         case "guitar": return ("Chitarra", "guitars.fill", 11)
@@ -125,7 +127,7 @@ final class SeparationJob: ObservableObject {
 
     /// Le tracce che hanno note da trascrivere (la batteria no: non ha altezze).
     var midiStems: [Stem] {
-        stems.filter { ["vocals", "lead", "backing", "bass", "guitar", "piano", "other"].contains($0.key) }
+        stems.filter { ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].contains($0.key) }
     }
 
     /// Le note di una traccia in un file MIDI accanto alle tracce, al tempo della canzone.
@@ -146,7 +148,7 @@ final class SeparationJob: ObservableObject {
                 // Spartito (MusicXML) sulle battute vere della canzone; per chitarra e basso anche la tablatura
                 let kind = MusicXML.kind(for: stem.key, notes: notes)
                 let score = Score.build(notes, structure: a?.structure, bpm: bpm, keyRoot: a?.keyRoot ?? 0, minor: a?.minor ?? false,
-                                        monophonic: stem.key == "bass" || stem.key == "vocals" || stem.key == "lead")
+                                        monophonic: ["bass", "vocals", "lead", "male", "female"].contains(stem.key))
                 var files = [url]
                 if !score.bars.isEmpty {
                     let xml = dir.appendingPathComponent("\(name).musicxml")
@@ -993,7 +995,9 @@ final class SeparationJob: ObservableObject {
 
     /// Si può dividere ancora una traccia: c'è, non è già divisa e nessun'altra divisione è in corso.
     func canSplit(_ kind: ExtraSplit) -> Bool {
-        phase == .done && splitting == nil && stems.contains { $0.key == kind.source } && !stems.contains { kind.parts.contains($0.key) }
+        // La voce si divide in un modo solo alla volta (solista e cori, oppure uomo e donna): nel mix non si sommano due volte
+        let taken = ExtraSplit.allCases.filter { $0.source == kind.source }.flatMap(\.parts)
+        return phase == .done && splitting == nil && stems.contains { $0.key == kind.source } && !stems.contains { taken.contains($0.key) }
     }
 
     /// Divide una traccia nelle sue parti (la batteria in cassa, rullante…; la voce in solista e cori), accanto alle altre.

@@ -221,7 +221,7 @@ enum MidiFile {
     /// Il suono General MIDI più vicino a ogni traccia.
     static func program(for stem: String) -> UInt8 {
         switch stem {
-        case "vocals", "lead": return 53          // voce «oohs»
+        case "vocals", "lead", "male", "female": return 53          // voce «oohs»
         case "backing": return 52                 // coro «aahs»
         case "bass": return 33                    // basso elettrico
         case "guitar": return 25                  // chitarra acustica

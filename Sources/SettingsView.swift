@@ -237,6 +237,7 @@ struct AboutSettings: View {
         ("HTDemucs", "Veloce; Studio · strumenti (in squadra)", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori3", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
+        ("VoceDuetto", "Voce maschile e femminile", "BS-RoFormer Chorus Male-Female · pesi di Sucial · codice MIT"),
         ("VoceRevive", "Studio · voce", "BS-RoFormer Vocals Revive V3e · pesi di unwa · codice MIT"),
         ("VoceRoFormer9", "Studio · voce (in squadra); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro; Studio · voce (in squadra)", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),

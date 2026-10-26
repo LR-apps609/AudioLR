@@ -61,6 +61,8 @@ enum Theme {
         // Voce solista e cori: sfumature del corallo della voce
         case "lead": return Color(light: 0xC85A44, dark: 0xEC8A70)
         case "backing": return Color(light: 0xD88F7C, dark: 0xF0B3A2)
+        case "male": return Color(light: 0xB8553F, dark: 0xE07F66)
+        case "female": return Color(light: 0xDB8A6E, dark: 0xF4B49B)
         // Le parti della batteria: sfumature dell'ambra della batteria
         case "kick": return Color(light: 0xB0702A, dark: 0xE09A50)
         case "snare": return Color(light: 0xC9A040, dark: 0xEBC670)

@@ -525,8 +525,8 @@ struct ContentView: View {
                     }
                     Spacer()
                     Button(kind == .drums ? "Dividi" : "Separa") { mixer.stop(); job.split(kind) }
-                        .keyboardShortcut(kind == .drums ? "d" : "v", modifiers: [.command, .shift])
-                        .help("\(kind == .drums ? "⇧⌘D" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
+                        .keyboardShortcut(kind == .drums ? "d" : kind == .gender ? "u" : "v", modifiers: [.command, .shift])
+                        .help("\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
