@@ -1,0 +1,98 @@
+# AudioLR per Windows (anteprima): l'interfaccia e il motore del sito dentro un'app Tauri, con il modello
+# già nell'installer. Si compila sul Windows di GitHub e si pubblica nella versione «windows-anteprima».
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, windows, win-motore]
+    paths: [windows/**, site/**, .github/workflows/windows.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Pagine, ONNX Runtime Web e modello
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p windows/dist && cp -r site/* windows/dist/ && rm -rf windows/dist/test
+          # Nell'app la pagina parla con il programma (scaricamento e lettura dei modelli di Massima e Studio)
+          sed -i "s|connect-src 'self'|connect-src 'self' ipc: http://ipc.localhost|" windows/dist/index.html
+          grep -q "ipc.localhost" windows/dist/index.html
+          mkdir -p windows/dist/vendor windows/dist/models /tmp/ort
+          (cd /tmp/ort && npm pack onnxruntime-web@1.19.2 --silent && tar xzf onnxruntime-web-1.19.2.tgz)
+          cp /tmp/ort/package/dist/ort.webgpu.min.js /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.mjs /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.wasm windows/dist/vendor/
+          gh release download modelli-web --repo "$GITHUB_REPOSITORY" --dir windows/dist/models --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --clobber
+          python - <<'PY'
+          import json, os, glob
+          base = "windows/dist/models/"
+          d = json.load(open(base + "HTDemucsWeb.json"))
+          d["parts"] = sorted(os.path.basename(p) for p in glob.glob(base + "HTDemucsWeb.onnx.part*"))
+          d["bytes"] = sum(os.path.getsize(base + p) for p in d["parts"])
+          json.dump(d, open(base + "HTDemucsWeb.json", "w"))
+          PY
+          ls -la windows/dist windows/dist/models
+      - name: Icone
+        working-directory: windows
+        run: |
+          npm install --silent
+          npx tauri icon ../Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png
+      - name: Compilazione (Rust + installer NSIS)
+        working-directory: windows
+        run: npx tauri build
+      - name: Installer
+        shell: bash
+        run: |
+          EXE=$(ls windows/src-tauri/target/release/bundle/nsis/*.exe | head -n 1)
+          cp "$EXE" "AudioLR-Windows-anteprima.exe"
+          ls -la AudioLR-Windows-anteprima.exe
+          echo "::notice::Installer: $(du -h AudioLR-Windows-anteprima.exe | cut -f1)"
+      - name: Prova di avvio (installa, apri, fotografa)
+        shell: pwsh
+        run: |
+          Start-Process -FilePath ".\AudioLR-Windows-anteprima.exe" -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA\AudioLR", "$env:LOCALAPPDATA\Programs\AudioLR" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "uninstall*" } | Select-Object -First 1
+          if (-not $exe) { Write-Output "::error::AudioLR non risulta installata"; exit 1 }
+          Write-Output "Installata in $($exe.FullName)"
+          $p = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { Write-Output "::error::AudioLR si è chiusa da sola dopo l'avvio (codice $($p.ExitCode))"; exit 1 }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("windows-avvio.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          Stop-Process -Id $p.Id -Force
+          Write-Output "::notice::AudioLR per Windows si avvia e resta aperta"
+      - name: Schermata
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f windows-avvio.png ] || exit 0
+          gh release upload schermate windows-avvio.png --repo "$GITHUB_REPOSITORY" --clobber || true
+      - uses: actions/upload-artifact@v6
+        with:
+          name: AudioLR-Windows
+          path: AudioLR-Windows-anteprima.exe
+      - name: Tra i file scaricabili
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view windows-anteprima --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create windows-anteprima --repo "$GITHUB_REPOSITORY" --prerelease \
+            --title "AudioLR per Windows (anteprima)" --notes "Anteprima per Windows 10 e 11: separazione Veloce con la scheda grafica, mixer e WAV. Tutto sul computer. Non firmata: Windows può mostrare un avviso (Ulteriori informazioni › Esegui comunque)."
+          gh release upload windows-anteprima AudioLR-Windows-anteprima.exe --repo "$GITHUB_REPOSITORY" --clobber

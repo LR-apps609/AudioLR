@@ -9,3 +9,7 @@ build-test/
 test.log
 __pycache__/
 *.pyc
+windows/dist/
+windows/node_modules/
+windows/src-tauri/target/
+windows/src-tauri/gen/

@@ -9,11 +9,16 @@
 #   4. frequenze mancanti a zero, iSTFT
 #
 #   python Tools/convert_mdx23c.py <file.ckpt> <config.yaml> <NomeUscita>
+#   ONNX=1 python Tools/convert_mdx23c.py …   → la stessa rete in ONNX (per Windows, windows/ui/core/mdx23c-core.js),
+#       provata con ONNX Runtime contro il modello originale. Ingresso «spec» (1, 4, dim_f, T) float32,
+#       uscita «spec_out» (1, S·4, dim_f, T) float32, come per Core ML.
+#   Al posto del file dei pesi «-»: pesi a caso (per le prove del codice JavaScript con un modello piccolo)
 import sys, os, math, json, types
 import numpy as np
 import torch
 import yaml
-import coremltools as ct
+if not os.environ.get("ONNX"):
+    import coremltools as ct
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mdx23c.tfc_tdf_v3 import TFC_TDF_net
@@ -34,13 +39,16 @@ def ns(d):
 
 raw = yaml.load(open(CFG), Loader=Loader)
 cfg = ns(raw)
+torch.manual_seed(0)
 m = TFC_TDF_net(cfg, "cpu").eval()
-state = torch.load(CKPT, map_location="cpu")
-if isinstance(state, dict) and "state_dict" in state:
-    state = state["state_dict"]
-missing, unexpected = m.load_state_dict(state, strict=False)
-print("pesi mancanti:", missing[:5], "inattesi:", unexpected[:5])
-assert not missing, "il file dei pesi non corrisponde al modello"
+RANDOM = CKPT == "-"
+if not RANDOM:
+    state = torch.load(CKPT, map_location="cpu")
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    missing, unexpected = m.load_state_dict(state, strict=False)
+    print("pesi mancanti:", missing[:5], "inattesi:", unexpected[:5])
+    assert not missing, "il file dei pesi non corrisponde al modello"
 
 N, HOP, DIM_F = cfg.audio.n_fft, cfg.audio.hop_length, cfg.audio.dim_f
 T = cfg.audio.dim_t
@@ -156,7 +164,7 @@ with torch.no_grad():
 ref = ref.reshape(S, 2, -1)[..., :CHUNK]
 for k, name in enumerate(STEMS):
     print(f"{name} stimata / batteria (energia): {np.sum(ref[k] ** 2) / np.sum(mix.astype(np.float64) ** 2):.3f}")
-assert np.sum(ref ** 2) > 0.05 * np.sum(mix.astype(np.float64) ** 2), "il modello non trova la batteria di prova"
+assert RANDOM or np.sum(ref ** 2) > 0.05 * np.sum(mix.astype(np.float64) ** 2), "il modello non trova la batteria di prova"
 
 
 def core_torch(x):
@@ -168,6 +176,58 @@ q = snr(ref, pipeline_np(core_torch, mix.astype(np.float64)))
 print(f"MDX23C diviso / intero: {q:.1f} dB")
 assert q > 45, "dividere il modello cambia il risultato"
 if os.environ.get("SOLO_TORCH"):
+    sys.exit(0)
+
+
+def save_extras(precision, db):
+    json.dump({"kind": "mdx23c", "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "dim_f": DIM_F,
+               "chunk": CHUNK, "frames": T, "overlap": 4, "precision": precision, "db": round(db, 1), "format": "onnx",
+               "inputs": {"spec": [1, 4, DIM_F, T]}, "outputs": {"spec_out": [1, S * 4, DIM_F, T]}},
+              open(OUT + ".json", "w"))
+    # [campioni, strumenti] · batteria (2 canali) · strumento 1 (2 canali) · strumento 2 …
+    with open(OUT + "-prova.f32", "wb") as f:
+        np.array([CHUNK, S], dtype="<f4").tofile(f)
+        mix.astype("<f4").tofile(f)
+        ref.astype("<f4").tofile(f)
+
+
+# 3b. ONNX (Windows): la stessa rete, provata con ONNX Runtime contro il modello originale.
+# Si chiede più di 60 dB; i pesi a 16 bit si tengono solo se restano sopra i 60 dB (e senza NaN).
+if os.environ.get("ONNX"):
+    import inspect
+    import onnx
+    import onnxruntime as ort
+    MIN_DB = float(os.environ.get("MIN_DB", "60"))
+    for p_ in core.parameters():
+        p_.requires_grad_(False)
+    x_in = torch.randn(1, 4, DIM_F, T)
+    kw = {"dynamo": False} if "dynamo" in inspect.signature(torch.onnx.export).parameters else {}
+    with torch.no_grad():
+        torch.onnx.export(core, (x_in,), OUT + "-32.onnx", input_names=["spec"], output_names=["spec_out"],
+                          opset_version=17, do_constant_folding=True, **kw)
+    opts = ort.SessionOptions()
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+    def fidelity(path):
+        s_ = ort.InferenceSession(path, opts, providers=["CPUExecutionProvider"])
+        return snr(ref, pipeline_np(lambda x: s_.run(["spec_out"], {"spec": x})[0], mix.astype(np.float64)))
+
+    q32 = fidelity(OUT + "-32.onnx")
+    print(f"ONNX 32 bit / MDX23C: {q32:.1f} dB")
+    assert q32 > MIN_DB, "conversione ONNX non fedele"
+    best, precision, qbest = OUT + "-32.onnx", "32", q32
+    try:
+        from onnxconverter_common import float16
+        onnx.save(float16.convert_float_to_float16(onnx.load(OUT + "-32.onnx"), keep_io_types=True), OUT + "-16.onnx")
+        q16 = fidelity(OUT + "-16.onnx")
+        print(f"ONNX 16 bit / MDX23C: {q16:.1f} dB")
+        if math.isfinite(q16) and q16 > MIN_DB:
+            best, precision, qbest = OUT + "-16.onnx", "16", q16
+    except Exception as e:
+        print("ONNX a 16 bit non riuscito:", e)
+    os.replace(best, OUT + ".onnx")
+    save_extras(precision, qbest)
+    print("Fatto:", OUT + ".onnx", precision, round(qbest, 1), f"{os.path.getsize(OUT + '.onnx') / 1e6:.0f} MB")
     sys.exit(0)
 
 # 3. Core ML

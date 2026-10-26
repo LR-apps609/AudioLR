@@ -1,0 +1,170 @@
+# I modelli del Mac in ONNX per Windows: stessa rete delle versioni Core ML, provata con ONNX Runtime contro il
+# modello originale (fedeltà in dB, più di 60), poi provata anche con il motore JavaScript dell'app (Node),
+# infine tra i file scaricabili della release «modelli-windows».
+#   roformer   Tools/convert_roformer.py  ingresso «x» (1, T, FS·2) → «mask» (1, S, T, FS·2)        site/app/roformer-core.js
+#   mdx23c     Tools/convert_mdx23c.py    ingresso «spec» (1, 4, dim_f, T) → «spec_out» (1, S·4, dim_f, T)  windows/ui/core/mdx23c-core.js
+#   demucs     Tools/web_demucs.py        «spec» (1, 4, 2048, T), «wave» (1, 2, L) → «spec_out», «wave_out»  site/app/engine-core.js
+#   basicpitch Tools/basic_pitch_onnx.py  il nmp.onnx di Spotify, provato contro il modello TensorFlow
+# HTDemucs (Veloce, e aiuto di Studio) è lo stesso modello di HTDemucsWeb (release «modelli-web»): non si ripete.
+#
+# A ogni modifica di questo file si convertono i modelli in NUOVI; a mano (Actions › Run workflow) si scelgono
+# i nomi, o «tutti».
+name: Modelli per Windows (ONNX)
+
+on:
+  workflow_dispatch:
+    inputs:
+      modelli:
+        description: "Nomi separati da spazi, oppure «tutti»"
+        required: false
+        default: ""
+  push:
+    paths: [.github/workflows/model-onnx.yml]
+
+permissions:
+  contents: write
+
+env:
+  NUOVI: "VoceCori3 VoceDuetto BatteriaDrumSep HTDemucsFT-1 BasicPitch"
+
+jobs:
+  scegli:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          SCELTA: ${{ github.event.inputs.modelli }}
+        shell: python
+        run: |
+          import json, os
+          tutti = [
+              {"nome": "StrumentiSW", "tipo": "roformer", "file": "BS-Roformer-SW", "yaml": "BS-Roformer-SW.yaml", "pezzo": 352768},
+              {"nome": "VoceRevive", "tipo": "roformer", "file": "bs_roformer_vocals_revive_v3e_unwa", "yaml": "config_bs_roformer_vocals_revive_unwa.yaml", "pezzo": 352800},
+              {"nome": "VoceRoFormer9", "tipo": "roformer", "file": "vocals_mel_band_roformer", "yaml": "vocals_mel_band_roformer.yaml", "pezzo": 352800},
+              {"nome": "VoceCori3", "tipo": "roformer", "file": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956", "yaml": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956_config.yaml", "pezzo": 352800},
+              {"nome": "VoceDuetto", "tipo": "roformer", "file": "model_chorus_bs_roformer_ep_267_sdr_24.1275", "yaml": "config_chorus_male_female_bs_roformer.yaml", "pezzo": 352800},
+              {"nome": "BatteriaDrumSep", "tipo": "mdx23c", "file": "MDX23C-DrumSep-aufr33-jarredou", "yaml": "config_drumsep_mdx23c.yaml", "pezzo": 0},
+              {"nome": "HTDemucsFT-1", "tipo": "demucs", "file": "htdemucs_ft", "yaml": "", "pezzo": 1},
+              {"nome": "BasicPitch", "tipo": "basicpitch", "file": "basic-pitch==0.4.0", "yaml": "", "pezzo": 0},
+          ]
+          scelta = (os.environ.get("SCELTA") or "").split() or os.environ["NUOVI"].split()
+          sel = tutti if scelta == ["tutti"] else [m for m in tutti if m["nome"] in scelta]
+          assert sel, f"nessun modello con questi nomi: {scelta}"
+          print("Modelli:", [m["nome"] for m in sel])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("matrix=" + json.dumps({"include": sel}) + "\n")
+
+  convert:
+    needs: scegli
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.scegli.outputs.matrix) }}
+    env:
+      N: ${{ matrix.nome }}
+      MIN_DB: "60"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: "Più memoria (i RoFormer grandi, senza, vengono fermati durante la conversione)"
+        if: matrix.tipo == 'roformer'
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 24G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 && sudo swapon /swapfile2
+          free -g; df -h /
+      - name: Strumenti
+        shell: bash
+        run: |
+          ok=0
+          case "${{ matrix.tipo }}" in
+            roformer)
+              pip install "torch==2.2.2" --index-url https://download.pytorch.org/whl/cpu > pip.log 2>&1 && \
+              pip install "numpy<2" pyyaml einops beartype "rotary-embedding-torch==0.6.5" scipy \
+                "numba==0.60.0" "llvmlite==0.43.0" "librosa==0.10.2.post1" \
+                "onnx==1.16.2" "onnxruntime==1.19.2" "onnxconverter-common==1.14.0" >> pip.log 2>&1 || ok=1 ;;
+            mdx23c)
+              pip install "torch==2.2.2" --index-url https://download.pytorch.org/whl/cpu > pip.log 2>&1 && \
+              pip install "numpy<2" pyyaml "onnx==1.16.2" "onnxruntime==1.19.2" "onnxconverter-common==1.14.0" >> pip.log 2>&1 || ok=1 ;;
+            demucs)
+              pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.2.2" "torchaudio==2.2.2" > pip.log 2>&1 && \
+              pip install "numpy<2" "onnx==1.16.2" "onnxruntime==1.19.2" "onnxconverter-common==1.14.0" >> pip.log 2>&1 && \
+              pip install --no-deps "demucs==4.0.1" "openunmix==1.3.0" >> pip.log 2>&1 && \
+              pip install dora-search einops julius omegaconf pyyaml tqdm >> pip.log 2>&1 || ok=1 ;;
+            basicpitch)
+              pip install "tensorflow-cpu==2.15.0" "numpy<2" "onnxruntime==1.19.2" > pip.log 2>&1 && \
+              pip download --no-deps "${{ matrix.file }}" -d bpwhl >> pip.log 2>&1 && \
+              python -m zipfile -e bpwhl/*.whl bp >> pip.log 2>&1 || ok=1 ;;
+          esac
+          if [ $ok -ne 0 ]; then
+            grep -iE "error|requires|conflict|no matching" pip.log | tail -n 12 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
+          mkdir -p /tmp/js && (cd /tmp/js && npm init -y >/dev/null && npm install --silent onnxruntime-node@1.19.2 onnxruntime-web@1.19.2)
+      - name: Modello originale
+        if: matrix.tipo == 'roformer' || matrix.tipo == 'mdx23c'
+        run: |
+          B=https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs
+          curl -fL --retry 3 -o m.ckpt "$B/${{ matrix.file }}.ckpt"
+          curl -fL --retry 3 -o m.yaml "$B/${{ matrix.yaml }}"
+      - name: Conversione e prova
+        shell: bash {0}
+        run: |
+          case "${{ matrix.tipo }}" in
+            roformer)   ONNX=1 python Tools/convert_roformer.py m.ckpt m.yaml $N ${{ matrix.pezzo }} > conv.log 2>&1 ;;
+            mdx23c)     ONNX=1 python Tools/convert_mdx23c.py m.ckpt m.yaml $N > conv.log 2>&1 ;;
+            demucs)     ONNX=1 F16=1 python Tools/web_demucs.py ${{ matrix.file }} $N ${{ matrix.pezzo }} > conv.log 2>&1 ;;
+            basicpitch) python Tools/basic_pitch_onnx.py bp/basic_pitch/saved_models/icassp_2022 $N Resources/BasicPitch.mlpackage > conv.log 2>&1 ;;
+          esac
+          code=$?
+          tail -n 60 conv.log
+          # Al massimo 10 annotazioni per passaggio: solo le righe che contano
+          grep -E " dB|Fatto|Pesi uguali|pesi mancanti|Error|Killed" conv.log | grep -v Warning | tail -n 10 | while IFS= read -r l; do echo "::notice::$l"; done
+          # Se non riesce, le ultime righe dell'errore nel riepilogo
+          if [ $code -ne 0 ]; then tail -n 8 conv.log | while IFS= read -r l; do echo "::error::$l"; done; fi
+          exit $code
+      - name: "Prova con il motore JavaScript (Node, ONNX Runtime 1.19.2)"
+        shell: bash {0}
+        run: |
+          export NODE_PATH=/tmp/js/node_modules
+          WEB=/tmp/js/node_modules/onnxruntime-web/dist/ort.node.min.js
+          code=0
+          case "${{ matrix.tipo }}" in
+            roformer) node site/test/roformer.test.js . $N > js.log 2>&1 || code=1 ;;
+            mdx23c)
+              # Prima un MDX23C piccolissimo con pesi a caso, poi il modello vero (ONNX Runtime e ONNX Runtime Web)
+              mkdir -p piccolo
+              (cd piccolo && ONNX=1 python ../Tools/convert_mdx23c.py - ../windows/ui/test/mdx23c-piccolo.yaml Piccolo > conv.log 2>&1) || { tail -n 5 piccolo/conv.log; code=1; }
+              node windows/ui/test/mdx23c.test.js piccolo Piccolo > js.log 2>&1 || code=1
+              ORT_WEB=$WEB node windows/ui/test/mdx23c.test.js piccolo Piccolo >> js.log 2>&1 || code=1
+              node windows/ui/test/mdx23c.test.js . $N >> js.log 2>&1 || code=1
+              ORT_WEB=$WEB node windows/ui/test/mdx23c.test.js . $N >> js.log 2>&1 || code=1 ;;
+            demucs) node site/test/engine.test.js . $N > js.log 2>&1 || code=1 ;;
+            basicpitch) echo "(nessuna prova JavaScript: il file è quello di Spotify)" > js.log ;;
+          esac
+          cat js.log
+          grep -E "dB|NON|Error|OK" js.log | grep -vE "^ok   (ricucitura|STFT)" | tail -n 9 | while IFS= read -r l; do echo "::notice::JS: $l"; done
+          if [ $code -ne 0 ]; then tail -n 6 js.log | while IFS= read -r l; do echo "::error::JS: $l"; done; fi
+          exit $code
+      - name: Pacchetto
+        run: |
+          sha256sum $N.onnx | tee $N.onnx.sha256
+          ls -la $N.*
+          echo "::notice::$N: $(python -c "import json;d=json.load(open('$N.json'));print(d['precision'],'bit,',d['db'],'dB,',d.get('inputs'),'→',d.get('outputs'))") · $(du -h $N.onnx | cut -f1) · sha256 $(cut -d' ' -f1 $N.onnx.sha256)"
+      - name: "Tra i file scaricabili (release «modelli-windows»)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view modelli-windows >/dev/null 2>&1 || \
+            gh release create modelli-windows --prerelease --title "Modelli per Windows (non è un aggiornamento)" \
+              --notes "I modelli di IsoLR in ONNX per Windows, provati contro gli originali."
+          gh release upload modelli-windows $N.onnx $N.onnx.sha256 $N.json $N-prova.f32 --clobber
+          echo "::notice::$N caricato in modelli-windows"

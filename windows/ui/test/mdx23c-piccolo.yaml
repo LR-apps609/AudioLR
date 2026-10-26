@@ -1,0 +1,22 @@
+# Un MDX23C piccolissimo con pesi a caso, solo per provare mdx23c-core.js (stessa forma di DrumSep, misure ridotte):
+#   ONNX=1 python Tools/convert_mdx23c.py - windows/ui/test/mdx23c-piccolo.yaml Piccolo
+audio:
+  dim_f: 64
+  dim_t: 32
+  hop_length: 512
+  n_fft: 2048
+  num_channels: 2
+  sample_rate: 44100
+model:
+  act: gelu
+  bottleneck_factor: 2
+  growth: 8
+  norm: InstanceNorm
+  num_blocks_per_scale: 1
+  num_channels: 8
+  num_scales: 2
+  num_subbands: 4
+  scale: [2, 2]
+training:
+  instruments: [kick, snare, hh]
+  target_instrument: null
