@@ -13,7 +13,7 @@
 import sys, os, json, math, tempfile
 import numpy as np
 
-METHOD, OUT = sys.argv[1], sys.argv[2]
+METHOD, OUT = (sys.argv[1], sys.argv[2]) if __name__ == "__main__" else ("", "")
 STEMS = ["vocals", "drums", "bass", "other"]
 
 
@@ -189,26 +189,31 @@ def separate(mix, rate, name):
 
 # ── Misura ─────────────────────────────────────────────────────────────────────────────────────
 
-results = {}
-for name, mix, rate, refs in tracks():
-    refs["instrumental"] = refs["drums"] + refs["bass"] + refs["other"]
-    est = separate(mix, rate, name)
-    if est is None:
-        continue
-    if "instrumental" not in est and all(s in est for s in ("drums", "bass", "other")):
-        est["instrumental"] = est["drums"] + est["bass"] + est["other"]
-    row = {}
-    for s, ref in refs.items():
-        # Le tracce mute (es. niente basso in quel pezzo) non si possono misurare
-        if s in est and np.sum(ref ** 2) > 1e-6:
-            row[s] = round(sdr(ref, est[s][:, :ref.shape[1]]), 2)
-    results[name] = row
-    print(name, row, flush=True)
+def main():
+    results = {}
+    for name, mix, rate, refs in tracks():
+        refs["instrumental"] = refs["drums"] + refs["bass"] + refs["other"]
+        est = separate(mix, rate, name)
+        if est is None:
+            continue
+        if "instrumental" not in est and all(s in est for s in ("drums", "bass", "other")):
+            est["instrumental"] = est["drums"] + est["bass"] + est["other"]
+        row = {}
+        for s, ref in refs.items():
+            # Le tracce mute (es. niente basso in quel pezzo) non si possono misurare
+            if s in est and np.sum(ref ** 2) > 1e-6:
+                row[s] = round(sdr(ref, est[s][:, :ref.shape[1]]), 2)
+        results[name] = row
+        print(name, row, flush=True)
 
-summary = {}
-for s in STEMS + ["instrumental"]:
-    v = [r[s] for r in results.values() if s in r]
-    if v:
-        summary[s] = {"mediana": round(float(np.median(v)), 2), "media": round(float(np.mean(v)), 2), "canzoni": len(v)}
-json.dump({"metodo": METHOD, "riepilogo": summary, "canzoni": results}, open(OUT, "w"), indent=1, ensure_ascii=False)
-print("RIEPILOGO", METHOD, json.dumps(summary, ensure_ascii=False))
+    summary = {}
+    for s in STEMS + ["instrumental"]:
+        v = [r[s] for r in results.values() if s in r]
+        if v:
+            summary[s] = {"mediana": round(float(np.median(v)), 2), "media": round(float(np.mean(v)), 2), "canzoni": len(v)}
+    json.dump({"metodo": METHOD, "riepilogo": summary, "canzoni": results}, open(OUT, "w"), indent=1, ensure_ascii=False)
+    print("RIEPILOGO", METHOD, json.dumps(summary, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
