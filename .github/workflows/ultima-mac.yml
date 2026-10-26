@@ -1,0 +1,32 @@
+# La versione per Mac più recente è sempre l'«ultima» su GitHub: il tasto «Scarica IsoLR per Mac» del sito
+# (releases/latest) deve portare al .dmg, non all'installer per Windows.
+name: Ultima versione Mac
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Windows]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: [.github/workflows/ultima-mac.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  ultima:
+    runs-on: ubuntu-latest
+    steps:
+      - name: La versione Mac più recente diventa l'ultima
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+        run: |
+          id=$(gh api "repos/$R/releases?per_page=50" | python3 -c "
+          import json, sys, re
+          rel = [r for r in json.load(sys.stdin) if not r['draft'] and not r['prerelease'] and re.fullmatch(r'v\d+\.\d+\.\d+', r['tag_name'])]
+          rel.sort(key=lambda r: tuple(int(x) for x in r['tag_name'][1:].split('.')))
+          print(rel[-1]['id'] if rel else '')")
+          [ -n "$id" ] || exit 0
+          gh api -X PATCH "repos/$R/releases/$id" -f make_latest=true -q '"::notice::Ultima versione: " + .tag_name'

@@ -135,7 +135,7 @@ jobs:
           print(t.split("\n\n")[0])
           PY
           )
-            gh release create "win-v$V" "$F" --title "IsoLR per Windows $V" --notes "$NOTE
+            gh release create "win-v$V" "$F" --latest=false --title "IsoLR per Windows $V" --notes "$NOTE
 
           Non firmata: la prima volta Windows può mostrare un avviso (Ulteriori informazioni › Esegui comunque)."
             echo "::notice::Rilasciata IsoLR per Windows $V"
