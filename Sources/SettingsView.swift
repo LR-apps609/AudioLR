@@ -32,6 +32,7 @@ struct TracksSettings: View {
     @AppStorage(Prefs.splitKey) private var split = true
     @AppStorage(Prefs.revealKey) private var reveal = false
     @AppStorage(Prefs.soundKey) private var sound = true
+    @AppStorage(Prefs.recordOffsetKey) private var recordOffset = 0.0
 
     var body: some View {
         Form {
@@ -63,6 +64,14 @@ struct TracksSettings: View {
             Section {
                 Toggle("Suono quando ha finito", isOn: $sound)
                 Toggle("Apri la cartella nel Finder quando ha finito", isOn: $reveal)
+            }
+            Section {
+                Stepper(value: $recordOffset, in: -300...300, step: 5) {
+                    Text("Sposta le registrazioni di \(Int(recordOffset)) ms").monospacedDigit()
+                }
+            } header: { Text("Registrazioni") } footer: {
+                Text("IsoLR toglie da solo il ritardo di microfono e altoparlanti. Se le tue registrazioni suonano un filo in anticipo, alza il numero; se suonano in ritardo, abbassalo.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

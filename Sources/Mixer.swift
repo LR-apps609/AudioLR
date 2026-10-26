@@ -180,6 +180,32 @@ final class MixPlayer: ObservableObject {
         play(from: loopA ?? 0)
     }
 
+    // La tua registrazione (0.29): un file lungo quanto la canzone, che suona insieme alle tracce.
+    @Published private(set) var take: URL?
+    @Published var takeOn = true { didSet { applyGains() } }
+    @Published var takeVolume = 1.0 { didSet { applyGains() } }
+    /// Mentre si registra la registrazione precedente tace e il passaggio A–B non ricomincia.
+    @Published var recording = false { didSet { applyGains() } }
+    private let takePlayer = AVAudioPlayerNode()
+    private var takeFile: AVAudioFile?
+    /// Chiamato quando il mixer parte (per mettere a tempo la registrazione) e quando si ferma da solo.
+    var onPlay: ((TakeClock) -> Void)?
+    var onStopped: (() -> Void)?
+
+    func setTake(_ url: URL?) {
+        guard url != take || (url != nil && takeFile == nil) else { return }
+        let wasPlaying = isPlaying, at = position
+        if wasPlaying { pause() }
+        take = url
+        takeFile = url.flatMap { try? AVAudioFile(forReading: $0) }
+        if takeFile != nil, takePlayer.engine == nil {
+            engine.attach(takePlayer)
+            engine.connect(takePlayer, to: engine.mainMixerNode, format: takeFile!.processingFormat)
+        }
+        applyGains()
+        if wasPlaying { play(from: at, counting: false) }
+    }
+
     private let clickPlayer = AVAudioPlayerNode()
     private let countPlayer = AVAudioPlayerNode()
     nonisolated static let clickRate = 44_100.0
@@ -346,13 +372,17 @@ final class MixPlayer: ObservableObject {
             keys.append(s.key)
             duration = max(duration, Double(f.length) / f.processingFormat.sampleRate)
         }
+        // L'ultima registrazione fatta su questa canzone
+        take = nil
+        takeFile = nil
+        setTake(folder.flatMap { TakeRecorder.takes(in: $0).first })
         applyGains()
     }
 
     func toggle() { isPlaying ? pause() : play(from: position >= duration - 0.05 ? 0 : position) }
 
     /// Suona da `seconds`; con il conteggio attivo, prima una battuta di clic (non quando il passaggio ricomincia da solo).
-    func play(from seconds: Double, counting: Bool = true) {
+    func play(from seconds: Double, counting: Bool = true, forceCount: Bool = false) {
         guard !players.isEmpty else { return }
         stopNodes()
         _ = limiter
@@ -364,7 +394,7 @@ final class MixPlayer: ObservableObject {
         // Il conteggio: una battuta al tempo del punto di partenza; la musica (e il metronomo) partono dopo
         let period = Self.beatPeriod(structure, bpm: bpm, at: at)
         let bar = structure?.beatsPerBar ?? 4
-        let lead = counting && countIn && canCount ? period * Double(bar) : 0
+        let lead = counting && (countIn || forceCount) ? period * Double(bar) : 0
         let sr = Self.clickRate
         if lead > 0 {
             for i in 0..<bar {
@@ -388,11 +418,22 @@ final class MixPlayer: ObservableObject {
             p.scheduleSegment(f, startingFrame: first, frameCount: count,
                               at: lead > 0 ? AVAudioTime(sampleTime: AVAudioFramePosition(lead * rate), atRate: rate) : nil)
         }
+        if let f = takeFile, takePlayer.engine != nil {
+            let r = f.processingFormat.sampleRate
+            let first = AVAudioFramePosition(at * r), last = min(f.length, AVAudioFramePosition(end * r))
+            if last > first {
+                takePlayer.scheduleSegment(f, startingFrame: first, frameCount: AVAudioFrameCount(last - first),
+                                           at: lead > 0 ? AVAudioTime(sampleTime: AVAudioFramePosition(lead * r), atRate: r) : nil)
+            }
+        }
         // Tutti i lettori partono nello stesso istante, un attimo dopo: così restano allineati
         let when = AVAudioTime(hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: 0.08))
         for p in players.values { p.play(at: when) }
         clickPlayer.play(at: when)
         countPlayer.play(at: when)
+        if takePlayer.engine != nil { takePlayer.play(at: when) }
+        onPlay?(TakeClock(startHost: AVAudioTime.seconds(forHostTime: when.hostTime), at: at, lead: lead, rate: self.rate,
+                          semitones: semitones, outputLatency: engine.outputNode.presentationLatency))
         startPosition = at
         // Il conteggio passa alla velocità scelta: a metà velocità dura il doppio
         startedAt = Date().addingTimeInterval(0.08 + lead / self.rate)
@@ -420,16 +461,19 @@ final class MixPlayer: ObservableObject {
     func tick() {
         guard isPlaying else { return }
         if let a = loopA, let b = loopB, position >= b - 0.03 {
+            // Registrando, il passaggio si suona una volta sola
+            if recording { pause(); onStopped?(); return }
             if ramp { rate = Self.rampNext(rate) }
             play(from: a, counting: false)
             return
         }
-        if position >= duration - 0.02 { stop() }
+        if position >= duration - 0.02 { stop(); onStopped?() }
     }
 
     private func stopNodes() {
         for p in players.values { p.stop() }
         // I clic entrano nel motore solo al primo ascolto
+        if takePlayer.engine != nil { takePlayer.stop() }
         guard clickPlayer.engine != nil else { return }
         clickPlayer.stop()
         countPlayer.stop()
@@ -437,6 +481,7 @@ final class MixPlayer: ObservableObject {
 
     private func applyGains() {
         for (k, p) in players { p.volume = Float(state.effectiveGain(k)) }
+        takePlayer.volume = takeOn && !recording ? Float(takeVolume) : 0
     }
 
     /// Salva il mix attuale: accanto alle tracce nel formato delle Impostazioni, oppure in `to` nel formato `format`.

@@ -31,6 +31,9 @@ struct ContentView: View {
     @EnvironmentObject private var job: SeparationJob
     @StateObject private var player = StemPlayer()
     @StateObject private var mixer = MixPlayer()
+    @ObservedObject private var recorder = TakeRecorder.shared
+    /// Le registrazioni della canzone aperta (la più recente per prima).
+    @State private var takes: [URL] = []
     @ObservedObject private var warmup = Warmup.shared
     @ObservedObject private var updateNotice = UpdateNotice.shared
     /// Larghezza della parte principale: sotto la soglia i tasti mostrano solo l'icona, così niente esce dalla finestra.
@@ -559,9 +562,99 @@ struct ContentView: View {
             }
             if let chords = job.analysis?.chords, !chords.isEmpty { chordRow(chords) }
             practiceControls
+            recordRow
         }
         .padding(.horizontal, 4)
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Registrati sopra la base: il tasto rosso, il volume del microfono, poi la registrazione da riascoltare.
+    private var recordRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                if recorder.recording { Task { await finishRecording() } } else { Task { await startRecording() } }
+            } label: {
+                Label(recorder.recording ? "Ferma" : "Registrati", systemImage: recorder.recording ? "stop.fill" : "record.circle")
+                    .foregroundStyle(recorder.recording ? Color.primary : Color.red)
+            }
+            .controlSize(.small)
+            .disabled(job.folder == nil || mixer.duration == 0)
+            .help(recorder.recording ? "Ferma e metti a tempo la registrazione"
+                                     : "Registra dal microfono o dalla scheda audio mentre suona la base (da A, o da dove sei, con una battuta di conteggio)")
+            if recorder.recording {
+                Capsule().fill(Color.primary.opacity(0.1)).frame(width: 90, height: 6)
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(recorder.level > 0.9 ? Color.red : Color.green).frame(width: 90 * CGFloat(min(1, recorder.level)), height: 6)
+                    }
+                    .accessibilityLabel("Volume del microfono")
+                Text(recorder.level > 0.9 ? "Troppo forte: abbassa il microfono" : "Registrazione in corso…")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else if let t = mixer.take {
+                Picker("Registrazione", selection: Binding(get: { t }, set: { mixer.setTake($0) })) {
+                    ForEach(takes, id: \.self) { Text($0.deletingPathExtension().lastPathComponent).tag($0) }
+                }
+                .labelsHidden().fixedSize().controlSize(.small)
+                Toggle(isOn: $mixer.takeOn) { Image(systemName: mixer.takeOn ? "speaker.wave.2.fill" : "speaker.slash") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .help(mixer.takeOn ? "Senti la registrazione insieme alla base" : "La registrazione tace")
+                Slider(value: $mixer.takeVolume, in: 0...2).frame(width: 80).controlSize(.small)
+                    .accessibilityLabel("Volume della registrazione")
+                Button("Scarica") { downloadTake(t) }.controlSize(.small)
+                    .help("Salva la registrazione (a tempo con la canzone) nel formato scelto")
+                Button { deleteTake(t) } label: { Image(systemName: "trash") }
+                    .buttonStyle(.borderless).help("Sposta la registrazione nel Cestino")
+            } else {
+                Text("Suona o canta sopra la base: la registrazione si mette a tempo da sola")
+                    .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            Spacer()
+        }
+        .onAppear { takes = job.folder.map(TakeRecorder.takes(in:)) ?? [] }
+        .onChange(of: job.folder) { _, f in
+            if recorder.recording { recorder.cancel(); mixer.recording = false }
+            takes = f.map(TakeRecorder.takes(in:)) ?? []
+        }
+        .alert("Registrazione", isPresented: Binding(get: { recorder.error != nil }, set: { if !$0 { recorder.error = nil } })) {
+            Button("OK") { recorder.error = nil }
+        } message: { Text(recorder.error ?? "") }
+    }
+
+    private func startRecording() async {
+        guard await TakeRecorder.allowed() else { recorder.error = TakeRecorder.Problem.denied.errorDescription; return }
+        do { try recorder.start() } catch {
+            recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return
+        }
+        mixer.recording = true
+        mixer.onPlay = { recorder.started($0) }
+        mixer.onStopped = { Task { await finishRecording() } }
+        // Da A se c'è un passaggio, altrimenti da dove si è; sempre con una battuta di conteggio
+        mixer.play(from: mixer.loopA ?? mixer.position, counting: true, forceCount: true)
+    }
+
+    private func finishRecording() async {
+        guard recorder.recording, let folder = job.folder else { return }
+        if mixer.isPlaying { mixer.pause() }
+        mixer.recording = false
+        mixer.onPlay = nil
+        mixer.onStopped = nil
+        do {
+            if let url = try await recorder.stop(into: folder, songDuration: mixer.duration, extraOffset: Prefs.recordOffset) {
+                takes = TakeRecorder.takes(in: folder)
+                mixer.setTake(url)
+            }
+        } catch { recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+    }
+
+    private func downloadTake(_ url: URL) {
+        let stem = Stem(key: "take", name: url.deletingPathExtension().lastPathComponent, symbol: "mic", url: url)
+        downloadOne(stem)
+    }
+
+    private func deleteTake(_ url: URL) {
+        try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        takes = job.folder.map(TakeRecorder.takes(in:)) ?? []
+        mixer.setTake(takes.first)
     }
 
     /// L'accordo che suona adesso, grande, e i prossimi tre: si legge mentre si suona.

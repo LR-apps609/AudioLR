@@ -44,6 +44,7 @@ targets:
         NSDesktopFolderUsageDescription: "IsoLR apre le canzoni che tieni sulla Scrivania."
         NSDocumentsFolderUsageDescription: "IsoLR apre le canzoni che tieni in Documenti."
         NSDownloadsFolderUsageDescription: "IsoLR apre le canzoni che hai scaricato."
+        NSMicrophoneUsageDescription: "IsoLR registra la tua voce o il tuo strumento mentre suona la base, solo quando premi «Registrati». Le registrazioni restano sul tuo Mac."
         # «Apri con → AudioLR» per qualsiasi file audio (e, più avanti, dal ponte con OrbitLR)
         CFBundleDocumentTypes:
           - CFBundleTypeName: "Aggiornamento di IsoLR"
