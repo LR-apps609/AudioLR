@@ -41,21 +41,23 @@ async function loadDemucs(forceWasm) {
   demucs = { session: s, backend: ep };
 }
 
-async function runDemucs(input, from, span, step) {
-  await loadDemucs(false);
+async function runDemucs(input, from, span, step, name) {
+  let sess, cfg;
+  if (name) { if (!nets[name]) throw new Error("modello " + name + " non caricato"); sess = nets[name].session; cfg = nets[name].cfg; }
+  else { await loadDemucs(false); sess = demucs.session; cfg = demucsCfg; }
   const runCore = async (spec, wave, le, seg) => {
-    const out = await demucs.session.run({
-      spec: new ort.Tensor("float32", spec, [1, 4, demucsCfg.nfft / 2, le]),
+    const out = await sess.run({
+      spec: new ort.Tensor("float32", spec, [1, 4, cfg.nfft / 2, le]),
       wave: new ort.Tensor("float32", wave, [1, 2, seg]),
     });
     return { spec: out.spec_out.data, wave: out.wave_out.data };
   };
   const stems = await AudioLREngine.separate(input, {
-    segment: demucsCfg.segment, sources: demucsCfg.sources, runCore,
+    segment: cfg.segment, sources: cfg.sources, runCore,
     onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled,
   });
   const out = {};
-  demucsCfg.sources.forEach((k, i) => { out[k] = stems[i]; });
+  cfg.sources.forEach((k, i) => { out[k] = stems[i]; });
   return out;
 }
 
@@ -105,8 +107,8 @@ async function separate(quality, mix, split) {
     const s = await runRoformer("StrumentiSW", mix, 0, 1, "Strumenti");
     tracks = { vocals: s.vocals, drums: s.drums, bass: s.bass, guitar: s.guitar, piano: s.piano, other: s.other };
   } else {
-    // Studio: 6 passaggi, la barra divisa in parti uguali
-    const P = 1 / 6;
+    // Studio: 7 passaggi, la barra divisa in parti uguali
+    const P = 1 / 7;
     let voice = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 3")).vocals;
     {
       const kim = (await runRoformer("VoceRoFormer9", mix, P, P, "Voce 2 di 3")).vocals;
@@ -116,14 +118,15 @@ async function separate(quality, mix, split) {
     for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) voice[c][k] = (voice[c][k] + onMix.vocals[c][k]) / 3;
     const base = minus(mix, voice, n);
     const onBase = await runRoformer("StrumentiSW", base, 3 * P, P, "Strumenti 1 di 2");
-    const ht = await runDemucs(base, 4 * P, 2 * P, "Strumenti 2 di 2");
+    const ht = await runDemucs(base, 4 * P, 2 * P, "Strumenti 2 di 3");
+    const ft = nets["HTDemucsFT-1"] ? (await runDemucs(base, 6 * P, P, "Strumenti 3 di 3", "HTDemucsFT-1")).bass : null;
     const restOf = (s) => plus([s.guitar, s.piano, s.other], n);
     const rest = mean([restOf(onBase), ht.other, restOf(onMix)], n);
     const guitar = mean([onBase.guitar, onMix.guitar], n), piano = mean([onBase.piano, onMix.piano], n);
     tracks = {
       vocals: voice,
       drums: mean([onBase.drums, ht.drums, onMix.drums], n),
-      bass: mean([onBase.bass, ht.bass, onMix.bass], n),
+      bass: mean(ft ? [onBase.bass, ft, ht.bass, onMix.bass] : [onBase.bass, ht.bass, onMix.bass], n),
       guitar, piano,
       // «Altri strumenti» è quello che resta, così chitarra + piano + altro = la media dei tre «resto»
       other: minus(rest, plus([guitar, piano], n), n),
@@ -148,10 +151,9 @@ async function extraSplit(kind, audio) {
     return { male: r.male, female: r.female };
   }
   if (kind === "drums") {
-    if (!self.AudioLRMDX23C) throw new Error("la batteria divisa arriva con il prossimo aggiornamento dei modelli");
     const m = nets.BatteriaDrumSep;
-    const out = await AudioLRMDX23C.separateAll(audio, m.cfg, async (x, shape) =>
-      (await m.session.run({ [m.cfg.input || "x"]: new ort.Tensor("float32", x, shape) }))[m.cfg.output || "y"].data, {
+    if (!m || !self.IsoLRMDX23C) throw new Error("modello della batteria non caricato");
+    const out = await IsoLRMDX23C.separate(audio, m.cfg, IsoLRMDX23C.onnxRunner(ort, m.session, m.cfg), {
       onProgress: (p) => post("progress", { progress: p, step: "Batteria" }), isCancelled: () => cancelled });
     const res = {};
     m.cfg.sources.forEach((k, i) => { res[k] = out[i]; });
@@ -184,10 +186,10 @@ self.onmessage = async (e) => {
       cancelled = false;
       const bp = nets.BasicPitch;
       if (!bp) throw new Error("modello delle note non caricato");
-      const cfg = bp.cfg, input = cfg.input || bp.session.inputNames[0];
+      const cfg = bp.cfg, input = Object.keys(cfg.inputs || {})[0] || bp.session.inputNames[0];
       const run = async (win) => {
         const out = await bp.session.run({ [input]: new ort.Tensor("float32", win, [1, win.length, 1]) });
-        return { frames: out[cfg.frames || cfg.note || "note"].data, onsets: out[cfg.onsets || cfg.onset || "onset"].data };
+        return { frames: out[cfg.outputs.note.name].data, onsets: out[cfg.outputs.onset.name].data };
       };
       const list = await self.IsoLR.Midi.transcribe([m.left, m.right], run, () => cancelled);
       post("done", { notes: list.map((n) => ({ start: n.start, end: n.end, pitch: n.pitch, velocity: n.velocity })) });

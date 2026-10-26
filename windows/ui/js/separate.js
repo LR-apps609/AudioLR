@@ -10,7 +10,7 @@
   const QUALITY = {
     fast: { title: "Veloce", icon: "bolt", line: "4 tracce · per provare un'idea", models: [], perMinute: 8, keys: ["vocals", "drums", "bass", "other"] },
     best: { title: "Massima", icon: "sparkle", line: "6 tracce · pulita e veloce", models: ["StrumentiSW"], perMinute: 40, keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
-    studio: { title: "Studio", icon: "star", line: "6 tracce · la più pulita", models: ["VoceRevive", "VoceRoFormer9", "StrumentiSW"], perMinute: 200, keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
+    studio: { title: "Studio", icon: "star", line: "6 tracce · la più pulita", models: ["VoceRevive", "VoceRoFormer9", "StrumentiSW", "HTDemucsFT-1"], perMinute: 200, keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
   };
   const EXTRA = {
     vocals: { source: "vocals", parts: ["lead", "backing"], model: "VoceCori3", title: "Separa voce e cori", detail: "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori", icon: "people", size: "circa 200 MB" },
@@ -125,7 +125,7 @@
       try {
         const song = await decode(file);
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
-        for (const m of QUALITY[quality].models) await this.model(m, m === "StrumentiSW" ? "il modello degli strumenti" : "il modello della voce");
+        for (const m of QUALITY[quality].models) await this.model(m, m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti");
         this.step = "Separazione"; this.progress = 0; this.emit();
         const t0 = performance.now();
         const split = Prefs.get("splitGuitarPiano", true);
