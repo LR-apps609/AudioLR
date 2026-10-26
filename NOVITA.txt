@@ -1,4 +1,10 @@
-Novità della 0.25.0:
+Novità della 0.25.0 «Scarica quello che vuoi»:
+• Finestra più grande e più chiara: a destra il riquadro «Scarica» con tutti i download a portata di clic
+• Scarichi una traccia sola (tasto «Scarica» su ogni riga), solo quelle spuntate, tutte in una cartella, il mix che senti o solo il passaggio A–B. Scegli tu il formato al momento (WAV, FLAC, Apple Lossless, AAC) e dove salvare
+• Nuovo formato AAC 256 kbps: file leggeri che suonano bene su iPhone e in Apple Music
+• Le tre qualità sono schede con quante tracce ricevi e quanto ci vuole, invece di un menu
+• In alto a sinistra «Nuova canzone»; Cronologia e Account in fondo alla colonna delle canzoni
+• Nel mixer, muto e ascolto solo hanno le icone dell'altoparlante e delle cuffie al posto di M e S
 • Album di notte: mentre IsoLR separa il Mac non va più in stop da solo, e alla fine arriva un avviso con quante canzoni sono pronte e quanto ci è voluto
 • Con «Poi metti in stop il Mac», un minuto dopo l'ultima canzone il Mac va in stop da solo: trascini un album la sera e lo trovi pronto la mattina
 
