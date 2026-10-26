@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AudioLR",
-  "version": "0.1.0",
+  "productName": "IsoLR",
+  "version": "0.5.0",
   "identifier": "it.ledion.audiolr",
   "build": {
     "frontendDist": "../dist"
@@ -10,12 +10,13 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "AudioLR",
-        "width": 1100,
-        "height": 780,
-        "minWidth": 860,
-        "minHeight": 560,
-        "dragDropEnabled": false
+        "title": "IsoLR",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 930,
+        "minHeight": 640,
+        "dragDropEnabled": false,
+        "label": "main"
       }
     ],
     "security": {
@@ -24,15 +25,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Ledion · LR Apps",
     "category": "Music",
     "shortDescription": "Separa voce e strumenti, tutto sul computer",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["Italian", "English"]
+        "languages": [
+          "Italian",
+          "English"
+        ]
       }
     }
   }

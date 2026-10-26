@@ -1,0 +1,10 @@
+Novità di IsoLR per Windows 0.5.0 «Come sul Mac»:
+• AudioLR per Windows ora si chiama IsoLR, con la stessa finestra dell'app per Mac: le tue canzoni a sinistra, le schede della qualità, il mixer e il riquadro «Scarica»
+• Massima e Studio con la stessa qualità del Mac (Studio: voce media di tre modelli, strumenti di tre passaggi). La prima volta scaricano i modelli, poi funziona senza internet
+• Le canzoni separate restano in Musica › IsoLR e si riaprono dalla colonna a sinistra o dalla Cronologia
+• Download mirati: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ (.stem.mp4); WAV, FLAC, AAC
+• Esercitati: velocità e tono (anche insieme), ripetizione di un passaggio con la rampa, metronomo sui battiti veri, conteggio, parti della canzone, accordi
+• Voce e cori, voce maschile e femminile, batteria divisa
+• Registrati sopra la base e confronta con l'originale; note MIDI, spartito MusicXML e tablatura
+• Un album di notte: il computer non va in stop mentre separa, avviso alla fine e, se vuoi, stop del computer
+• Aggiornamenti: quando ce n'è uno compare in alto «Aggiornamento disponibile»

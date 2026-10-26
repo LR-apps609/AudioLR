@@ -1,8 +1,8 @@
 {
-  "name": "audiolr-windows",
+  "name": "isolr-windows",
   "private": true,
-  "version": "0.1.0",
-  "description": "AudioLR per Windows: l'interfaccia e il motore del sito dentro un'app (Tauri), tutto sul computer",
+  "version": "0.5.0",
+  "description": "IsoLR per Windows: tutto sul computer",
   "devDependencies": {
     "@tauri-apps/cli": "2.1.0"
   }
