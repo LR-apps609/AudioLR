@@ -125,7 +125,8 @@ jobs:
           esac
           code=$?
           tail -n 60 conv.log
-          grep -E "RoFormer|MDX23C|Demucs|Basic Pitch|Pesi|STFT|ONNX|Fatto|pesi|stimata|Error|Killed" conv.log | tail -n 16 | while IFS= read -r l; do echo "::notice::$l"; done
+          # Al massimo 10 annotazioni per passaggio: solo le righe che contano
+          grep -E " dB|Fatto|Pesi uguali|pesi mancanti|Error|Killed" conv.log | grep -v Warning | tail -n 10 | while IFS= read -r l; do echo "::notice::$l"; done
           # Se non riesce, le ultime righe dell'errore nel riepilogo
           if [ $code -ne 0 ]; then tail -n 8 conv.log | while IFS= read -r l; do echo "::error::$l"; done; fi
           exit $code
@@ -149,7 +150,7 @@ jobs:
             basicpitch) echo "(nessuna prova JavaScript: il file è quello di Spotify)" > js.log ;;
           esac
           cat js.log
-          grep -E "dB|NON|Error|OK" js.log | grep -v "^ok   ricucitura" | tail -n 10 | while IFS= read -r l; do echo "::notice::JS: $l"; done
+          grep -E "dB|NON|Error|OK" js.log | grep -vE "^ok   (ricucitura|STFT)" | tail -n 9 | while IFS= read -r l; do echo "::notice::JS: $l"; done
           if [ $code -ne 0 ]; then tail -n 6 js.log | while IFS= read -r l; do echo "::error::JS: $l"; done; fi
           exit $code
       - name: Pacchetto
