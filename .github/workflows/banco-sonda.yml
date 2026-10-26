@@ -1,0 +1,67 @@
+# Sonda per il banco severo: controlla dal server di GitHub cosa si può scaricare (MUSDB18 completo da Zenodo
+# o da copie su Hugging Face, il dataset Multisong di MVSep) e salva le pagine nella release «banco-di-prova» (sonda.tar.gz).
+name: Sonda del banco severo
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/banco-sonda.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pagine
+        run: |
+          mkdir s && cd s
+          df -h > disco.txt; nproc >> disco.txt; free -g >> disco.txt
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+          get() { curl -sSL -A "$UA" -m 60 -o "$1" -w "%{http_code} %{url_effective} %{size_download}\n" "$2" >> codici.txt 2>&1 || echo "ERR $2" >> codici.txt; }
+          get zen_1117372.json https://zenodo.org/api/records/1117372
+          get zen_3338373.json https://zenodo.org/api/records/3338373
+          get zen_1117372.html https://zenodo.org/records/1117372
+          curl -sS -I -L -A "$UA" -m 60 "https://zenodo.org/records/1117372/files/musdb18.zip?download=1" > zen_head_1117372.txt 2>&1 || true
+          curl -sS -I -L -A "$UA" -m 60 "https://zenodo.org/records/3338373/files/musdb18hq.zip?download=1" > zen_head_3338373.txt 2>&1 || true
+          get hf_musdb.json "https://huggingface.co/api/datasets?search=musdb&limit=100&full=true"
+          get hf_musdb18.json "https://huggingface.co/api/datasets?search=musdb18&limit=100"
+          get mv_qc.html https://mvsep.com/quality_checker/
+          get mv_qc_en.html https://mvsep.com/en/quality_checker
+          get mv_ms.html "https://mvsep.com/quality_checker/multisong_leaderboard"
+          get mv_ms2.html "https://mvsep.com/quality_checker/multisong_leaderboard?sort=instrum"
+          get mv_upload.html https://mvsep.com/quality_checker/upload
+          get mv_home.html https://mvsep.com/
+          get mv_algos.html https://mvsep.com/algorithms
+          cat codici.txt
+          python3 - <<'PY'
+          import re, glob
+          links = set()
+          for f in glob.glob("mv_*.html"):
+              t = open(f, errors="ignore").read()
+              for h in re.findall(r'href=["\']([^"\']+)["\']', t):
+                  if any(k in h.lower() for k in ("quality", "multisong", "dataset", "download", "drive", "zip", "upload", "synth")):
+                      links.add(h)
+          open("link.txt", "w").write("\n".join(sorted(links)))
+          print("\n".join(sorted(links)))
+          PY
+      - name: Pagine collegate
+        run: |
+          cd s
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+          i=0
+          grep -iE "quality_checker|multisong" link.txt | sort -u | head -40 > sel.txt || true
+          while read -r l; do
+            case "$l" in http*) u="$l";; /*) u="https://mvsep.com$l";; *) u="https://mvsep.com/$l";; esac
+            i=$((i+1)); curl -sSL -A "$UA" -m 60 -o "lk_$i.html" -w "%{http_code} $u\n" "$u" >> codici.txt || true
+          done < sel.txt
+          tail -45 codici.txt
+      - name: Nella release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tar czf sonda.tar.gz s
+          gh release upload banco-di-prova sonda.tar.gz --clobber
+          echo "::notice::sonda caricata $(du -h sonda.tar.gz | cut -f1)"
