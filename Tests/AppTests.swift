@@ -215,7 +215,8 @@ final class AppTests: XCTestCase {
             try AudioIO.write([tone, tone], to: url, format: f)
             let back = try AudioIO.read(url)
             XCTAssertEqual(back[0].count, n, f.title)
-            XCTAssertEqual(back[0][5000], tone[5000], accuracy: f == .wav16 ? 1e-3 : 1e-4, f.title)
+            // L'AAC è compresso: il suono resta, i singoli campioni cambiano un poco
+            XCTAssertEqual(back[0][5000], tone[5000], accuracy: f == .aac ? 0.02 : f == .wav16 ? 1e-3 : 1e-4, f.title)
         }
     }
 
