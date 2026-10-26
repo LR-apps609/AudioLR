@@ -134,15 +134,32 @@ final class SeparationJob: ObservableObject {
         if let done = midiFiles[stem.key] { NSWorkspace.shared.activateFileViewerSelecting([done]); return }
         midiWorking = stem.key
         midiError = nil
-        let title = self.title, bpm = analysis?.bpm ?? 120
+        let title = self.title, bpm = analysis?.bpm ?? 120, a = analysis
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let audio = try AudioIO.read(stem.url)
                 let notes = try MidiTranscriber.bundled().transcribe(audio)
-                let url = dir.appendingPathComponent("\(title) – \(stem.name).mid")
-                try MidiFile.data(notes, bpm: bpm, program: MidiFile.program(for: stem.key), name: "\(title) – \(stem.name)")
+                let name = "\(title) – \(stem.name)"
+                let url = dir.appendingPathComponent("\(name).mid")
+                try MidiFile.data(notes, bpm: bpm, program: MidiFile.program(for: stem.key), name: name)
                     .write(to: url, options: .atomic)
-                await self?.midiDone(stem.key, url, folder: dir)
+                // Spartito (MusicXML) sulle battute vere della canzone; per chitarra e basso anche la tablatura
+                let kind = MusicXML.kind(for: stem.key, notes: notes)
+                let score = Score.build(notes, structure: a?.structure, bpm: bpm, keyRoot: a?.keyRoot ?? 0, minor: a?.minor ?? false,
+                                        monophonic: stem.key == "bass" || stem.key == "vocals" || stem.key == "lead")
+                var files = [url]
+                if !score.bars.isEmpty {
+                    let xml = dir.appendingPathComponent("\(name).musicxml")
+                    try MusicXML.data(score, kind: kind, title: name, instrument: stem.name, program: MidiFile.program(for: stem.key))
+                        .write(to: xml, options: .atomic)
+                    files.append(xml)
+                    if let tuning = kind.tuning {
+                        let tab = dir.appendingPathComponent("\(name) (tab).txt")
+                        try Tab.text(score, tuning: tuning, title: name).write(to: tab, atomically: true, encoding: .utf8)
+                        files.append(tab)
+                    }
+                }
+                await self?.midiDone(stem.key, url, folder: dir, files: files)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 await self?.midiFailed(msg, folder: dir)
@@ -150,11 +167,11 @@ final class SeparationJob: ObservableObject {
         }
     }
 
-    private func midiDone(_ key: String, _ url: URL, folder dir: URL) {
+    private func midiDone(_ key: String, _ url: URL, folder dir: URL, files: [URL]) {
         midiWorking = nil
         guard folder == dir else { return }
         midiFiles[key] = url
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        NSWorkspace.shared.activateFileViewerSelecting(files)
     }
 
     private func midiFailed(_ msg: String, folder dir: URL) {

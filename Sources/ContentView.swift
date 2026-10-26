@@ -991,10 +991,10 @@ struct ContentView: View {
                         Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
                     }
                 } label: {
-                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note MIDI di una traccia")
+                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note, spartito e tab")
                 }
                 .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
-                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da aprire in GarageBand o Logic")
+                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia: file MIDI (GarageBand, Logic), spartito MusicXML (MuseScore, Guitar Pro) e, per chitarra e basso, la tablatura")
                 Button { showDetails = true } label: { Text("Dettagli della separazione").frame(maxWidth: .infinity, alignment: .leading) }
                     .popover(isPresented: $showDetails, arrowEdge: .leading) { DetailsView().environmentObject(job) }
                     .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone (⌘I)")
