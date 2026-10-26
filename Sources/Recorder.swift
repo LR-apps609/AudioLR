@@ -204,6 +204,8 @@ final class TakeRecorder: ObservableObject {
         let tp = AVAudioUnitTimePitch()
         tp.rate = Float(1 / max(0.25, rate))
         tp.pitch = Float(-semitones * 100)
+        // A velocità e tono normali l'effetto non serve (e non aggiunge il suo piccolo ritardo)
+        tp.bypass = abs(rate - 1) < 0.001 && semitones == 0
         let outFmt = AVAudioFormat(standardFormatWithSampleRate: AudioIO.sampleRate, channels: 2)!
         e.attach(player)
         e.attach(tp)
@@ -214,7 +216,9 @@ final class TakeRecorder: ObservableObject {
         player.scheduleFile(file, at: nil)
         player.play()
         let seconds = Double(file.length) / file.processingFormat.sampleRate * rate
-        let want = AVAudioFramePosition(seconds * AudioIO.sampleRate)
+        // L'effetto restituisce il suono con un piccolo ritardo: si registra un po' di più e lo si toglie
+        let skip = tp.bypass ? 0 : Int((tp.auAudioUnit.latency * AudioIO.sampleRate).rounded())
+        let want = AVAudioFramePosition(seconds * AudioIO.sampleRate) + AVAudioFramePosition(skip)
         let buf = AVAudioPCMBuffer(pcmFormat: e.manualRenderingFormat, frameCapacity: e.manualRenderingMaximumFrameCount)!
         var out: [[Float]] = [[], []]
         out[0].reserveCapacity(Int(want)); out[1].reserveCapacity(Int(want))
@@ -226,6 +230,6 @@ final class TakeRecorder: ObservableObject {
         }
         player.stop()
         e.stop()
-        return out
+        return skip > 0 ? out.map { Array($0.dropFirst(skip)) } : out
     }
 }
