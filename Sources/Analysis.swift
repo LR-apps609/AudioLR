@@ -16,6 +16,8 @@ struct SongAnalysis: Codable, Equatable {
     let minor: Bool
     /// Quanto la tonalità è netta (0…1): sotto 0,5 la canzone cambia spesso tonalità o è poco tonale.
     let keyConfidence: Double
+    /// Battiti, battute e parti della canzone (dalla 0.26; nelle separazioni precedenti manca).
+    var structure: SongStructure? = nil
 
     static let names = ["Do", "Do♯", "Re", "Mi♭", "Mi", "Fa", "Fa♯", "Sol", "La♭", "La", "Si♭", "Si"]
     static let english = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
@@ -52,7 +54,13 @@ enum Analysis {
         let rhythm = sources.contains("drums") && energy(drums) > 1e-3 * energy(everything) ? drums : everything
         let harmonic = mono { $0 != "drums" && $0 != "vocals" }
         let key = self.key(energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything)
-        return SongAnalysis(bpm: tempo(rhythm), keyRoot: key.root, minor: key.minor, keyConfidence: key.confidence)
+        let bpm = tempo(rhythm)
+        let bass = mono { $0 == "bass" }
+        let vocal = mono { $0 == "vocals" || $0 == "lead" || $0 == "backing" }
+        let structure = Rhythm.structure(rhythm: rhythm, low: energy(bass) > 1e-4 * energy(everything) ? bass : rhythm,
+                                         harmonic: energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything,
+                                         vocal: vocal, all: everything, bpm: bpm)
+        return SongAnalysis(bpm: bpm, keyRoot: key.root, minor: key.minor, keyConfidence: key.confidence, structure: structure)
     }
 
     private static func energy(_ x: [Float]) -> Float { vDSP.sumOfSquares(x) }

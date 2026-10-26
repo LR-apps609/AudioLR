@@ -75,3 +75,71 @@ final class AnalysisTests: XCTestCase {
         XCTAssertEqual(a?.keyRoot, 0)
     }
 }
+
+/// Battiti, battute e parti su canzoni finte: tempo, primo battito della battuta e ritornello che torna.
+final class RhythmTests: XCTestCase {
+    let sr = 44_100
+
+    /// Un colpo corto (rumore che si spegne) a ogni battito; il primo di ogni battuta più forte e più basso.
+    private func song(bpm: Double, seconds: Double, offsetBeats: Int = 0) -> (drums: [Float], bass: [Float]) {
+        let n = Int(seconds * Double(sr))
+        var drums = [Float](repeating: 0, count: n), bass = [Float](repeating: 0, count: n)
+        let period = 60 / bpm
+        var g = SystemRandomNumberGenerator()
+        var k = 0
+        var t = 0.2
+        while t < seconds - 0.3 {
+            let s = Int(t * Double(sr))
+            let down = (k + offsetBeats) % 4 == 0
+            for i in 0..<2000 where s + i < n {
+                let env = Float(exp(-Double(i) / 300))
+                drums[s + i] += (down ? 0.9 : 0.5) * env * Float.random(in: -1...1, using: &g)
+                if down { bass[s + i] += 0.6 * env * Float(sin(2 * Double.pi * 55 * Double(i) / Double(sr))) }
+            }
+            k += 1
+            t += period
+        }
+        return (drums, bass)
+    }
+
+    func testBeatsFollowTheTempo() throws {
+        let (drums, bass) = song(bpm: 120, seconds: 30)
+        let s = try XCTUnwrap(Rhythm.structure(rhythm: drums, low: bass, harmonic: bass, vocal: [Float](repeating: 0, count: drums.count),
+                                               all: drums, bpm: 120))
+        let gaps = zip(s.beats.dropFirst(), s.beats).map { $0 - $1 }
+        let median = gaps.sorted()[gaps.count / 2]
+        XCTAssertEqual(median, 0.5, accuracy: 0.02, "a 120 BPM un battito ogni mezzo secondo")
+        XCTAssertGreaterThan(s.beats.count, 50)
+    }
+
+    func testDownbeatIsTheStrongBeat() throws {
+        // Il primo colpo della canzone è il terzo della battuta: il primo battito vero è il secondo colpo dopo
+        let (drums, bass) = song(bpm: 100, seconds: 40, offsetBeats: 2)
+        let s = try XCTUnwrap(Rhythm.structure(rhythm: drums, low: bass, harmonic: bass, vocal: [Float](repeating: 0, count: drums.count),
+                                               all: drums, bpm: 100))
+        // Ogni primo battito della battuta deve cadere dove c'è il basso
+        let hits = s.downbeats.filter { t in
+            let i = Int(t * Double(sr))
+            return Rhythm.rms(bass, i - 500, i + 1500) > 0.05
+        }
+        XCTAssertGreaterThan(Double(hits.count) / Double(max(1, s.downbeats.count)), 0.8)
+    }
+
+    func testSectionLabelsFromRepeats() {
+        // Strofa (voce piano), ritornello (voce forte), strofa, ritornello: il gruppo che torna più forte è il ritornello
+        let groups = [0, 1, 0, 1, 2]
+        let vocal = [0.3, 0.5, 0.3, 0.5, 0.0]
+        let loud = [0.2, 0.6, 0.2, 0.6, 0.1]
+        XCTAssertEqual(Rhythm.labels(groups: groups, vocal: vocal, loud: loud), ["Strofa", "Ritornello", "Strofa", "Ritornello", "Finale"])
+        XCTAssertEqual(Rhythm.labels(groups: [3, 0, 1, 0, 1], vocal: [0, 0.3, 0.5, 0.3, 0.5], loud: [0.1, 0.2, 0.6, 0.2, 0.6]).first, "Intro")
+    }
+
+    func testBoundariesAtChanges() {
+        // Due blocchi di 8 battute molto diversi: il confine cade sull'ottava
+        let a = [1.0, 0, 0], b = [0, 1.0, 0]
+        let feats = Array(repeating: a, count: 8) + Array(repeating: b, count: 8)
+        var sim = [[Double]](repeating: [Double](repeating: 0, count: 16), count: 16)
+        for i in 0..<16 { for j in 0..<16 { sim[i][j] = Rhythm.cosine(feats[i], feats[j]) } }
+        XCTAssertEqual(Rhythm.boundaries(Rhythm.novelty(sim)), [0, 8, 16])
+    }
+}
