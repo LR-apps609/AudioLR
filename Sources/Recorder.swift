@@ -180,7 +180,10 @@ final class TakeRecorder: ObservableObject {
     /// Riporta la registrazione a velocità e tono originali (se serve), a 44,1 kHz stereo,
     /// e la scrive a partire dal secondo `start` della canzone, con silenzio prima.
     nonisolated static func place(raw: URL, startingAt start: Double, rate: Double, semitones: Int, length: Double, to url: URL) throws {
-        let audio = try render(raw, rate: rate, semitones: semitones)
+        let audio: [[Float]]
+        do { audio = try render(raw, rate: rate, semitones: semitones) } catch {
+            throw SeparationError("non riesco a mettere a tempo la registrazione (\(error.localizedDescription))")
+        }
         let sr = AudioIO.sampleRate
         let total = Int(max(0, length) * sr)
         let shift = Int((start * sr).rounded())
