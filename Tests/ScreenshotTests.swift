@@ -49,6 +49,12 @@ final class ScreenshotTests: XCTestCase {
     }
 
     /// Tracce finte (toni) per mostrare il mixer pieno.
+    /// Parti finte sui 6 secondi delle tracce di prova.
+    static let parts = SongStructure(beats: stride(from: 0.0, to: 6, by: 0.25).map { $0 }, firstDownbeat: 0, beatsPerBar: 4, sections: [
+        SongSection(start: 0, end: 0.6, label: "Intro", group: 0), SongSection(start: 0.6, end: 1.8, label: "Strofa", group: 1),
+        SongSection(start: 1.8, end: 2.8, label: "Ritornello", group: 2), SongSection(start: 2.8, end: 4, label: "Strofa", group: 1),
+        SongSection(start: 4, end: 5.4, label: "Ritornello", group: 2), SongSection(start: 5.4, end: 6, label: "Finale", group: 3)])
+
     private func fakeStems() throws -> (URL, [Stem]) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("schermate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -116,7 +122,7 @@ final class ScreenshotTests: XCTestCase {
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.reset() }
         job.showcase(title: "TENDER_WIP_2 versione lunga del titolo", stems: stems, folder: dir, quality: .studio, duration: 280,
-                     analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8), elapsed: 536,
+                     analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8, structure: Self.parts), elapsed: 536,
                      engine: "Grafica (scelta nelle Impostazioni)", timings: [])
         // Con la Sala prove aperta: la barra più lunga
         let practice = UserDefaults.standard.object(forKey: "showPractice")
