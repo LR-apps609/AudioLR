@@ -1,3 +1,7 @@
+Novità della 0.25.0:
+• Album di notte: mentre IsoLR separa il Mac non va più in stop da solo, e alla fine arriva un avviso con quante canzoni sono pronte e quanto ci è voluto
+• Con «Poi metti in stop il Mac», un minuto dopo l'ultima canzone il Mac va in stop da solo: trascini un album la sera e lo trovi pronto la mattina
+
 Novità della 0.24.0 «IsoLR»:
 • AudioLR adesso si chiama IsoLR: nel Dock, nei menu, nel Finder e in tutta l'app. Il logo resta lo stesso
 • La cartella delle tracce passa da Musica › AudioLR a Musica › IsoLR: si sposta da sola al primo avvio, con tutte le canzoni già separate e la cronologia

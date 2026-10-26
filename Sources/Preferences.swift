@@ -121,6 +121,10 @@ enum Prefs {
     static var makeStemFile: Bool { UserDefaults.standard.bool(forKey: stemFileKey) }
     static var makeInstrumental: Bool { UserDefaults.standard.object(forKey: instrumentalKey) as? Bool ?? true }
     static var revealWhenDone: Bool { UserDefaults.standard.bool(forKey: revealKey) }
+    /// Album di notte: a fine coda il Mac va in stop (scelta per il giro di lavoro in corso, si ricorda).
+    static let sleepAfterBatchKey = "sleepAfterBatch"
+    static var sleepAfterBatch: Bool { UserDefaults.standard.bool(forKey: sleepAfterBatchKey) }
+
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }
 
     /// «Musica › IsoLR» oppure il percorso abbreviato della cartella scelta.

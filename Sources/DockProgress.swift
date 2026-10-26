@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import UserNotifications
 
 /// Nel Dock: una barra sotto l'icona mentre IsoLR separa, e alla fine la finestra torna in primo piano.
 @MainActor
@@ -9,6 +10,11 @@ final class DockProgress {
     private let view = DockProgressView()
     private var shown: Int?
     private var wasWorking = false
+    /// Album di notte: finché si separa il Mac non va in stop da solo
+    private var activity: NSObjectProtocol?
+    /// Canzoni finite in questo giro di lavoro (una o una coda intera) e quando è cominciato
+    private var finished = 0
+    private var batchStart: Date?
 
     func start() {
         let job = SeparationJob.shared
@@ -35,6 +41,7 @@ final class DockProgress {
         let tile = NSApp.dockTile
         if let f = Self.fraction(phase) {
             wasWorking = true
+            beginBatch()
             let pct = Int(f * 100)
             guard pct != shown else { return }
             shown = pct
@@ -48,6 +55,13 @@ final class DockProgress {
             tile.contentView = nil
             tile.display()
         }
+        if wasWorking, phase == .done { finished += 1 }
+        // Fine del giro di lavoro: finita l'ultima della coda, oppure annullata o non riuscita senza altro in coda
+        var failed = false
+        if case .failed = phase { failed = true }
+        if wasWorking, queueEmpty, phase == .done || phase == .idle || failed {
+            endBatch(cancelled: phase == .idle)
+        }
         // Finita (anche l'ultima della coda): IsoLR torna davanti, con la finestra dei risultati
         if wasWorking, phase == .done, queueEmpty {
             NSApp.activate()
@@ -59,6 +73,53 @@ final class DockProgress {
             if !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
         }
         if phase != .done || queueEmpty { wasWorking = false }
+    }
+
+    // MARK: Album di notte
+
+    private func beginBatch() {
+        guard activity == nil else { return }
+        finished = 0
+        batchStart = Date()
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled],
+                                                         reason: "IsoLR sta separando le canzoni")
+        // Il permesso per l'avviso si chiede la prima volta che serve
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private func endBatch(cancelled: Bool) {
+        if let a = activity { ProcessInfo.processInfo.endActivity(a) }
+        activity = nil
+        let count = finished, took = batchStart.map { Date().timeIntervalSince($0) } ?? 0
+        finished = 0
+        batchStart = nil
+        guard !cancelled, count > 0 else { return }
+        // L'avviso arriva anche con l'app davanti solo per una coda: per una canzone sola basta la finestra
+        if !NSApp.isActive || count > 1 {
+            let c = UNMutableNotificationContent()
+            c.title = count == 1 ? "IsoLR ha finito" : "IsoLR ha finito le \(count) canzoni"
+            c.body = (count == 1 ? "La canzone è separata" : "Tutte separate") + " in " + Self.duration(took) + "."
+            c.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        }
+        // A fine coda, se scelto: il Mac va in stop dopo un minuto (se nel frattempo non riparte un lavoro)
+        if Prefs.sleepAfterBatch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+                guard !SeparationJob.shared.isWorking, Prefs.sleepAfterBatch else { return }
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+                p.arguments = ["sleepnow"]
+                try? p.run()
+            }
+        }
+    }
+
+    /// «1 h 12 min», «8 min», «40 s».
+    nonisolated static func duration(_ s: Double) -> String {
+        let m = Int((s / 60).rounded(.down))
+        if m >= 60 { return "\(m / 60) h \(m % 60) min" }
+        if m >= 1 { return "\(m) min" }
+        return "\(max(1, Int(s.rounded()))) s"
     }
 }
 

@@ -45,6 +45,7 @@ struct ContentView: View {
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
     @State private var showPrivacy = false
+    @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
     @Environment(\.openWindow) private var openWindow
@@ -423,6 +424,11 @@ struct ContentView: View {
                     Chip(text: job.queue.count == 1 ? "1 in coda" : "\(job.queue.count) in coda", symbol: "list.bullet", tint: Theme.brass)
                         .help(job.queue.map { $0.deletingPathExtension().lastPathComponent }.joined(separator: "\n"))
                 }
+                // Album di notte: il Mac resta sveglio mentre separa; a fine lavoro, se scelto, va in stop
+                Toggle(isOn: $sleepAfterBatch) { Label("Poi metti in stop il Mac", systemImage: "moon.zzz") }
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+                    .help("Mentre IsoLR separa il Mac non va in stop. Con questa scelta, un minuto dopo la fine dell'ultima canzone il Mac va in stop.")
                 Button(job.queue.isEmpty ? "Annulla" : "Annulla tutto") { job.cancel() }.controlSize(.large)
             }
             steps

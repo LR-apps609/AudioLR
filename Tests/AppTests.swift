@@ -80,6 +80,13 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(Paths.migrateOutput(from: old, to: new, defaults: d))
     }
 
+    /// Album di notte: la durata nell'avviso.
+    func testBatchDurationText() {
+        XCTAssertEqual(DockProgress.duration(40), "40 s")
+        XCTAssertEqual(DockProgress.duration(8 * 60 + 5), "8 min")
+        XCTAssertEqual(DockProgress.duration(72 * 60), "1 h 12 min")
+    }
+
     /// La barra nel Dock: sale con il lavoro e sparisce quando non c'è niente in corso.
     func testDockProgressFraction() {
         XCTAssertNil(DockProgress.fraction(.idle))
