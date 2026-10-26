@@ -317,7 +317,7 @@ def run_multisong(src, dst):
         for stem, key in (("vocals", "vocals"), ("instrum", "instrumental"), ("bass", "bass"), ("drums", "drums"), ("other", "other")):
             a = st[key]
             clipped += int(np.sum(np.abs(a) > 1.0))
-            sf.write(os.path.join(dst, f"{song}_{stem}.flac"), np.clip(a, -1, 1).T, rate, subtype="PCM_24")
+            sf.write(os.path.join(dst, f"{song}_{stem}.flac"), np.clip(a, -1, 1).T, rate, subtype="PCM_16")
         print(song, f"{time.time() - t0:.0f} s", flush=True)
     t = {k: round(v[0] / max(v[1], 1), 2) for k, v in tempi.items()}
     print(f"::notice title=Multisong parte {shard}::campioni tagliati oltre ±1: {clipped}; tempi " + ", ".join(f"{k} {v}" for k, v in t.items()), flush=True)
