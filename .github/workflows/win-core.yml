@@ -1,0 +1,20 @@
+# I calcoli dell'app per Windows (windows/ui/core): tempo, tonalità, battiti, accordi, confronto,
+# spartito, MIDI e mixer, copiati dall'app per Mac. Si provano con i test di Node, senza dipendenze.
+name: "Windows: calcoli"
+
+on:
+  push:
+    paths: [windows/ui/core/**, .github/workflows/win-core.yml]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # xmllint controlla che il MusicXML sia ben formato (se manca, il test fa un controllo più semplice)
+      - run: sudo apt-get install -y -qq libxml2-utils >/dev/null || true
+      - run: node --test windows/ui/core/test/*.test.js

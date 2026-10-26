@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Niente esce dal computer: la pagina parla solo con sé stessa e con il programma (ipc) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost blob: data:; img-src 'self' data: blob:; media-src 'self' blob: data: mediastream:; style-src 'self' 'unsafe-inline'">
+<title>IsoLR</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="library" id="library" aria-label="Le tue canzoni"></aside>
+  <section class="main">
+    <header class="header" id="header"></header>
+    <div class="panel" id="panel"></div>
+    <div class="foot">Le canzoni non lasciano mai il tuo computer · Le tracce vanno in Musica › IsoLR</div>
+  </section>
+</div>
+<div id="overlay"></div>
+<script src="core/stft.js"></script>
+<script src="core/rhythm.js"></script>
+<script src="core/analysis.js"></script>
+<script src="core/chords.js"></script>
+<script src="core/compare.js"></script>
+<script src="core/midi.js"></script>
+<script src="core/sheet.js"></script>
+<script src="core/mix.js"></script>
+<script src="vendor/SignalsmithStretch.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/bridge.js"></script>
+<script src="js/encode.js"></script>
+<script src="js/player.js"></script>
+<script src="js/separate.js"></script>
+<script src="js/recorder.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
