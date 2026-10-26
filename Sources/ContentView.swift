@@ -556,7 +556,7 @@ struct ContentView: View {
                     .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                     .disabled(!mixer.canClick)
                     .help(mixer.canClick ? "Un clic su ogni battito della canzone, più forte sul primo della battuta"
-                                         : "Il metronomo segue i battiti trovati nelle separazioni fatte dalla 0.26: separa di nuovo la canzone")
+                                         : "Il metronomo segue i battiti trovati nelle separazioni fatte dalla 0.31: separa di nuovo la canzone")
                 Toggle(isOn: $mixer.countIn) { Label("Conteggio", systemImage: "4.circle") }
                     .toggleStyle(.button).controlSize(.small)
                     .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
@@ -728,7 +728,7 @@ struct ContentView: View {
     @ViewBuilder private var sectionStrip: some View {
         let parts = mixer.structure?.sections ?? []
         if parts.isEmpty || mixer.duration <= 0 {
-            Text(mixer.structure == nil ? "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.26"
+            Text(mixer.structure == nil ? "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.31"
                                         : "Parti della canzone non riconosciute: segna A e B a mano")
                 .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)

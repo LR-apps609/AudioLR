@@ -201,26 +201,32 @@ final class TakeRecorder: ObservableObject {
     /// Il file del microfono come stereo a 44,1 kHz; con velocità o tono cambiati passa per lo stesso
     /// effetto del mixer, al contrario (`1/rate`, `-semitoni`), fuori tempo reale.
     nonisolated static func render(_ raw: URL, rate: Double, semitones: Int) throws -> [[Float]] {
-        let file = try AVAudioFile(forReading: raw)
+        // Prima a 44,1 kHz stereo (il microfono spesso registra a 48 kHz mono, che l'effetto non accetta)
+        let audio = try AudioIO.read(raw)
+        // A velocità e tono normali l'effetto non serve (e non aggiunge il suo piccolo ritardo)
+        if abs(rate - 1) < 0.001 && semitones == 0 { return audio }
+        let fmt = AVAudioFormat(standardFormatWithSampleRate: AudioIO.sampleRate, channels: 2)!
+        let count = audio[0].count
+        guard count > 0, let input = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(count)),
+              let src = input.floatChannelData else { return audio }
+        input.frameLength = AVAudioFrameCount(count)
+        for c in 0..<2 { audio[c].withUnsafeBufferPointer { src[c].update(from: $0.baseAddress!, count: count) } }
         let e = AVAudioEngine()
         let player = AVAudioPlayerNode()
         let tp = AVAudioUnitTimePitch()
         tp.rate = Float(1 / max(0.25, rate))
         tp.pitch = Float(-semitones * 100)
-        // A velocità e tono normali l'effetto non serve (e non aggiunge il suo piccolo ritardo)
-        tp.bypass = abs(rate - 1) < 0.001 && semitones == 0
-        let outFmt = AVAudioFormat(standardFormatWithSampleRate: AudioIO.sampleRate, channels: 2)!
         e.attach(player)
         e.attach(tp)
-        e.connect(player, to: tp, format: file.processingFormat)
-        e.connect(tp, to: e.mainMixerNode, format: outFmt)
-        try e.enableManualRenderingMode(.offline, format: outFmt, maximumFrameCount: 4096)
+        e.connect(player, to: tp, format: fmt)
+        e.connect(tp, to: e.mainMixerNode, format: fmt)
+        try e.enableManualRenderingMode(.offline, format: fmt, maximumFrameCount: 4096)
         try e.start()
-        player.scheduleFile(file, at: nil)
+        player.scheduleBuffer(input, at: nil)
         player.play()
-        let seconds = Double(file.length) / file.processingFormat.sampleRate * rate
+        let seconds = Double(count) / AudioIO.sampleRate * rate
         // L'effetto restituisce il suono con un piccolo ritardo: si registra un po' di più e lo si toglie
-        let skip = tp.bypass ? 0 : Int((tp.auAudioUnit.latency * AudioIO.sampleRate).rounded())
+        let skip = Int((tp.auAudioUnit.latency * AudioIO.sampleRate).rounded())
         let want = AVAudioFramePosition(seconds * AudioIO.sampleRate) + AVAudioFramePosition(skip)
         let buf = AVAudioPCMBuffer(pcmFormat: e.manualRenderingFormat, frameCapacity: e.manualRenderingMaximumFrameCount)!
         var out: [[Float]] = [[], []]

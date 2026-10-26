@@ -3,7 +3,10 @@
 Scelte con Ledion il 26 ottobre 2026. Prima le nove funzioni «in corso», nell'ordine di lavoro;
 poi le undici «per dopo», da riprendere quando le prime sono finite.
 
-## In corso
+## Fatte (0.25 e 0.31)
+
+La 0.25 è uscita il 26 ottobre; dalla 0.26 alla 0.31 tutto insieme nella 0.31.
+
 
 | Versione | Funzione | Note |
 |---|---|---|
