@@ -1,0 +1,93 @@
+# Banco degli strumenti (Tools/banco_strumenti.py): SCNet XL IHF e BS-RoFormer a 4 strumenti per batteria,
+# basso e altro, da soli e in squadra con Studio, sulle 50 canzoni di prova di MUSDB18 in 5 parti.
+# Risultati: in questa pagina e nella release «banco-di-prova» (strumenti.md, strumenti.json).
+name: Banco degli strumenti
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/banco_strumenti.py, .github/workflows/banco-strumenti.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  misura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [0, 1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" musdb soundfile
+          pip install -q --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install -q dora-search einops julius omegaconf pyyaml tqdm ml_collections beartype rotary_embedding_torch loralib
+          git clone -q --depth 1 https://github.com/ZFTurbo/Music-Source-Separation-Training.git /tmp/msst
+          grep -viE "^torch|^numpy|^segmentation|^asteroid|^prodigy|^torchmetrics|^wandb|^auraloss|^gradio|^pedalboard|^audiomentations" /tmp/msst/requirements.txt > /tmp/req.txt || true
+          pip install -q -r /tmp/req.txt || true
+      - name: Separazione e misura
+        run: MSST=/tmp/msst SHARD=${{ matrix.parte }}/5 python Tools/banco_strumenti.py strumenti_${{ matrix.parte }}.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: strumenti_${{ matrix.parte }}
+          path: strumenti_*.json
+
+  riepilogo:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: strumenti_*
+          merge-multiple: true
+      - name: Tabella
+        run: |
+          python - <<'PY'
+          import json, glob, os, statistics as st
+          songs, tempi = {}, {}
+          for f in glob.glob("strumenti_*.json"):
+              d = json.load(open(f))
+              songs.update(d["canzoni"])
+              for k, v in d["tempi"].items():
+                  tempi.setdefault(k, []).append(v)
+          keys = sorted({k for r in songs.values() for k in r})
+          rows = {}
+          for k in keys:
+              v = [r[k] for r in songs.values() if k in r]
+              if len(v) >= 0.9 * len(songs):
+                  rows[k] = (round(st.median(v), 2), round(st.mean(v), 2), len(v))
+          names = {"drums": "Batteria", "bass": "Basso", "other": "Altro"}
+          md = [f"SDR (dB) sulle {len(songs)} canzoni di prova di MUSDB18 (estratti da 7 s). Più alto = più pulito.", "",
+                "OGGI = la ricetta di Studio oggi; «silenzi» = con la pulizia dei silenzi a quella soglia.", ""]
+          for stem, title in names.items():
+              mine = [(k, v) for k, v in rows.items() if k.startswith(stem + ":")]
+              top = sorted(mine, key=lambda x: -x[1][0])
+              singles = [x for x in top if "media(" not in x[0]]
+              md += [f"### {title}: le 25 ricette migliori", "", "| Ricetta | Mediana | Media | Canzoni |", "|---|---|---|---|"]
+              md += [f"| {k.split(':', 1)[1]} | {m:.2f} | {a:.2f} | {n} |" for k, (m, a, n) in top[:25]]
+              md += ["", f"#### {title}: ogni modello da solo", "", "| Modello | Mediana | Media | Canzoni |", "|---|---|---|---|"]
+              md += [f"| {k.split(':', 1)[1]} | {m:.2f} | {a:.2f} | {n} |" for k, (m, a, n) in singles]
+              md.append("")
+          md += ["### Tempo (CPU del server, secondi per secondo di musica)", "", "| Modello | Tempo |", "|---|---|"]
+          md += [f"| {k} | {st.median(v):.2f} |" for k, v in sorted(tempi.items(), key=lambda x: st.median(x[1]))]
+          text = "\n".join(md)
+          open("strumenti.md", "w").write(text)
+          json.dump({"riepilogo": rows, "tempi": tempi, "canzoni": songs}, open("strumenti.json", "w"), ensure_ascii=False)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write("## Banco degli strumenti\n\n" + text + "\n")
+          print(text)
+          PY
+      - name: Nella release «banco-di-prova»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload banco-di-prova strumenti.md strumenti.json --clobber
