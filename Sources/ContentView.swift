@@ -34,6 +34,9 @@ struct ContentView: View {
     @ObservedObject private var recorder = TakeRecorder.shared
     /// Le registrazioni della canzone aperta (la più recente per prima).
     @State private var takes: [URL] = []
+    /// Il confronto della registrazione con una traccia («Voce», «Basso»…).
+    @State private var comparison: (name: String, result: CompareResult)?
+    @State private var comparing = false
     @ObservedObject private var warmup = Warmup.shared
     @ObservedObject private var updateNotice = UpdateNotice.shared
     /// Larghezza della parte principale: sotto la soglia i tasti mostrano solo l'icona, così niente esce dalla finestra.
@@ -599,6 +602,16 @@ struct ContentView: View {
                     .help(mixer.takeOn ? "Senti la registrazione insieme alla base" : "La registrazione tace")
                 Slider(value: $mixer.takeVolume, in: 0...2).frame(width: 80).controlSize(.small)
                     .accessibilityLabel("Volume della registrazione")
+                Menu {
+                    ForEach(MixPlayer.mixable(job.stems)) { st in
+                        Button(st.name) { compare(t, with: st) }
+                    }
+                } label: {
+                    Label(comparing ? "Confronto…" : "Confronta", systemImage: "chart.xyaxis.line")
+                }
+                .menuStyle(.button).fixedSize().controlSize(.small)
+                .disabled(comparing)
+                .help("Confronta la registrazione con la parte originale: intonazione e tempo")
                 Button("Scarica") { downloadTake(t) }.controlSize(.small)
                     .help("Salva la registrazione (a tempo con la canzone) nel formato scelto")
                 Button { deleteTake(t) } label: { Image(systemName: "trash") }
@@ -613,6 +626,9 @@ struct ContentView: View {
         .onChange(of: job.folder) { _, f in
             if recorder.recording { recorder.cancel(); mixer.recording = false }
             takes = f.map(TakeRecorder.takes(in:)) ?? []
+        }
+        .sheet(isPresented: Binding(get: { comparison != nil }, set: { if !$0 { comparison = nil } })) {
+            if let c = comparison { CompareView(name: c.name, result: c.result) { comparison = nil } }
         }
         .alert("Registrazione", isPresented: Binding(get: { recorder.error != nil }, set: { if !$0 { recorder.error = nil } })) {
             Button("OK") { recorder.error = nil }
@@ -644,6 +660,23 @@ struct ContentView: View {
                 mixer.setTake(url)
             }
         } catch { recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+    }
+
+    private func compare(_ take: URL, with stem: Stem) {
+        comparing = true
+        Task {
+            do {
+                let r = try await Task.detached(priority: .userInitiated) {
+                    func mono(_ a: [[Float]]) -> [Float] {
+                        guard a.count > 1 else { return a.first ?? [] }
+                        return zip(a[0], a[1]).map { ($0 + $1) / 2 }
+                    }
+                    return try Compare.run(take: mono(try AudioIO.read(take)), original: mono(try AudioIO.read(stem.url)))
+                }.value
+                comparison = (stem.name, r)
+            } catch { recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+            comparing = false
+        }
     }
 
     private func downloadTake(_ url: URL) {
@@ -1433,4 +1466,89 @@ struct AnyLabelStyle: LabelStyle {
     private let make: (Configuration) -> AnyView
     init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
     func makeBody(configuration: Configuration) -> some View { make(configuration) }
+}
+
+/// Il risultato del confronto: un voto, intonazione e tempo in parole, e le due linee dell'altezza.
+struct CompareView: View {
+    let name: String
+    let result: CompareResult
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(result.verdict).font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(Theme.brass)
+                Text("· \(Int((result.inTune * 100).rounded()))% intonato rispetto a «\(name)»").font(.system(size: 15, weight: .medium))
+                Spacer()
+            }
+            HStack(spacing: 22) {
+                fact("Intonazione", abs(result.cents) < 10 ? "Centrata" :
+                        "\(Int(abs(result.cents).rounded())) cent \(result.cents > 0 ? "crescente" : "calante")",
+                     abs(result.cents) < 10 ? "in media sei sulla nota giusta" : (result.cents > 0 ? "in media un filo sopra la nota" : "in media un filo sotto la nota"))
+                fact("Tempo", abs(result.offsetMs) < 15 ? "A tempo" :
+                        "\(Int(abs(result.offsetMs).rounded())) ms \(result.offsetMs > 0 ? "in ritardo" : "in anticipo")",
+                     abs(result.offsetMs) < 15 ? "gli attacchi combaciano" : "gli attacchi in media rispetto all'originale")
+                fact("Confrontati", "\(Int(result.seconds.rounded())) s", "da \(formatTime(result.start)) a \(formatTime(result.end))")
+            }
+            PitchLines(result: result)
+                .frame(height: 220)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.well))
+            HStack(spacing: 16) {
+                legend(Theme.brass, "Originale")
+                legend(.red, "Tu")
+                Text("Un'ottava sopra o sotto conta come la stessa nota").font(.system(size: 11)).foregroundStyle(.tertiary)
+                Spacer()
+                Button("Fatto", action: close).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 720)
+    }
+
+    private func fact(_ title: String, _ value: String, _ note: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased()).font(.system(size: 10, weight: .semibold)).kerning(0.6).foregroundStyle(.secondary)
+            Text(value).font(.system(size: 17, weight: .semibold)).monospacedDigit()
+            Text(note).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func legend(_ c: Color, _ t: String) -> some View {
+        HStack(spacing: 5) { Capsule().fill(c).frame(width: 14, height: 3); Text(t).font(.system(size: 11)) }
+    }
+}
+
+/// Le due linee dell'altezza nel tempo; le tue note si portano all'ottava dell'originale per confrontarle.
+struct PitchLines: View {
+    let result: CompareResult
+
+    var body: some View {
+        Canvas { ctx, size in
+            let all = (result.original + result.mine).compactMap { $0 }
+            guard let lo0 = all.min(), let hi0 = all.max(), result.original.count > 1 else { return }
+            let lo = lo0 - 2, hi = max(lo0 + 12, hi0 + 2)
+            let n = result.original.count
+            func pt(_ i: Int, _ m: Double) -> CGPoint {
+                CGPoint(x: 10 + (size.width - 20) * CGFloat(i) / CGFloat(n - 1), y: size.height - 10 - (size.height - 20) * CGFloat((m - lo) / (hi - lo)))
+            }
+            // Righe dei semitoni (più marcate sui Do)
+            for m in Int(lo.rounded(.up))...Int(hi) {
+                let y = pt(0, Double(m)).y
+                ctx.fill(Path(CGRect(x: 10, y: y, width: size.width - 20, height: m % 12 == 0 ? 1 : 0.5)),
+                         with: .color(.primary.opacity(m % 12 == 0 ? 0.18 : 0.06)))
+            }
+            func line(_ v: [Double?], _ c: Color, follow: Bool) {
+                var p = Path(), open = false
+                for i in 0..<min(n, v.count) {
+                    guard var m = v[i] else { open = false; continue }
+                    if follow, let o = result.original[i] { m -= 12 * ((m - o) / 12).rounded() }
+                    if open { p.addLine(to: pt(i, m)) } else { p.move(to: pt(i, m)); open = true }
+                }
+                ctx.stroke(p, with: .color(c), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            line(result.original, Theme.brass, follow: false)
+            line(result.mine, .red.opacity(0.85), follow: true)
+        }
+        .accessibilityLabel("Le linee dell'altezza: originale e la tua registrazione")
+    }
 }
