@@ -1,6 +1,6 @@
 // Prova del motore del sito: lo spettrogramma, la rete ONNX e la ricucitura danno lo stesso risultato
 // di Demucs originale (file di prova prodotto da Tools/web_demucs.py). Si esegue con Node:
-//   node site/test/engine.test.js <cartella con HTDemucsWeb.onnx e HTDemucsWeb-prova.f32>
+//   node site/test/engine.test.js <cartella con HTDemucsWeb.onnx e HTDemucsWeb-prova.f32> [Nome, di serie HTDemucsWeb]
 const fs = require("fs"), path = require("path");
 const ort = require("onnxruntime-node");
 const E = require("../app/engine-core.js");
@@ -12,12 +12,12 @@ function snr(ref, est) {
 }
 
 (async () => {
-  const dir = process.argv[2];
-  const raw = fs.readFileSync(path.join(dir, "HTDemucsWeb-prova.f32"));
+  const dir = process.argv[2], name = process.argv[3] || "HTDemucsWeb";
+  const raw = fs.readFileSync(path.join(dir, name + "-prova.f32"));
   const all = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
   const L = all[0], S = all[1];
   const piece = [all.slice(2, 2 + L), all.slice(2 + L, 2 + 2 * L)];
-  const session = await ort.InferenceSession.create(path.join(dir, "HTDemucsWeb.onnx"));
+  const session = await ort.InferenceSession.create(path.join(dir, name + ".onnx"));
   const runCore = async (spec, wave, le, seg) => {
     const out = await session.run({ spec: new ort.Tensor("float32", spec, [1, 4, 2048, le]), wave: new ort.Tensor("float32", wave, [1, 2, seg]) });
     return { spec: out.spec_out.data, wave: out.wave_out.data };

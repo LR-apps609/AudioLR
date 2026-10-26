@@ -195,7 +195,8 @@ assert q > 45, "dividere il modello cambia il risultato"
 def save_extras(precision, db, ext):
     json.dump({"kind": KIND, "sources": STEMS, "samplerate": sr, "n_fft": N, "hop": HOP, "chunk": CHUNK,
                "frames": T, "freq_indices": FI.tolist(), "num_bands_per_freq": NB.tolist(), "precision": precision,
-               "db": round(db, 1), "format": ext}, open(OUT + ".json", "w"))
+               "db": round(db, 1), "format": ext, "inputs": {"x": [1, T, FSEL * 2]},
+               "outputs": {"mask": [1, len(STEMS), T, FSEL * 2]}}, open(OUT + ".json", "w"))
     with open(OUT + "-prova.f32", "wb") as f:
         np.array([CHUNK, len(STEMS)], dtype="<f4").tofile(f)
         mix.astype("<f4").tofile(f)
@@ -206,6 +207,8 @@ def save_extras(precision, db, ext):
 if os.environ.get("ONNX"):
     import onnx
     import onnxruntime as ort
+    # Fedeltà minima (dB) per la rete a 32 bit; i pesi a 16 bit si tengono solo sopra la stessa soglia e senza NaN
+    MIN_DB = float(os.environ.get("MIN_DB", "60"))
     for p_ in core.parameters():
         p_.requires_grad_(False)
     x_in = torch.randn(1, T, FSEL * 2)
@@ -216,7 +219,7 @@ if os.environ.get("ONNX"):
     s32 = ort.InferenceSession(OUT + "-32.onnx", opts, providers=["CPUExecutionProvider"])
     q32 = snr(ref, pipeline_np(lambda x: s32.run(["mask"], {"x": x})[0], mix.astype(np.float64)))
     print(f"ONNX 32 bit / RoFormer: {q32:.1f} dB")
-    assert q32 > 45, "conversione ONNX non fedele"
+    assert q32 > MIN_DB, "conversione ONNX non fedele"
     best, precision, qbest = OUT + "-32.onnx", "32", q32
     # Pesi a 16 bit: metà da scaricare e più veloce sulle schede grafiche; si tiene solo se resta fedele
     try:
@@ -226,7 +229,7 @@ if os.environ.get("ONNX"):
         s16 = ort.InferenceSession(OUT + "-16.onnx", opts, providers=["CPUExecutionProvider"])
         q16 = snr(ref, pipeline_np(lambda x: s16.run(["mask"], {"x": x})[0], mix.astype(np.float64)))
         print(f"ONNX 16 bit / RoFormer: {q16:.1f} dB")
-        if q16 >= 40:
+        if math.isfinite(q16) and q16 > MIN_DB:
             best, precision, qbest = OUT + "-16.onnx", "16", q16
     except Exception as e:
         print("ONNX a 16 bit non riuscito:", e)

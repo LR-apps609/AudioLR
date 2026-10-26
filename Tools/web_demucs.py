@@ -16,7 +16,8 @@
 import sys, os, math, json
 import numpy as np
 import torch
-import coremltools as ct
+if not os.environ.get("ONNX"):
+    import coremltools as ct
 from demucs.pretrained import get_model
 
 NAME = sys.argv[1] if len(sys.argv) > 1 else "htdemucs"
@@ -221,17 +222,41 @@ if os.environ.get("ONNX"):
     # Con i gradienti attivi (come per Core ML): PyTorch non usa l'attenzione «veloce», che ONNX non conosce
     torch.onnx.export(core, (spec_in, wave_in), OUT + ".onnx", opset_version=17, do_constant_folding=True,
                       input_names=["spec", "wave"], output_names=["spec_out", "wave_out"])
-    sess = ort.InferenceSession(OUT + ".onnx", providers=["CPUExecutionProvider"])
+    # MIN_DB: fedeltà minima (il sito ha chiesto 50 dB; i modelli per Windows 60). I pesi a 16 bit (F16=1)
+    # si tengono solo se restano sopra la soglia e senza NaN.
+    MIN_DB = float(os.environ.get("MIN_DB", "50"))
 
-    def core_onnx(xn, xtn):
-        a, b = sess.run(None, {"spec": xn, "wave": xtn})
-        return a, b
+    def fidelity(path):
+        sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
 
-    qo = snr(ref, separate_np(core_onnx, mix.astype(np.float64)))
+        def core_onnx(xn, xtn):
+            a, b = sess.run(["spec_out", "wave_out"], {"spec": xn, "wave": xtn})
+            return a, b
+
+        return snr(ref, separate_np(core_onnx, mix.astype(np.float64)))
+
+    qo = fidelity(OUT + ".onnx")
     print(f"ONNX / Demucs: {qo:.1f} dB")
-    assert qo > 50, "la conversione ONNX non è fedele"
-    json.dump({"model": NAME, "sources": SOURCES, "samplerate": SR, "segment": L, "nfft": NFFT, "hop": HOP,
-               "frames": LE, "db": round(qo, 1)}, open(OUT + ".json", "w"), indent=1)
+    assert qo > MIN_DB, "la conversione ONNX non è fedele"
+    precision = "32"
+    if os.environ.get("F16"):
+        try:
+            import onnx
+            from onnxconverter_common import float16
+            onnx.save(float16.convert_float_to_float16(onnx.load(OUT + ".onnx"), keep_io_types=True), OUT + "-16.onnx")
+            q16 = fidelity(OUT + "-16.onnx")
+            print(f"ONNX 16 bit / Demucs: {q16:.1f} dB")
+            if math.isfinite(q16) and q16 > MIN_DB:
+                os.replace(OUT + "-16.onnx", OUT + ".onnx")
+                precision, qo = "16", q16
+        except Exception as e:
+            print("ONNX a 16 bit non riuscito:", e)
+    json.dump({"model": NAME, "index": INDEX, "specialty": SPECIALTY, "sources": SOURCES, "samplerate": SR,
+               "segment": L, "nfft": NFFT, "hop": HOP, "frames": LE, "precision": precision, "db": round(qo, 1),
+               "format": "onnx", "inputs": {"spec": [1, 4, NFFT // 2, LE], "wave": [1, 2, L]},
+               "outputs": {"spec_out": [1, S * 4, NFFT // 2, LE], "wave_out": [1, S * 2, L]}},
+              open(OUT + ".json", "w"), indent=1)
+    print(f"ONNX {precision} bit / Demucs: {qo:.1f} dB")
     # [campioni, strumenti] · pezzo (2 canali) · strumenti secondo Demucs originale (S × 2 canali)
     with open(OUT + "-prova.f32", "wb") as f:
         np.array([L, S], dtype="<f4").tofile(f)
