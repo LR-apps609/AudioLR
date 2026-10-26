@@ -15,7 +15,11 @@ cp "$T"/onnxruntime-web-1.19.2/package/dist/ort.webgpu.min.js "$T"/onnxruntime-w
    "$T"/onnxruntime-web-1.19.2/package/dist/ort-wasm-simd-threaded.jsep.wasm windows/dist/vendor/
 cp "$T"/signalsmith-stretch-1.3.2/package/SignalsmithStretch.js windows/dist/vendor/
 [ "${SALTA_MODELLI:-}" = 1 ] && { echo "modello Veloce saltato"; exit 0; }
-gh release download modelli-web --repo "${GITHUB_REPOSITORY:-LR-apps609/AudioLR}" --dir windows/dist/models --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --clobber
+# Il modello Veloce dalla release «modelli-web» (solo l'API REST: funziona anche dove GraphQL è bloccato)
+R="${GITHUB_REPOSITORY:-LR-apps609/AudioLR}"
+gh api "repos/$R/releases/tags/modelli-web" -q '.assets[]|select(.name|test("^HTDemucsWeb([.]json|[.]onnx[.]part)"))|"\(.id) \(.name)"' | while read -r id name; do
+  gh api -H "Accept: application/octet-stream" "repos/$R/releases/assets/$id" > "windows/dist/models/$name"
+done
 python3 - <<'PY'
 import json, os, glob
 base = "windows/dist/models/"
