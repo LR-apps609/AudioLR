@@ -38,16 +38,17 @@ jobs:
       - name: Prova completa (una canzone separata in Veloce, analisi, mixer, download)
         run: |
           python3 - <<'PY'
-          import numpy as np, wave
+          import math, struct, wave
           sr, n = 44100, 44100 * 20
-          t = np.arange(n) / sr
-          beat = (t % 0.5) < 0.03
-          drums = beat * np.sin(2 * np.pi * 70 * t) * np.exp(-(t % 0.5) * 60)
-          bass = 0.25 * np.sin(2 * np.pi * 55 * t)
-          voice = 0.2 * np.sin(2 * np.pi * 440 * t + 3 * np.sin(2 * np.pi * 5 * t))
-          x = np.clip(drums + bass + voice, -1, 1)
-          s = (np.stack([x, x], 1) * 32767).astype("<i2")
-          w = wave.open("prova.wav", "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(sr); w.writeframes(s.tobytes()); w.close()
+          w = wave.open("prova.wav", "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(sr)
+          frames = bytearray()
+          for i in range(n):
+              t = i / sr; ph = t % 0.5
+              x = (math.sin(2 * math.pi * 70 * t) * math.exp(-ph * 60) if ph < 0.03 else 0) + 0.25 * math.sin(2 * math.pi * 55 * t) \
+                  + 0.2 * math.sin(2 * math.pi * 440 * t + 3 * math.sin(2 * math.pi * 5 * t))
+              v = int(max(-1, min(1, x)) * 32767)
+              frames += struct.pack("<hh", v, v)
+          w.writeframes(bytes(frames)); w.close()
           PY
           PW=/tmp/pw/node_modules/playwright node windows/ui/test/e2e.js windows/dist prova.wav shots
       - name: Nella release «schermate»
