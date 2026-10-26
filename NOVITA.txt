@@ -1,3 +1,13 @@
+Novità della 0.31.0 «Per chi suona»:
+• Metronomo: in «Esercitati» un clic su ogni battito vero della canzone, più forte sul primo della battuta. Con «Conteggio» una battuta di clic prima di partire
+• Parti della canzone: intro, strofa, ritornello, ponte… in una striscia sopra la musica. Un clic e quella parte si ripete
+• Accordi: l'accordo che suona adesso, grande, e i prossimi tre. Cambiando il tono si spostano anche loro. Nomi C D E oppure Do Re Mi
+• Voce maschile e femminile: nei duetti la voce di uomo da una parte, quella di donna dall'altra (⇧⌘U, la prima volta scarica il modello, circa 270 MB)
+• Registrati sopra la base: microfono o scheda audio, una battuta di conteggio e via. La registrazione si mette a tempo da sola, anche se suonavi più piano o in un altro tono; la riascolti sopra la base, la scarichi o la butti
+• Confronto con l'originale: la tua registrazione contro la voce (o il basso, la chitarra…) separata. Quanto sei intonato, se sei crescente o calante, se sei in anticipo o in ritardo, con le due linee delle note a confronto
+• Spartito e tablatura: «Note, spartito e tab» crea il file MIDI, lo spartito MusicXML (MuseScore, Guitar Pro, Sibelius) sulle battute vere della canzone e, per chitarra e basso, la tablatura
+• Accordi, parti e battiti si calcolano nelle canzoni separate da questa versione in poi: per le canzoni vecchie, separale di nuovo
+
 Novità della 0.25.0 «Scarica quello che vuoi»:
 • Finestra più grande e più chiara: a destra il riquadro «Scarica» con tutti i download a portata di clic
 • Scarichi una traccia sola (tasto «Scarica» su ogni riga), solo quelle spuntate, tutte in una cartella, il mix che senti o solo il passaggio A–B. Scegli tu il formato al momento (WAV, FLAC, Apple Lossless, AAC) e dove salvare

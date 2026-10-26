@@ -31,6 +31,12 @@ struct ContentView: View {
     @EnvironmentObject private var job: SeparationJob
     @StateObject private var player = StemPlayer()
     @StateObject private var mixer = MixPlayer()
+    @ObservedObject private var recorder = TakeRecorder.shared
+    /// Le registrazioni della canzone aperta (la più recente per prima).
+    @State private var takes: [URL] = []
+    /// Il confronto della registrazione con una traccia («Voce», «Basso»…).
+    @State private var comparison: (name: String, result: CompareResult)?
+    @State private var comparing = false
     @ObservedObject private var warmup = Warmup.shared
     @ObservedObject private var updateNotice = UpdateNotice.shared
     /// Larghezza della parte principale: sotto la soglia i tasti mostrano solo l'icona, così niente esce dalla finestra.
@@ -50,6 +56,7 @@ struct ContentView: View {
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
+    @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var typing = TypingFocus.shared
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
@@ -490,7 +497,8 @@ struct ContentView: View {
             sidePanel
         }
         .padding(22)
-        .onAppear { mixer.load(job.stems, folder: job.folder) }
+        .onAppear { mixer.load(job.stems, folder: job.folder); mixer.setGrid(job.analysis) }
+        .onChange(of: job.analysis) { _, a in mixer.setGrid(a) }
         .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
@@ -517,8 +525,8 @@ struct ContentView: View {
                     }
                     Spacer()
                     Button(kind == .drums ? "Dividi" : "Separa") { mixer.stop(); job.split(kind) }
-                        .keyboardShortcut(kind == .drums ? "d" : "v", modifiers: [.command, .shift])
-                        .help("\(kind == .drums ? "⇧⌘D" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
+                        .keyboardShortcut(kind == .drums ? "d" : kind == .gender ? "u" : "v", modifiers: [.command, .shift])
+                        .help("\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -538,8 +546,227 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.15), value: showPractice)
     }
 
-    /// Sala prove: velocità, tono, un passaggio da ripetere.
+    /// Sala prove: le parti della canzone e il metronomo; sotto velocità, tono, un passaggio da ripetere.
     private var practiceBar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                sectionStrip
+                Toggle(isOn: $mixer.metronome) { Label("Metronomo", systemImage: "metronome") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .disabled(!mixer.canClick)
+                    .help(mixer.canClick ? "Un clic su ogni battito della canzone, più forte sul primo della battuta"
+                                         : "Il metronomo segue i battiti trovati nelle separazioni fatte dalla 0.31: separa di nuovo la canzone")
+                Toggle(isOn: $mixer.countIn) { Label("Conteggio", systemImage: "4.circle") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .disabled(!mixer.canCount)
+                    .help("Prima di partire, una battuta di clic al tempo della canzone (1, 2, 3, 4)")
+            }
+            if let chords = job.analysis?.chords, !chords.isEmpty { chordRow(chords) }
+            practiceControls
+            recordRow
+        }
+        .padding(.horizontal, 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Registrati sopra la base: il tasto rosso, il volume del microfono, poi la registrazione da riascoltare.
+    private var recordRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                if recorder.recording { Task { await finishRecording() } } else { Task { await startRecording() } }
+            } label: {
+                Label(recorder.recording ? "Ferma" : "Registrati", systemImage: recorder.recording ? "stop.fill" : "record.circle")
+                    .foregroundStyle(recorder.recording ? Color.primary : Color.red)
+            }
+            .controlSize(.small)
+            .disabled(job.folder == nil || mixer.duration == 0)
+            .help(recorder.recording ? "Ferma e metti a tempo la registrazione"
+                                     : "Registra dal microfono o dalla scheda audio mentre suona la base (da A, o da dove sei, con una battuta di conteggio)")
+            if recorder.recording {
+                Capsule().fill(Color.primary.opacity(0.1)).frame(width: 90, height: 6)
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(recorder.level > 0.9 ? Color.red : Color.green).frame(width: 90 * CGFloat(min(1, recorder.level)), height: 6)
+                    }
+                    .accessibilityLabel("Volume del microfono")
+                Text(recorder.level > 0.9 ? "Troppo forte: abbassa il microfono" : "Registrazione in corso…")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else if let t = mixer.take {
+                Picker("Registrazione", selection: Binding(get: { t }, set: { mixer.setTake($0) })) {
+                    ForEach(takes, id: \.self) { Text($0.deletingPathExtension().lastPathComponent).tag($0) }
+                }
+                .labelsHidden().fixedSize().controlSize(.small)
+                Toggle(isOn: $mixer.takeOn) { Image(systemName: mixer.takeOn ? "speaker.wave.2.fill" : "speaker.slash") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .help(mixer.takeOn ? "Senti la registrazione insieme alla base" : "La registrazione tace")
+                Slider(value: $mixer.takeVolume, in: 0...2).frame(width: 80).controlSize(.small)
+                    .accessibilityLabel("Volume della registrazione")
+                Menu {
+                    ForEach(MixPlayer.mixable(job.stems)) { st in
+                        Button(st.name) { compare(t, with: st) }
+                    }
+                } label: {
+                    Label(comparing ? "Confronto…" : "Confronta", systemImage: "chart.xyaxis.line")
+                }
+                .menuStyle(.button).fixedSize().controlSize(.small)
+                .disabled(comparing)
+                .help("Confronta la registrazione con la parte originale: intonazione e tempo")
+                Button("Scarica") { downloadTake(t) }.controlSize(.small)
+                    .help("Salva la registrazione (a tempo con la canzone) nel formato scelto")
+                Button { deleteTake(t) } label: { Image(systemName: "trash") }
+                    .buttonStyle(.borderless).help("Sposta la registrazione nel Cestino")
+            } else {
+                Text("Suona o canta sopra la base: la registrazione si mette a tempo da sola")
+                    .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            Spacer()
+        }
+        .onAppear { takes = job.folder.map(TakeRecorder.takes(in:)) ?? [] }
+        .onChange(of: job.folder) { _, f in
+            if recorder.recording { recorder.cancel(); mixer.recording = false }
+            takes = f.map(TakeRecorder.takes(in:)) ?? []
+        }
+        .sheet(isPresented: Binding(get: { comparison != nil }, set: { if !$0 { comparison = nil } })) {
+            if let c = comparison { CompareView(name: c.name, result: c.result) { comparison = nil } }
+        }
+        .alert("Registrazione", isPresented: Binding(get: { recorder.error != nil }, set: { if !$0 { recorder.error = nil } })) {
+            Button("OK") { recorder.error = nil }
+        } message: { Text(recorder.error ?? "") }
+    }
+
+    private func startRecording() async {
+        guard await TakeRecorder.allowed() else { recorder.error = TakeRecorder.Problem.denied.errorDescription; return }
+        do { try recorder.start() } catch {
+            recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return
+        }
+        mixer.recording = true
+        mixer.onPlay = { recorder.started($0) }
+        mixer.onStopped = { Task { await finishRecording() } }
+        // Da A se c'è un passaggio, altrimenti da dove si è; sempre con una battuta di conteggio
+        mixer.play(from: mixer.loopA ?? mixer.position, counting: true, forceCount: true)
+    }
+
+    private func finishRecording() async {
+        guard recorder.recording, let folder = job.folder else { return }
+        if mixer.isPlaying { mixer.pause() }
+        mixer.recording = false
+        mixer.onPlay = nil
+        mixer.onStopped = nil
+        do {
+            if let url = try await recorder.stop(into: folder, songDuration: mixer.duration, extraOffset: Prefs.recordOffset) {
+                takes = TakeRecorder.takes(in: folder)
+                mixer.setTake(url)
+            }
+        } catch { recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+    }
+
+    private func compare(_ take: URL, with stem: Stem) {
+        comparing = true
+        Task {
+            do {
+                let r = try await Task.detached(priority: .userInitiated) {
+                    func mono(_ a: [[Float]]) -> [Float] {
+                        guard a.count > 1 else { return a.first ?? [] }
+                        return zip(a[0], a[1]).map { ($0 + $1) / 2 }
+                    }
+                    return try Compare.run(take: mono(try AudioIO.read(take)), original: mono(try AudioIO.read(stem.url)))
+                }.value
+                comparison = (stem.name, r)
+            } catch { recorder.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+            comparing = false
+        }
+    }
+
+    private func downloadTake(_ url: URL) {
+        let stem = Stem(key: "take", name: url.deletingPathExtension().lastPathComponent, symbol: "mic", url: url)
+        downloadOne(stem)
+    }
+
+    private func deleteTake(_ url: URL) {
+        try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        takes = job.folder.map(TakeRecorder.takes(in:)) ?? []
+        mixer.setTake(takes.first)
+    }
+
+    /// L'accordo che suona adesso, grande, e i prossimi tre: si legge mentre si suona.
+    /// Con il tono cambiato gli accordi si spostano insieme alla musica.
+    private func chordRow(_ chords: [ChordSpan]) -> some View {
+        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+            let t = mixer.position
+            let i = chords.firstIndex { t < $0.end } ?? chords.count - 1
+            let next = chords[(i + 1)...].filter { $0.root != nil }.prefix(3)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Accordi").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Text(chords[i].name(italian: italianChords, shift: mixer.semitones))
+                    .font(.system(size: 22, weight: .bold, design: .rounded)).foregroundStyle(Theme.brass)
+                    .frame(minWidth: 56, alignment: .leading)
+                    .accessibilityLabel("Accordo adesso: \(chords[i].name(italian: true, shift: mixer.semitones))")
+                ForEach(Array(next.enumerated()), id: \.offset) { k, c in
+                    Text(c.name(italian: italianChords, shift: mixer.semitones))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(k == 0 ? Color.primary.opacity(0.75) : Color.secondary)
+                }
+                if let n = next.first {
+                    Text("tra \(max(0, Int(((n.start - t) / max(0.25, mixer.rate)).rounded(.up)))) s")
+                        .font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Picker("Nomi", selection: $italianChords) {
+                    Text("C D E").tag(false)
+                    Text("Do Re Mi").tag(true)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().controlSize(.small)
+                .help("Nomi degli accordi all'inglese (C, Am) o all'italiana (Do, Lam)")
+            }
+        }
+        .help("Accordi stimati dagli strumenti (maggiori e minori): con il tono cambiato si spostano anche loro")
+    }
+
+    /// Le parti della canzone in proporzione alla durata: un clic ne ripete una.
+    @ViewBuilder private var sectionStrip: some View {
+        let parts = mixer.structure?.sections ?? []
+        if parts.isEmpty || mixer.duration <= 0 {
+            Text(mixer.structure == nil ? "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.31"
+                                        : "Parti della canzone non riconosciute: segna A e B a mano")
+                .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            GeometryReader { geo in
+                let w = geo.size.width, d = mixer.duration
+                ZStack(alignment: .leading) {
+                    ForEach(Array(parts.enumerated()), id: \.offset) { _, p in
+                        let on = abs((mixer.loopA ?? -9) - p.start) < 0.05 && abs((mixer.loopB ?? -9) - min(d, p.end)) < 0.05
+                        Button { mixer.practice(from: p.start, to: p.end) } label: {
+                            Text(p.label)
+                                .font(.system(size: 10.5, weight: .semibold)).lineLimit(1).truncationMode(.tail)
+                                .foregroundStyle(on ? Color.white : Color.primary.opacity(0.8))
+                                .padding(.horizontal, 5)
+                                .frame(width: max(0, w * (min(d, p.end) - p.start) / d - 1), height: 24, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(on ? AnyShapeStyle(Theme.brass.gradient) : AnyShapeStyle(Theme.brass.opacity(0.10 + 0.07 * Double(p.group % 4)))))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: w * p.start / d)
+                        .help("Ripeti «\(p.label)» (\(formatTime(p.start))–\(formatTime(min(d, p.end))))")
+                        .accessibilityLabel("Ripeti \(p.label), da \(formatTime(p.start))")
+                    }
+                    TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                        Rectangle().fill(Color.primary.opacity(0.7)).frame(width: 2, height: 28)
+                            .offset(x: max(0, min(w - 2, w * mixer.position / d - 1)))
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Velocità, tono, un passaggio da ripetere.
+    private var practiceControls: some View {
         HStack(spacing: 14) {
             if !compact {
                 Label("Esercitati", systemImage: "music.note").font(.system(size: 11.5, weight: .semibold))
@@ -582,8 +809,6 @@ struct ContentView: View {
                     .help("Velocità e tono originali, niente ripetizione")
             }
         }
-        .padding(.horizontal, 4)
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     /// La barra del mixer: se Tutto/Karaoke/Solo voce non ci stanno affiancati, diventano un menu.
@@ -766,10 +991,10 @@ struct ContentView: View {
                         Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
                     }
                 } label: {
-                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note MIDI di una traccia")
+                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note, spartito e tab")
                 }
                 .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
-                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da aprire in GarageBand o Logic")
+                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia: file MIDI (GarageBand, Logic), spartito MusicXML (MuseScore, Guitar Pro) e, per chitarra e basso, la tablatura")
                 Button { showDetails = true } label: { Text("Dettagli della separazione").frame(maxWidth: .infinity, alignment: .leading) }
                     .popover(isPresented: $showDetails, arrowEdge: .leading) { DetailsView().environmentObject(job) }
                     .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone (⌘I)")
@@ -1241,4 +1466,89 @@ struct AnyLabelStyle: LabelStyle {
     private let make: (Configuration) -> AnyView
     init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
     func makeBody(configuration: Configuration) -> some View { make(configuration) }
+}
+
+/// Il risultato del confronto: un voto, intonazione e tempo in parole, e le due linee dell'altezza.
+struct CompareView: View {
+    let name: String
+    let result: CompareResult
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(result.verdict).font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(Theme.brass)
+                Text("· \(Int((result.inTune * 100).rounded()))% intonato rispetto a «\(name)»").font(.system(size: 15, weight: .medium))
+                Spacer()
+            }
+            HStack(spacing: 22) {
+                fact("Intonazione", abs(result.cents) < 10 ? "Centrata" :
+                        "\(Int(abs(result.cents).rounded())) cent \(result.cents > 0 ? "crescente" : "calante")",
+                     abs(result.cents) < 10 ? "in media sei sulla nota giusta" : (result.cents > 0 ? "in media un filo sopra la nota" : "in media un filo sotto la nota"))
+                fact("Tempo", abs(result.offsetMs) < 15 ? "A tempo" :
+                        "\(Int(abs(result.offsetMs).rounded())) ms \(result.offsetMs > 0 ? "in ritardo" : "in anticipo")",
+                     abs(result.offsetMs) < 15 ? "gli attacchi combaciano" : "gli attacchi in media rispetto all'originale")
+                fact("Confrontati", "\(Int(result.seconds.rounded())) s", "da \(formatTime(result.start)) a \(formatTime(result.end))")
+            }
+            PitchLines(result: result)
+                .frame(height: 220)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.well))
+            HStack(spacing: 16) {
+                legend(Theme.brass, "Originale")
+                legend(.red, "Tu")
+                Text("Un'ottava sopra o sotto conta come la stessa nota").font(.system(size: 11)).foregroundStyle(.tertiary)
+                Spacer()
+                Button("Fatto", action: close).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 720)
+    }
+
+    private func fact(_ title: String, _ value: String, _ note: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased()).font(.system(size: 10, weight: .semibold)).kerning(0.6).foregroundStyle(.secondary)
+            Text(value).font(.system(size: 17, weight: .semibold)).monospacedDigit()
+            Text(note).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func legend(_ c: Color, _ t: String) -> some View {
+        HStack(spacing: 5) { Capsule().fill(c).frame(width: 14, height: 3); Text(t).font(.system(size: 11)) }
+    }
+}
+
+/// Le due linee dell'altezza nel tempo; le tue note si portano all'ottava dell'originale per confrontarle.
+struct PitchLines: View {
+    let result: CompareResult
+
+    var body: some View {
+        Canvas { ctx, size in
+            let all = (result.original + result.mine).compactMap { $0 }
+            guard let lo0 = all.min(), let hi0 = all.max(), result.original.count > 1 else { return }
+            let lo = lo0 - 2, hi = max(lo0 + 12, hi0 + 2)
+            let n = result.original.count
+            func pt(_ i: Int, _ m: Double) -> CGPoint {
+                CGPoint(x: 10 + (size.width - 20) * CGFloat(i) / CGFloat(n - 1), y: size.height - 10 - (size.height - 20) * CGFloat((m - lo) / (hi - lo)))
+            }
+            // Righe dei semitoni (più marcate sui Do)
+            for m in Int(lo.rounded(.up))...Int(hi) {
+                let y = pt(0, Double(m)).y
+                ctx.fill(Path(CGRect(x: 10, y: y, width: size.width - 20, height: m % 12 == 0 ? 1 : 0.5)),
+                         with: .color(.primary.opacity(m % 12 == 0 ? 0.18 : 0.06)))
+            }
+            func line(_ v: [Double?], _ c: Color, follow: Bool) {
+                var p = Path(), open = false
+                for i in 0..<min(n, v.count) {
+                    guard var m = v[i] else { open = false; continue }
+                    if follow, let o = result.original[i] { m -= 12 * ((m - o) / 12).rounded() }
+                    if open { p.addLine(to: pt(i, m)) } else { p.move(to: pt(i, m)); open = true }
+                }
+                ctx.stroke(p, with: .color(c), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            line(result.original, Theme.brass, follow: false)
+            line(result.mine, .red.opacity(0.85), follow: true)
+        }
+        .accessibilityLabel("Le linee dell'altezza: originale e la tua registrazione")
+    }
 }

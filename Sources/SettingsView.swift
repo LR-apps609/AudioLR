@@ -32,6 +32,7 @@ struct TracksSettings: View {
     @AppStorage(Prefs.splitKey) private var split = true
     @AppStorage(Prefs.revealKey) private var reveal = false
     @AppStorage(Prefs.soundKey) private var sound = true
+    @AppStorage(Prefs.recordOffsetKey) private var recordOffset = 0.0
 
     var body: some View {
         Form {
@@ -63,6 +64,14 @@ struct TracksSettings: View {
             Section {
                 Toggle("Suono quando ha finito", isOn: $sound)
                 Toggle("Apri la cartella nel Finder quando ha finito", isOn: $reveal)
+            }
+            Section {
+                Stepper(value: $recordOffset, in: -300...300, step: 5) {
+                    Text("Sposta le registrazioni di \(Int(recordOffset)) ms").monospacedDigit()
+                }
+            } header: { Text("Registrazioni") } footer: {
+                Text("IsoLR toglie da solo il ritardo di microfono e altoparlanti. Se le tue registrazioni suonano un filo in anticipo, alza il numero; se suonano in ritardo, abbassalo.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -228,6 +237,7 @@ struct AboutSettings: View {
         ("HTDemucs", "Veloce; Studio · strumenti (in squadra)", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori3", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
+        ("VoceDuetto", "Voce maschile e femminile", "BS-RoFormer Chorus Male-Female · pesi di Sucial · codice MIT"),
         ("VoceRevive", "Studio · voce", "BS-RoFormer Vocals Revive V3e · pesi di unwa · codice MIT"),
         ("VoceRoFormer9", "Studio · voce (in squadra); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
         ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro; Studio · voce (in squadra)", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),

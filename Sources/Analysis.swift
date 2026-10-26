@@ -18,6 +18,8 @@ struct SongAnalysis: Codable, Equatable {
     let keyConfidence: Double
     /// Battiti, battute e parti della canzone (dalla 0.26; nelle separazioni precedenti manca).
     var structure: SongStructure? = nil
+    /// Gli accordi, uno per tratto (dalla 0.27).
+    var chords: [ChordSpan]? = nil
 
     static let names = ["Do", "Do♯", "Re", "Mi♭", "Mi", "Fa", "Fa♯", "Sol", "La♭", "La", "Si♭", "Si"]
     static let english = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
@@ -56,11 +58,15 @@ enum Analysis {
         let key = self.key(energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything)
         let bpm = tempo(rhythm)
         let bass = mono { $0 == "bass" }
-        let vocal = mono { $0 == "vocals" || $0 == "lead" || $0 == "backing" }
+        let vocal = mono { MixState.voices.contains($0) }
         let structure = Rhythm.structure(rhythm: rhythm, low: energy(bass) > 1e-4 * energy(everything) ? bass : rhythm,
                                          harmonic: energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything,
                                          vocal: vocal, all: everything, bpm: bpm)
-        return SongAnalysis(bpm: bpm, keyRoot: key.root, minor: key.minor, keyConfidence: key.confidence, structure: structure)
+        let chords = Chords.detect(harmonic: energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything,
+                                   bass: energy(bass) > 1e-4 * energy(everything) ? bass : [], beats: structure?.beats,
+                                   key: (key.root, key.minor))
+        return SongAnalysis(bpm: bpm, keyRoot: key.root, minor: key.minor, keyConfidence: key.confidence, structure: structure,
+                            chords: chords.isEmpty ? nil : chords)
     }
 
     private static func energy(_ x: [Float]) -> Float { vDSP.sumOfSquares(x) }

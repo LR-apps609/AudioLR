@@ -67,6 +67,10 @@ enum Prefs {
     static let revealKey = "revealWhenDone"
     static let soundKey = "soundWhenDone"
 
+    static let recordOffsetKey = "recordOffsetMs"
+    /// Correzione a mano del ritardo delle registrazioni, in secondi (positiva = la registrazione si sposta più tardi).
+    static var recordOffset: Double { UserDefaults.standard.double(forKey: recordOffsetKey) / 1000 }
+
     static var format: OutputFormat {
         OutputFormat(rawValue: UserDefaults.standard.string(forKey: formatKey) ?? "") ?? .wav24
     }
