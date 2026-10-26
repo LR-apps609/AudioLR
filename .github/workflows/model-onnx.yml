@@ -14,7 +14,7 @@ permissions:
 jobs:
   convert:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +36,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Più memoria (Revive è grande: senza, la conversione viene fermata)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 24G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 && sudo swapon /swapfile2
+          free -g
       - name: Strumenti
         run: |
           pip install "torch==2.2.2" --index-url https://download.pytorch.org/whl/cpu > pip.log 2>&1
