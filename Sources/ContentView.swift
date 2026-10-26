@@ -490,7 +490,8 @@ struct ContentView: View {
             sidePanel
         }
         .padding(22)
-        .onAppear { mixer.load(job.stems, folder: job.folder) }
+        .onAppear { mixer.load(job.stems, folder: job.folder); mixer.setGrid(job.analysis) }
+        .onChange(of: job.analysis) { _, a in mixer.setGrid(a) }
         .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
@@ -538,8 +539,72 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.15), value: showPractice)
     }
 
-    /// Sala prove: velocità, tono, un passaggio da ripetere.
+    /// Sala prove: le parti della canzone e il metronomo; sotto velocità, tono, un passaggio da ripetere.
     private var practiceBar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                sectionStrip
+                Toggle(isOn: $mixer.metronome) { Label("Metronomo", systemImage: "metronome") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .disabled(!mixer.canClick)
+                    .help(mixer.canClick ? "Un clic su ogni battito della canzone, più forte sul primo della battuta"
+                                         : "Il metronomo segue i battiti trovati nelle separazioni fatte dalla 0.26: separa di nuovo la canzone")
+                Toggle(isOn: $mixer.countIn) { Label("Conteggio", systemImage: "4.circle") }
+                    .toggleStyle(.button).controlSize(.small)
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .disabled(!mixer.canCount)
+                    .help("Prima di partire, una battuta di clic al tempo della canzone (1, 2, 3, 4)")
+            }
+            practiceControls
+        }
+        .padding(.horizontal, 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Le parti della canzone in proporzione alla durata: un clic ne ripete una.
+    @ViewBuilder private var sectionStrip: some View {
+        let parts = mixer.structure?.sections ?? []
+        if parts.isEmpty || mixer.duration <= 0 {
+            Text(mixer.structure == nil ? "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.26"
+                                        : "Parti della canzone non riconosciute: segna A e B a mano")
+                .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            GeometryReader { geo in
+                let w = geo.size.width, d = mixer.duration
+                ZStack(alignment: .leading) {
+                    ForEach(Array(parts.enumerated()), id: \.offset) { _, p in
+                        let on = abs((mixer.loopA ?? -9) - p.start) < 0.05 && abs((mixer.loopB ?? -9) - min(d, p.end)) < 0.05
+                        Button { mixer.practice(from: p.start, to: p.end) } label: {
+                            Text(p.label)
+                                .font(.system(size: 10.5, weight: .semibold)).lineLimit(1).truncationMode(.tail)
+                                .foregroundStyle(on ? Color.white : Color.primary.opacity(0.8))
+                                .padding(.horizontal, 5)
+                                .frame(width: max(0, w * (min(d, p.end) - p.start) / d - 1), height: 24, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(on ? AnyShapeStyle(Theme.brass.gradient) : AnyShapeStyle(Theme.brass.opacity(0.10 + 0.07 * Double(p.group % 4)))))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: w * p.start / d)
+                        .help("Ripeti «\(p.label)» (\(formatTime(p.start))–\(formatTime(min(d, p.end))))")
+                        .accessibilityLabel("Ripeti \(p.label), da \(formatTime(p.start))")
+                    }
+                    TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                        Rectangle().fill(Color.primary.opacity(0.7)).frame(width: 2, height: 28)
+                            .offset(x: max(0, min(w - 2, w * mixer.position / d - 1)))
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Velocità, tono, un passaggio da ripetere.
+    private var practiceControls: some View {
         HStack(spacing: 14) {
             if !compact {
                 Label("Esercitati", systemImage: "music.note").font(.system(size: 11.5, weight: .semibold))
@@ -582,8 +647,6 @@ struct ContentView: View {
                     .help("Velocità e tono originali, niente ripetizione")
             }
         }
-        .padding(.horizontal, 4)
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     /// La barra del mixer: se Tutto/Karaoke/Solo voce non ci stanno affiancati, diventano un menu.
