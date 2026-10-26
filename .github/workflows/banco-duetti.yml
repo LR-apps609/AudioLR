@@ -1,0 +1,51 @@
+# Banco della voce maschile e femminile (Tools/banco_duetti.py): duetti finti dalle voci di MUSDB18,
+# divisi da due modelli pubblici. Risultati in questa pagina e nella release «banco-di-prova» (duetti.md).
+name: Banco dei duetti
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [Tools/banco_duetti.py, .github/workflows/banco-duetti.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  misura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" musdb soundfile librosa
+      - name: Duetti e misura
+        run: python Tools/banco_duetti.py duetti.json
+      - name: Tabella
+        run: |
+          python - <<'PY'
+          import json, os, statistics as st
+          d = json.load(open("duetti.json"))
+          md = [f"Duetti finti dalle voci di MUSDB18 (estratti da 7 s): {len(d['voci'])} voci riconosciute. SDR in dB, più alto = più pulito.", "",
+                "| Modello | Uomo (mediana) | Donna (mediana) | Media | Senza separare | Uscite | Tempo (s per s) |", "|---|---|---|---|---|---|---|"]
+          for m, r in d["risultati"].items():
+              u = [x["sdr_uomo"] for x in r]; w = [x["sdr_donna"] for x in r]
+              b = [(x["base_uomo"] + x["base_donna"]) / 2 for x in r]
+              md.append(f"| {m} | {st.median(u):.2f} | {st.median(w):.2f} | {st.mean(u + w):.2f} | {st.median(b):.2f} | {', '.join(d['uscite'][m])} | {d['tempi'][m]:.2f} |")
+          md += ["", "Voci: " + ", ".join(f"{n} {k} {p:.0f} Hz" for n, k, p in d["voci"])]
+          text = "\n".join(md)
+          open("duetti.md", "w").write(text)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write("## Banco dei duetti\n\n" + text + "\n")
+          print(text)
+          PY
+      - name: Nella release «banco-di-prova»
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload banco-di-prova duetti.md duetti.json --clobber
