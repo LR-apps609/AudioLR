@@ -49,7 +49,8 @@ enum Rhythm {
         let n = env.count
         guard n > Int(period * 4), period >= 2 else { return [] }
         // Gli attacchi si normalizzano, così la tolleranza sul tempo pesa allo stesso modo in ogni canzone
-        let sd = max(1e-9, Double(vDSP.standardDeviation(env)))
+        let mean = env.reduce(0.0) { $0 + Double($1) } / Double(n)
+        let sd = max(1e-9, sqrt(env.reduce(0.0) { $0 + (Double($1) - mean) * (Double($1) - mean) } / Double(n)))
         let e = env.map { Double($0) / sd }
         var score = [Double](repeating: 0, count: n)
         var back = [Int](repeating: -1, count: n)

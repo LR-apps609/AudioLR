@@ -35,8 +35,11 @@ struct ContentView: View {
     @ObservedObject private var updateNotice = UpdateNotice.shared
     /// Larghezza della parte principale: sotto la soglia i tasti mostrano solo l'icona, così niente esce dalla finestra.
     @State private var mainWidth: CGFloat = 1200
-    private var compact: Bool { mainWidth < 980 }
+    private var compact: Bool { mainWidth < 1000 }
     @State private var exported: URL?
+    @State private var unselected: Set<String> = []
+    @State private var downloading = false
+    @State private var downloadError: String?
     @State private var makingStemFile = false
     @State private var stemFileError: String?
     @State private var dropping = false
@@ -44,7 +47,6 @@ struct ContentView: View {
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
     @AppStorage("showLibrary") private var showLibrary = true
     @State private var showGuide = false
-    @State private var showPrivacy = false
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
@@ -58,19 +60,19 @@ struct ContentView: View {
         GeometryReader { g in
             content
                 .frame(width: g.size.width, height: g.size.height)
-                .onChange(of: g.size.width, initial: true) { _, w in mainWidth = w - (showLibrary ? 237 : 0) }
+                .onChange(of: g.size.width, initial: true) { _, w in mainWidth = w - (showLibrary ? 251 : 0) }
                 .onChange(of: showLibrary) { _, lib in
-                    mainWidth = g.size.width - (lib ? 237 : 0)
+                    mainWidth = g.size.width - (lib ? 251 : 0)
                     widenIfNeeded(library: lib)
                 }
         }
         // Con la libreria aperta serve più spazio: la finestra non si stringe oltre il punto in cui i tasti escono
-        .frame(minWidth: showLibrary ? 940 : 700)
+        .frame(minWidth: showLibrary ? 1180 : 930)
     }
 
     /// Aprendo la libreria in una finestra stretta, la finestra si allarga invece di tagliare il contenuto.
     private func widenIfNeeded(library: Bool) {
-        let need: CGFloat = library ? 940 : 700
+        let need: CGFloat = library ? 1180 : 930
         guard let w = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain && $0.frame.width < need }) else { return }
         var f = w.frame
         f.size.width = need
@@ -114,7 +116,7 @@ struct ContentView: View {
             player.stop()
             mixer.toggle()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .audiolrExport)) { _ in exportMix() }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrExport)) { _ in downloadMix(range: nil) }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrStemFile)) { _ in exportStemFile() }
         .alert("Il file per DJ non è riuscito", isPresented: Binding(get: { stemFileError != nil }, set: { if !$0 { stemFileError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -195,51 +197,23 @@ struct ContentView: View {
                 .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
                 .transition(.scale.combined(with: .opacity))
             }
-            // Con poco spazio resta solo il lucchetto. È un tasto: un clic spiega cosa vuol dire
-            // (i suggerimenti al passaggio del mouse su macOS compaiono in modo affidabile solo sui tasti)
-            Button { showPrivacy.toggle() } label: {
-                if compact {
-                    Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.green)
-                        .frame(width: 28, height: 24)
-                        .background(Capsule().fill(Theme.green.opacity(0.14)))
-                        .overlay(Capsule().strokeBorder(Theme.green.opacity(0.35)))
-                        .contentShape(Capsule())
-                } else {
-                    Chip(text: "Tutto sul tuo Mac", symbol: "lock.fill", tint: Theme.green).contentShape(Capsule())
-                }
-            }
-            .buttonStyle(.plain)
-            .help("Tutto sul tuo Mac: la canzone non viene caricata su internet")
-            .accessibilityLabel("Tutto sul tuo Mac")
-            .popover(isPresented: $showPrivacy, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Tutto sul tuo Mac", systemImage: "lock.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
-                    Text("Le canzoni vengono separate qui, sul tuo Mac. Non vengono caricate su internet e nessuno le ascolta: nemmeno noi.")
-                        .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(width: 280)
-            }
-            HStack(spacing: 2) {
-                toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria" : "Mostra la libreria") {
+            // A destra solo tre tasti, con il loro nome: libreria, aiuto, impostazioni.
+            // Cronologia e account sono in fondo alla libreria; la privacy nella riga in fondo alla finestra
+            HStack(spacing: 8) {
+                toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria (⌘L)" : "Mostra la libreria (⌘L)") {
                     showLibrary.toggle()
                 }
-                toolButton("questionmark.circle", help: "Come si usa") { showGuide = true }
+                Button { showGuide = true } label: { Label("Aiuto", systemImage: "questionmark.circle") }
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .help("Come si usa IsoLR")
                     .popover(isPresented: $showGuide, arrowEdge: .bottom) {
                         GuideView { showGuide = false; openWindow(id: "faq") }
                     }
-                toolButton("clock.arrow.circlepath", help: "Cronologia (⌘Y)") { openWindow(id: "history") }
-                toolButton("person.crop.circle", help: "Account (⇧⌘A)") { openWindow(id: "account") }
-                SettingsLink {
-                    Image(systemName: "gearshape").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 28)
-                }
-                .buttonStyle(.borderless)
-                .help("Impostazioni (⌘,)")
-                .accessibilityLabel("Impostazioni")
+                SettingsLink { Label("Impostazioni", systemImage: "gearshape") }
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .help("Impostazioni (⌘,)")
             }
-            .padding(3)
-            .background(Capsule().fill(Theme.card.opacity(0.8)))
-            .overlay(Capsule().strokeBorder(Theme.stroke))
+            .controlSize(.large)
         }
     }
 
@@ -278,17 +252,13 @@ struct ContentView: View {
                 pendingSong
             }
             // Qualità: Veloce, Massima (di serie) o Studio
-            VStack(spacing: 6) {
-                Picker("Qualità", selection: $qualityRaw) {
-                    ForEach(Quality.allCases) { q in Text(q.title).tag(q.rawValue) }
+            // Tre schede che dicono cosa si ottiene e quanto ci vuole, invece dei nomi dei modelli
+            VStack(spacing: 8) {
+                Text("COME LA VUOI?").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+                HStack(spacing: 10) {
+                    ForEach(Quality.allCases) { q in qualityCard(q) }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                // Mai più stretto delle sue parole (testo grande nelle Impostazioni di Sistema compreso):
-                // un controllo costretto in poco spazio disegna fuori dai bordi, sopra i vicini
-                .frame(minWidth: 360)
-                .fixedSize()
-                Text(quality.detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 4)
             // Canzone pronta: parte solo da qui
@@ -337,6 +307,30 @@ struct ContentView: View {
                 .foregroundStyle(dropping ? Theme.brass : Theme.stroke)
                 .padding(12)
         )
+    }
+
+    private func qualityCard(_ q: Quality) -> some View {
+        let on = quality == q
+        let tracks = Theme.stems(for: q).count
+        return Button { qualityRaw = q.rawValue } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Image(systemName: q.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Theme.brass : Color.secondary)
+                    Text(q == .best ? "Massima" : q.title).font(.system(size: 14, weight: .semibold))
+                }
+                Text("\(tracks) tracce · \(q.cardLine)").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Text(q.cardTime).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            .frame(width: 170, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Theme.brass.opacity(0.12) : Theme.well.opacity(0.7)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Theme.brass : Theme.stroke, lineWidth: on ? 2 : 1))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .help(q.detail)
+        .accessibilityLabel("\(q.title): \(tracks) tracce, \(q.cardLine), \(q.cardTime)")
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     /// La canzone trascinata o scelta, in attesa di «Separa»: si vede bene cosa partirà.
@@ -466,78 +460,38 @@ struct ContentView: View {
     // MARK: Risultati
 
     private var results: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 songTitle
-                Spacer()
-                Button { showDetails = true } label: { Label("Dettagli", systemImage: "info.circle") }
-                    .popover(isPresented: $showDetails, arrowEdge: .bottom) { DetailsView().environmentObject(job) }
-                    .help("Dettagli: tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone")
-                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                Menu {
-                    ForEach(job.midiStems) { s in
-                        Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
+                transport
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(MixPlayer.mixable(job.stems)) { stem in
+                            MixerRow(stem: stem, mixer: mixer, selected: selection(stem.key), onDownload: { downloadOne(stem) })
+                        }
+                        splitRows
+                        let mixed = Set(MixPlayer.mixable(job.stems).map(\.key))
+                        let others = job.stems.filter { !mixed.contains($0.key) }
+                        if !others.isEmpty {
+                            Divider().padding(.vertical, 4)
+                            ForEach(others) { StemRow(stem: $0, player: player, selected: selection($0.key), onDownload: { [s = $0] in downloadOne(s) }) }
+                        }
                     }
-                } label: {
-                    if let k = job.midiWorking {
-                        Label("Note di \(Stem.info(k).name.lowercased())…", systemImage: "pianokeys")
-                    } else {
-                        Label("MIDI", systemImage: "pianokeys")
-                    }
+                    .padding(.bottom, 4)
                 }
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                .fixedSize()
-                .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
-                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da trascinare in GarageBand o Logic")
-                Button {
-                    if let f = job.folder { NSWorkspace.shared.activateFileViewerSelecting([f]) }
-                } label: { Label("Mostra nel Finder", systemImage: "folder") }
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                .help("Mostra nel Finder")
-                Button {
-                    player.stop()
-                    mixer.stop()
-                    job.reset()
-                } label: { Label("Un'altra canzone", systemImage: "plus") }
-                .buttonStyle(.borderedProminent)
-            }
-            transport
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(MixPlayer.mixable(job.stems)) { stem in
-                        MixerRow(stem: stem, mixer: mixer)
-                    }
-                    splitRows
-                    let mixed = Set(MixPlayer.mixable(job.stems).map(\.key))
-                    let others = job.stems.filter { !mixed.contains($0.key) }
-                    if !others.isEmpty {
-                        Divider().padding(.vertical, 4)
-                        ForEach(others) { StemRow(stem: $0, player: player) }
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-            FlowLayout(spacing: 6, lineSpacing: 6, centered: false) {
-                Chip(text: job.quality.title, symbol: job.quality.symbol, tint: Theme.brass)
-                if let e = job.engineText { Chip(text: e, symbol: "cpu", tint: Theme.green) }
                 if let q = job.qualityNote {
                     Chip(text: q, symbol: "exclamationmark.triangle.fill", tint: Theme.voiceMute)
-                        .help("Un modello non si è potuto usare (memoria o download): riprova chiudendo le altre app. Dettagli con ⌘I.")
+                        .help("Un modello non si è potuto usare (memoria o download): riprova chiudendo le altre app. Dettagli in «Dettagli della separazione».")
                 }
-                if let t = job.elapsed { Chip(text: "in " + formatTime(t), symbol: "timer", tint: Color.secondary) }
-                if let a = job.analysis {
-                    Chip(text: a.bpmText, symbol: "metronome", tint: Theme.color("drums"))
-                        .help("Tempo stimato dalla batteria · se ti sembra lento, può essere \(Int((a.bpm * 2).rounded())) BPM")
-                    Chip(text: a.keyName, symbol: "music.note", tint: Theme.color("piano"))
-                        .help("Tonalità \(a.keyShort) · Camelot \(a.camelot)\(a.keyConfidence < 0.5 ? " · incerta: la canzone cambia tonalità o è poco tonale" : "")")
-                }
+                Text("Clic sull'onda per ascoltare da quel punto · le tracce si possono anche trascinare in GarageBand, Logic o nel Finder")
+                    .font(.system(size: 11)).foregroundStyle(.tertiary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Trascina una traccia in GarageBand, Logic o nel Finder. Clic sull'onda per ascoltare da quel punto.")
-                .font(.system(size: 11)).foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            sidePanel
         }
         .padding(22)
         .onAppear { mixer.load(job.stems, folder: job.folder) }
+        .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
     }
@@ -588,7 +542,7 @@ struct ContentView: View {
     private var practiceBar: some View {
         HStack(spacing: 14) {
             if !compact {
-                Label("Sala prove", systemImage: "music.note.house").font(.system(size: 11.5, weight: .semibold))
+                Label("Esercitati", systemImage: "music.note").font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Theme.brass)
             }
             HStack(spacing: 6) {
@@ -640,12 +594,12 @@ struct ContentView: View {
 
     /// Ci stanno i tasti affiancati? Lo spazio della barra (la colonna meno i margini) contro quello che serve
     /// agli altri tasti più ai segmenti, con le misure di macOS 26 (controlli più grandi) e un po' di margine.
-    private var segmentsFit: Bool {
-        let available = mainWidth - 108
-        let others: CGFloat = compact ? 360 : 600
-        let segments: CGFloat = mixer.keys.contains("lead") ? 350 : 260
-        return available >= others + segments
-    }
+    private var segmentsFit: Bool { transportSpace >= 300 + segmentsWidth }
+    /// «Esercitati» e «Senza…» con il nome: solo se c'è posto anche per i segmenti affiancati
+    private var transportLabels: Bool { transportSpace >= 440 + segmentsWidth }
+    /// Lo spazio della barra: la colonna meno i margini e il riquadro «Scarica» a destra
+    private var transportSpace: CGFloat { mainWidth - 108 - 288 }
+    private var segmentsWidth: CGFloat { mixer.keys.contains("lead") ? 350 : 260 }
 
     @ViewBuilder
     private func presetControl(segmented: Bool) -> some View {
@@ -699,27 +653,16 @@ struct ContentView: View {
                     .onAppear { mixer.tick() }
                     .task(id: Int(mixer.position * (mixer.isLooping ? 25 : 4))) { mixer.tick() }
             }
-            Toggle(isOn: $showPractice) { Label("Prove", systemImage: "music.note.house") }
-                .toggleStyle(.button).controlSize(.small)
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                .help("Sala prove: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
-                .accessibilityLabel("Sala prove")
             presetControl(segmented: segmented)
             withoutMenu
-            Spacer()
-            Menu {
-                Button("Esporta il mix (⌘E)") { exportMix() }
-                Button("Esporta per DJ: .stem.mp4 · anteprima (⌥⌘E)") { exportStemFile() }
-            } label: {
-                if mixer.exporting || makingStemFile { ProgressView().controlSize(.small) } else {
-                    Label("Esporta il mix", systemImage: "square.and.arrow.up")
-                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                }
-            } primaryAction: { exportMix() }
-            .menuStyle(.button)
-            .fixedSize()
-            .disabled(mixer.exporting || makingStemFile || job.folder == nil)
-            .help("Salva quello che senti, con muto, solo e volumi, accanto alle tracce (velocità e tono della Sala prove restano quelli originali)")
+            Spacer(minLength: 4)
+            // Velocità, tono, ripetizione di un passaggio: tutto quello che serve a chi suona
+            Toggle(isOn: $showPractice) { Label("Esercitati", systemImage: "music.note") }
+                .toggleStyle(.button)
+                .labelStyle(transportLabels ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
+                .fixedSize()
+                .help("Esercitati: velocità, tono e ripetizione di un passaggio (⌥⌘P)")
+                .accessibilityLabel("Esercitati")
         }
     }
 
@@ -750,11 +693,138 @@ struct ContentView: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.brass.gradient))
             VStack(alignment: .leading, spacing: 1) {
                 Text(job.title)
-                    .font(.system(size: 16, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                if job.duration > 0 {
-                    Text(formatTime(job.duration)).font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                    .font(.system(size: 17, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                // Tutto in una riga, a parole: durata, qualità, quanto ci ha messo, tempo e tonalità
+                Text(infoLine).font(.system(size: 11.5)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+                    .help(job.analysis.map { "Tonalità \($0.keyShort) · Camelot \($0.camelot) · se il tempo ti sembra lento, può essere \(Int(($0.bpm * 2).rounded())) BPM" } ?? "")
+            }
+        }
+    }
+
+    /// «4:40 · Studio · fatta in 8 min 56 s · 115 BPM · Do maggiore»
+    private var infoLine: String {
+        var parts: [String] = []
+        if job.duration > 0 { parts.append(formatTime(job.duration)) }
+        parts.append(job.quality.title)
+        if let t = job.elapsed { parts.append("fatta in " + DockProgress.duration(t)) }
+        if let a = job.analysis { parts.append(a.bpmText); parts.append(a.keyName) }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: Scarica e vai più a fondo
+
+    @AppStorage("downloadFormat") private var downloadFormatRaw = OutputFormat.wav24.rawValue
+    private var downloadFormat: OutputFormat { OutputFormat(rawValue: downloadFormatRaw) ?? .wav24 }
+
+    /// Le tracce scelte per «Scarica le selezionate»: di serie tutte (si tiene chi è stato tolto).
+    private func selection(_ key: String) -> Binding<Bool> {
+        Binding(get: { !unselected.contains(key) }, set: { on in if on { unselected.remove(key) } else { unselected.insert(key) } })
+    }
+    private var selectedStems: [Stem] { job.stems.filter { !unselected.contains($0.key) } }
+
+    private var sidePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Scarica").font(.system(size: 15, weight: .bold, design: .rounded))
+                Picker("Formato", selection: $downloadFormatRaw) {
+                    ForEach(OutputFormat.allCases) { f in Text(f.title).tag(f.rawValue) }
+                }
+                .help(downloadFormat.detail)
+                Button { downloadMany(job.stems) } label: {
+                    Label("Tutte le tracce", systemImage: "square.and.arrow.down.on.square").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Button { downloadMany(selectedStems) } label: {
+                    Text(selectedStems.count == 1 ? "La traccia selezionata" : "Le \(selectedStems.count) selezionate").frame(maxWidth: .infinity)
+                }
+                .disabled(selectedStems.isEmpty || selectedStems.count == job.stems.count)
+                .help("Scegli le tracce con le caselle a sinistra di ogni traccia")
+                Button { downloadMix(range: nil) } label: { Text("Il mix che senti").frame(maxWidth: .infinity) }
+                    .help("Quello che senti adesso: con muto, solo, volumi e «Senza…»")
+                Button { downloadMix(range: (mixer.loopA ?? 0, mixer.loopB ?? 0)) } label: {
+                    Text("Il passaggio A–B").frame(maxWidth: .infinity)
+                }
+                .disabled(mixer.loopA == nil || mixer.loopB == nil)
+                .help(mixer.loopA == nil || mixer.loopB == nil ? "Prima segna A e B in «Esercitati»" : "Solo il passaggio tra A e B, con il mix che senti")
+                Button { exportStemFile() } label: { Text("File per DJ (.stem.mp4)").frame(maxWidth: .infinity) }
+                    .disabled(makingStemFile)
+                    .help("Traktor e Mixxx: la canzone intera più batteria, basso, altri strumenti e voce")
+                if downloading || mixer.exporting || makingStemFile {
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Preparo i file…").font(.system(size: 11)).foregroundStyle(.secondary) }
+                } else {
+                    Text("Scegli tu dove salvarle. Le tracce restano anche in \(Prefs.displayName(of: Prefs.folder)).")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.well.opacity(0.7)))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Vai più a fondo").font(.system(size: 15, weight: .bold, design: .rounded))
+                Menu {
+                    ForEach(job.midiStems) { s in
+                        Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
+                    }
+                } label: {
+                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note MIDI di una traccia")
+                }
+                .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
+                .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia in un file MIDI, da aprire in GarageBand o Logic")
+                Button { showDetails = true } label: { Text("Dettagli della separazione").frame(maxWidth: .infinity, alignment: .leading) }
+                    .popover(isPresented: $showDetails, arrowEdge: .leading) { DetailsView().environmentObject(job) }
+                    .help("Tempi di ogni fase, file di partenza, motore e di cosa è fatta la canzone (⌘I)")
+                Button {
+                    if let f = job.folder { NSWorkspace.shared.activateFileViewerSelecting([f]) }
+                } label: { Text("Apri la cartella delle tracce").frame(maxWidth: .infinity, alignment: .leading) }
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.well.opacity(0.7)))
+            Spacer(minLength: 0)
+        }
+        .frame(width: 270)
+        .alert("Non sono riuscito a salvare", isPresented: Binding(get: { downloadError != nil }, set: { if !$0 { downloadError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(downloadError ?? "") }
+    }
+
+    private func downloadOne(_ stem: Stem) {
+        let f = downloadFormat
+        guard let url = Downloads.askFile(name: Downloads.fileName(title: job.title, stem: stem, format: f), format: f) else { return }
+        downloading = true
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) { try Downloads.write(stem, to: url, format: f) }.value
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+            downloading = false
+        }
+    }
+
+    private func downloadMany(_ stems: [Stem]) {
+        guard !stems.isEmpty, let folder = Downloads.askFolder() else { return }
+        let f = downloadFormat, title = job.title
+        downloading = true
+        Task {
+            do {
+                let dir = try await Task.detached(priority: .userInitiated) { try Downloads.writeAll(stems, title: title, into: folder, format: f) }.value
+                NSWorkspace.shared.activateFileViewerSelecting([dir])
+            } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+            downloading = false
+        }
+    }
+
+    private func downloadMix(range: (Double, Double)?) {
+        guard job.phase == .done, !mixer.exporting, let folder = job.folder else { return }
+        let f = downloadFormat
+        var name = MixPlayer.exportName(state: mixer.state, title: job.title)
+        if let r = range { name += " (\(formatTime(r.0))–\(formatTime(r.1)))" }
+        guard let url = Downloads.askFile(name: "\(name).\(f.fileExtension)", format: f) else { return }
+        Task {
+            do {
+                let done = try await mixer.export(stems: job.stems, folder: folder, title: job.title, to: url, format: f, range: range)
+                exported = done
+                NSWorkspace.shared.activateFileViewerSelecting([done])
+            } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
         }
     }
 
@@ -854,8 +924,8 @@ struct ContentView: View {
             Label(mixer.state.without?.without ?? "Senza…", systemImage: "music.note.list")
                 .lineLimit(1)
                 // Con poco spazio solo l'icona, colorata quando uno strumento è tolto (il nome compare passandoci sopra)
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                .foregroundStyle(compact && mixer.state.without != nil ? Theme.brass : Theme.ink)
+                .labelStyle(transportLabels ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
+                .foregroundStyle(!transportLabels && mixer.state.without != nil ? Theme.brass : Theme.ink)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -882,16 +952,6 @@ struct ContentView: View {
         }
     }
 
-    private func exportMix() {
-        guard job.phase == .done, !mixer.exporting, let f = job.folder else { return }
-        Task {
-            if let url = try? await mixer.export(stems: job.stems, folder: f, title: job.title) {
-                exported = url
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
-        }
-    }
-
     private func choose() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio]
@@ -910,11 +970,18 @@ struct ContentView: View {
 struct StemRow: View {
     let stem: Stem
     @ObservedObject var player: StemPlayer
+    var selected: Binding<Bool>? = nil
+    var onDownload: (() -> Void)? = nil
     @State private var hover = false
 
     var body: some View {
         let playing = player.current == stem.url
         HStack(spacing: 12) {
+            if let selected {
+                Toggle("", isOn: selected).toggleStyle(.checkbox).labelsHidden()
+                    .help("Scegli questa traccia per «Scarica le selezionate»")
+                    .accessibilityLabel("Scegli \(stem.name) per il download")
+            }
             StemBadge(key: stem.key, symbol: stem.symbol, size: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stem.name).font(.system(size: 13, weight: .semibold))
@@ -946,12 +1013,20 @@ struct StemRow: View {
             .buttonStyle(.plain)
             .help(playing ? "Ferma" : "Ascolta")
             .accessibilityLabel(playing ? "Ferma \(stem.name)" : "Ascolta \(stem.name)")
-            Button { NSWorkspace.shared.activateFileViewerSelecting([stem.url]) } label: {
-                Image(systemName: "folder").font(.system(size: 13))
+            if let onDownload {
+                Button(action: onDownload) { Label("Scarica", systemImage: "arrow.down.to.line") }
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Salva solo questa traccia, nel formato scelto a destra")
+                    .accessibilityLabel("Scarica \(stem.name)")
+            } else {
+                Button { NSWorkspace.shared.activateFileViewerSelecting([stem.url]) } label: {
+                    Image(systemName: "folder").font(.system(size: 13))
+                }
+                .buttonStyle(.borderless)
+                .help("Mostra il file nel Finder")
+                .accessibilityLabel("Mostra \(stem.name) nel Finder")
             }
-            .buttonStyle(.borderless)
-            .help("Mostra il file nel Finder")
-            .accessibilityLabel("Mostra \(stem.name) nel Finder")
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1081,12 +1156,20 @@ struct RecentRow: View {
 struct MixerRow: View {
     let stem: Stem
     @ObservedObject var mixer: MixPlayer
+    /// La casella per «Scarica le selezionate»
+    var selected: Binding<Bool>? = nil
+    var onDownload: (() -> Void)? = nil
 
     var body: some View {
         let muted = mixer.state.muted.contains(stem.key)
         let solo = mixer.state.solo.contains(stem.key)
         let audible = mixer.state.effectiveGain(stem.key) > 0
         HStack(spacing: 10) {
+            if let selected {
+                Toggle("", isOn: selected).toggleStyle(.checkbox).labelsHidden()
+                    .help("Scegli questa traccia per «Scarica le selezionate»")
+                    .accessibilityLabel("Scegli \(stem.name) per il download")
+            }
             StemBadge(key: stem.key, symbol: stem.symbol, size: 32)
                 .opacity(audible ? 1 : 0.4)
             VStack(alignment: .leading, spacing: 1) {
@@ -1098,10 +1181,11 @@ struct MixerRow: View {
                 }
             }
             .frame(width: 112, alignment: .leading)
-            toggle("M", on: muted, tint: Theme.voiceMute, help: muted ? "Riattiva" : "Muto") {
+            toggle(muted ? "speaker.slash.fill" : "speaker.slash", on: muted, tint: Theme.voiceMute,
+                   help: muted ? "Torna a sentirla" : "Silenzia questa traccia") {
                 if muted { mixer.state.muted.remove(stem.key) } else { mixer.state.muted.insert(stem.key) }
             }
-            toggle("S", on: solo, tint: Theme.brass, help: solo ? "Togli solo" : "Solo") {
+            toggle("headphones", on: solo, tint: Theme.brass, help: solo ? "Torna a sentire tutto" : "Ascolta solo questa traccia") {
                 if solo { mixer.state.solo.remove(stem.key) } else { mixer.state.solo.insert(stem.key) }
             }
             Slider(value: Binding(get: { mixer.state.gain[stem.key] ?? 1 }, set: { mixer.state.gain[stem.key] = $0 }), in: 0...1.5)
@@ -1126,22 +1210,23 @@ struct MixerRow: View {
                 }
             }
             .frame(height: 30)
-            Button { NSWorkspace.shared.activateFileViewerSelecting([stem.url]) } label: {
-                Image(systemName: "folder").font(.system(size: 12))
+            if let onDownload {
+                Button(action: onDownload) { Label("Scarica", systemImage: "arrow.down.to.line") }
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Salva solo questa traccia, nel formato scelto a destra")
+                    .accessibilityLabel("Scarica \(stem.name)")
             }
-            .buttonStyle(.borderless)
-            .help("Mostra il file nel Finder")
-            .accessibilityLabel("Mostra \(stem.name) nel Finder")
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(solo ? Theme.color(stem.key).opacity(0.10) : Theme.well.opacity(0.6)))
         .onDrag { NSItemProvider(contentsOf: stem.url) ?? NSItemProvider() }
     }
 
-    private func toggle(_ label: String, on: Bool, tint: Color, help: String, action: @escaping () -> Void) -> some View {
+    private func toggle(_ symbol: String, on: Bool, tint: Color, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label).font(.system(size: 11, weight: .bold, design: .rounded))
-                .frame(width: 22, height: 22)
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                .frame(width: 26, height: 24)
                 .foregroundStyle(on ? .white : Color.secondary)
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? tint : Theme.ink.opacity(0.07)))
         }

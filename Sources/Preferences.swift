@@ -9,7 +9,7 @@ import AppKit
 
 /// Il formato dei file delle tracce separate.
 enum OutputFormat: String, CaseIterable, Identifiable {
-    case wav24, wav16, flac, alac
+    case wav24, wav16, flac, alac, aac
     var id: String { rawValue }
 
     var title: String {
@@ -18,6 +18,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .wav16: return "WAV 16 bit"
         case .flac: return "FLAC"
         case .alac: return "Apple Lossless (M4A)"
+        case .aac: return "AAC 256 kbps (M4A, leggero)"
         }
     }
 
@@ -27,6 +28,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .wav16: return "Qualità CD, file un po' più piccoli"
         case .flac: return "Senza perdita, circa metà dello spazio"
         case .alac: return "Senza perdita, per Musica e iPhone"
+        case .aac: return "Compresso, circa un decimo dello spazio: per ascoltare e condividere"
         }
     }
 
@@ -34,7 +36,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         switch self {
         case .wav24, .wav16: return "wav"
         case .flac: return "flac"
-        case .alac: return "m4a"
+        case .alac, .aac: return "m4a"
         }
     }
 
@@ -51,6 +53,9 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .alac:
             return [AVFormatIDKey: kAudioFormatAppleLossless, AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: channels,
                     AVEncoderBitDepthHintKey: 24]
+        case .aac:
+            return [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: channels,
+                    AVEncoderBitRateKey: 256_000]
         }
     }
 }

@@ -331,25 +331,32 @@ final class MixPlayer: ObservableObject {
         for (k, p) in players { p.volume = Float(state.effectiveGain(k)) }
     }
 
-    /// Salva il mix attuale accanto alle tracce, nel formato scelto nelle Impostazioni.
-    func export(stems: [Stem], folder: URL, title: String) async throws -> URL {
+    /// Salva il mix attuale: accanto alle tracce nel formato delle Impostazioni, oppure in `to` nel formato `format`.
+    /// Con `range` (secondi) solo quel passaggio, per esempio la ripetizione A–B.
+    func export(stems: [Stem], folder: URL, title: String, to chosenURL: URL? = nil, format chosenFormat: OutputFormat? = nil,
+                range: (Double, Double)? = nil) async throws -> URL {
         exporting = true
         defer { exporting = false }
         let state = self.state
         let chosen = Self.mixable(stems)
         let name = Self.exportName(state: state, title: title)
-        let format = Prefs.format
+        let format = chosenFormat ?? Prefs.format
         // Un mix esportato prima non si sovrascrive: «Canzone – Mix 2», «Canzone – Mix 3»…
         var url = folder.appendingPathComponent("\(name).\(format.fileExtension)")
         var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
+        while chosenURL == nil && FileManager.default.fileExists(atPath: url.path) {
             url = folder.appendingPathComponent("\(name) \(n).\(format.fileExtension)")
             n += 1
         }
-        let target = url
+        let target = chosenURL ?? url
         return try await Task.detached(priority: .userInitiated) {
             let tracks = try chosen.map { (key: $0.key, audio: try AudioIO.read($0.url)) }
-            let mixed = MixState.mix(tracks, state: state)
+            var mixed = MixState.mix(tracks, state: state)
+            if let r = range {
+                let n = mixed.first?.count ?? 0
+                let s0 = max(0, min(n, Int(r.0 * AudioIO.sampleRate))), s1 = max(s0, min(n, Int(r.1 * AudioIO.sampleRate)))
+                mixed = mixed.map { Array($0[s0..<s1]) }
+            }
             let url = target
             // Con i volumi alzati il mix può superare il massimo: si abbassa tutto quanto basta, senza tagliare
             try AudioIO.write(mixed, to: url, format: format, gain: Stem.safeGain(peaks: [Stem.measure(mixed).peak]))

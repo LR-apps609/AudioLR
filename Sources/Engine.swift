@@ -125,6 +125,24 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Nella scheda della schermata iniziale: per chi è, a parole.
+    var cardLine: String {
+        switch self {
+        case .fast: return "per provare un'idea"
+        case .best: return "pulita e veloce"
+        case .studio: return "la più pulita"
+        }
+    }
+
+    /// Quanto ci mette, circa, per una canzone di 4 minuti su un Mac con chip Apple.
+    var cardTime: String {
+        switch self {
+        case .fast: return "circa 30 secondi"
+        case .best: return "circa 3 minuti"
+        case .studio: return "circa 15 minuti"
+        }
+    }
+
     /// Da scaricare la prima volta.
     var downloadSize: String {
         switch self {

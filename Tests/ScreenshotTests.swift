@@ -77,7 +77,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testShotStart() throws {
         try skipOnVirtualMac()
-        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio", width: 1020, height: 680)
+        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio", width: 1280, height: 820)
     }
 
     func testShotResults() throws {
@@ -89,7 +89,7 @@ final class ScreenshotTests: XCTestCase {
                      analysis: SongAnalysis(bpm: 124, keyRoot: 9, minor: true, keyConfidence: 0.8), elapsed: 312,
                      engine: "Neural Engine (verificato: 48 dB)",
                      timings: [.init(name: "Voce (RoFormer)", seconds: 96), .init(name: "Strumenti (BS-RoFormer SW)", seconds: 190)])
-        try shot(ContentView().environmentObject(job), "2-risultati", width: 1020, height: 760)
+        try shot(ContentView().environmentObject(job), "2-risultati", width: 1280, height: 820)
         try shot(DetailsView().environmentObject(job), "3-dettagli", width: 320, height: 620)
     }
 
@@ -102,7 +102,7 @@ final class ScreenshotTests: XCTestCase {
     /// La finestra alla misura minima, con la libreria aperta: niente parole spezzate
     func testShotStartNarrow() throws {
         try skipOnVirtualMac()
-        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 940, height: 600)
+        try shot(ContentView().environmentObject(SeparationJob.shared), "1-inizio-stretta", width: 1180, height: 720)
     }
 
     /// Il tasto «Aggiornamento disponibile» nella testata: alla misura minima e a quella di partenza,
@@ -111,7 +111,7 @@ final class ScreenshotTests: XCTestCase {
         let u = URL(string: "https://example.com/a.audiolr")!
         UpdateNotice.shared.available = UpdateCheck.Release(version: "0.23.1", asset: u, page: u)
         defer { UpdateNotice.shared.available = nil }
-        try shot(ContentView().environmentObject(SeparationJob.shared), "10-aggiornamento-stretta", width: 940, height: 600)
+        try shot(ContentView().environmentObject(SeparationJob.shared), "10-aggiornamento-stretta", width: 1180, height: 720)
         let job = SeparationJob.shared
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.reset() }
@@ -121,9 +121,9 @@ final class ScreenshotTests: XCTestCase {
         // Con la Sala prove aperta: la barra più lunga
         let practice = UserDefaults.standard.object(forKey: "showPractice")
         UserDefaults.standard.set(true, forKey: "showPractice")
-        try shot(ContentView().environmentObject(job), "11-aggiornamento-risultati-stretta", width: 940, height: 640)
+        try shot(ContentView().environmentObject(job), "11-aggiornamento-risultati-stretta", width: 1180, height: 760)
         UserDefaults.standard.set(practice, forKey: "showPractice")
-        try shot(ContentView().environmentObject(job), "12-aggiornamento-risultati", width: 1020, height: 680)
+        try shot(ContentView().environmentObject(job), "12-aggiornamento-risultati", width: 1280, height: 820)
     }
 
     /// Una canzone trascinata in attesa di «Separa».
@@ -132,6 +132,6 @@ final class ScreenshotTests: XCTestCase {
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.clearPending() }
         job.prepare([stems[0].url])
-        try shot(ContentView().environmentObject(job), "13-canzone-pronta", width: 940, height: 640)
+        try shot(ContentView().environmentObject(job), "13-canzone-pronta", width: 1180, height: 760)
     }
 }

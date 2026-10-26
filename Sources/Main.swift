@@ -20,7 +20,7 @@ struct AudioLRApp: App {
                 .environmentObject(job)
                 .frame(minHeight: 560)
         }
-        .defaultSize(width: 1020, height: 680)
+        .defaultSize(width: 1280, height: 820)
         .commands { AudioLRCommands(job: job) }
 
         Settings {

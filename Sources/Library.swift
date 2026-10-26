@@ -15,6 +15,7 @@ final class TypingFocus: ObservableObject {
 
 struct LibraryView: View {
     @EnvironmentObject private var job: SeparationJob
+    @Environment(\.openWindow) private var openWindow
     @State private var search = ""
     @FocusState private var searchFocused: Bool
 
@@ -25,8 +26,16 @@ struct LibraryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // L'azione principale, sempre allo stesso posto
+            Button { job.reset() } label: {
+                Label("Nuova canzone", systemImage: "plus").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(job.isBusy || job.phase == .idle)
+            .help("Torna alla schermata iniziale per separare un'altra canzone (⌘N)")
             HStack {
-                Text("LIBRERIA").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
+                Text("LE TUE CANZONI").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
                 Spacer()
                 Button { NSWorkspace.shared.open(Prefs.folder) } label: { Image(systemName: "folder") }
                     .buttonStyle(.borderless)
@@ -61,7 +70,7 @@ struct LibraryView: View {
             stats
         }
         .padding(14)
-        .frame(width: 236)
+        .frame(width: 250)
         .background(Theme.card.opacity(0.55))
     }
 
@@ -71,7 +80,14 @@ struct LibraryView: View {
             statLine("music.note", s.songs == 1 ? "1 canzone separata" : "\(s.songs) canzoni separate")
             if s.minutes > 0 { statLine("clock", String(format: "%.0f minuti di musica", s.minutes)) }
             if let a = s.averageSeconds { statLine("timer", "in media " + formatTime(a) + " a canzone") }
-            statLine("lock.fill", "Niente caricato su internet")
+            HStack(spacing: 6) {
+                Button { openWindow(id: "history") } label: { Label("Cronologia", systemImage: "clock.arrow.circlepath") }
+                    .help("Tutte le separazioni, con tempi, tonalità e BPM (⌘Y)")
+                Button { openWindow(id: "account") } label: { Label("Account", systemImage: "person.crop.circle") }
+                    .help("Il tuo account e i numeri della libreria (⇧⌘A)")
+            }
+            .controlSize(.small)
+            .padding(.top, 4)
         }
     }
 
