@@ -50,6 +50,7 @@ struct ContentView: View {
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
     @AppStorage("showPractice") private var showPractice = false
+    @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var typing = TypingFocus.shared
     private var quality: Quality { Quality(rawValue: qualityRaw) ?? .best }
@@ -556,10 +557,45 @@ struct ContentView: View {
                     .disabled(!mixer.canCount)
                     .help("Prima di partire, una battuta di clic al tempo della canzone (1, 2, 3, 4)")
             }
+            if let chords = job.analysis?.chords, !chords.isEmpty { chordRow(chords) }
             practiceControls
         }
         .padding(.horizontal, 4)
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// L'accordo che suona adesso, grande, e i prossimi tre: si legge mentre si suona.
+    /// Con il tono cambiato gli accordi si spostano insieme alla musica.
+    private func chordRow(_ chords: [ChordSpan]) -> some View {
+        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+            let t = mixer.position
+            let i = chords.firstIndex { t < $0.end } ?? chords.count - 1
+            let next = chords[(i + 1)...].filter { $0.root != nil }.prefix(3)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Accordi").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Text(chords[i].name(italian: italianChords, shift: mixer.semitones))
+                    .font(.system(size: 22, weight: .bold, design: .rounded)).foregroundStyle(Theme.brass)
+                    .frame(minWidth: 56, alignment: .leading)
+                    .accessibilityLabel("Accordo adesso: \(chords[i].name(italian: true, shift: mixer.semitones))")
+                ForEach(Array(next.enumerated()), id: \.offset) { k, c in
+                    Text(c.name(italian: italianChords, shift: mixer.semitones))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(k == 0 ? Color.primary.opacity(0.75) : Color.secondary)
+                }
+                if let n = next.first {
+                    Text("tra \(max(0, Int(((n.start - t) / max(0.25, mixer.rate)).rounded(.up)))) s")
+                        .font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Picker("Nomi", selection: $italianChords) {
+                    Text("C D E").tag(false)
+                    Text("Do Re Mi").tag(true)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().controlSize(.small)
+                .help("Nomi degli accordi all'inglese (C, Am) o all'italiana (Do, Lam)")
+            }
+        }
+        .help("Accordi stimati dagli strumenti (maggiori e minori): con il tono cambiato si spostano anche loro")
     }
 
     /// Le parti della canzone in proporzione alla durata: un clic ne ripete una.

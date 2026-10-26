@@ -122,7 +122,10 @@ final class ScreenshotTests: XCTestCase {
         let (dir, stems) = try fakeStems()
         defer { try? FileManager.default.removeItem(at: dir); job.reset() }
         job.showcase(title: "TENDER_WIP_2 versione lunga del titolo", stems: stems, folder: dir, quality: .studio, duration: 280,
-                     analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8, structure: Self.parts), elapsed: 536,
+                     analysis: SongAnalysis(bpm: 115, keyRoot: 0, minor: false, keyConfidence: 0.8, structure: Self.parts,
+                                            chords: [ChordSpan(start: 0, end: 1.5, root: 9, minor: true), ChordSpan(start: 1.5, end: 3, root: 5, minor: false),
+                                                     ChordSpan(start: 3, end: 4.5, root: 0, minor: false), ChordSpan(start: 4.5, end: 6, root: 7, minor: false)]),
+                     elapsed: 536,
                      engine: "Grafica (scelta nelle Impostazioni)", timings: [])
         // Con la Sala prove aperta: la barra più lunga
         let practice = UserDefaults.standard.object(forKey: "showPractice")
