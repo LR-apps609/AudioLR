@@ -138,14 +138,6 @@ struct ContentView: View {
             showPractice = true
             if (n.object as? String) == "A" { mixer.markLoopStart() } else { mixer.markLoopEnd() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .audiolrWarp)) { _ in
-            if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showWarp = true }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .audiolrArrange)) { _ in
-            if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showArrange = true }
-        }
-        .sheet(isPresented: $showWarp) { WarpView(mixer: mixer) { showWarp = false }.environmentObject(job) }
-        .sheet(isPresented: $showArrange) { ArrangeView(mixer: mixer) { showArrange = false }.environmentObject(job) }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrDetails)) { _ in
             if job.phase == .done { showDetails = true }
         }
@@ -519,6 +511,7 @@ struct ContentView: View {
         .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
+        .modifier(EditorSheets(showWarp: $showWarp, showArrange: $showArrange, job: job, mixer: mixer))
     }
 
     /// Le divisioni in più: «Separa voce e cori» e «Dividi la batteria», con la barra mentre lavorano.
@@ -1589,5 +1582,26 @@ struct PitchLines: View {
             line(result.mine, .red.opacity(0.85), follow: true)
         }
         .accessibilityLabel("Le linee dell'altezza: originale e la tua registrazione")
+    }
+}
+
+/// Gli editor Warp e Rimonta come fogli sopra i risultati, aperti dal riquadro «Vai più a fondo» o dal menu Mix.
+/// A parte: il corpo di ContentView è già al limite di quello che il compilatore controlla in tempo.
+struct EditorSheets: ViewModifier {
+    @Binding var showWarp: Bool
+    @Binding var showArrange: Bool
+    let job: SeparationJob
+    let mixer: MixPlayer
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .audiolrWarp)) { _ in
+                if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showWarp = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .audiolrArrange)) { _ in
+                if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showArrange = true }
+            }
+            .sheet(isPresented: $showWarp) { WarpView(mixer: mixer) { showWarp = false }.environmentObject(job) }
+            .sheet(isPresented: $showArrange) { ArrangeView(mixer: mixer) { showArrange = false }.environmentObject(job) }
     }
 }
