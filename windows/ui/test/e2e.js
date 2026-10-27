@@ -62,6 +62,25 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     check(mix.pre === "karaoke" && mix.name === "Canzone – Karaoke", `karaoke: ${mix.name}`);
     check(mix.flac > 1000, `mix in FLAC: ${mix.flac} byte`);
   }
+  // Transpose: +2 semitoni sposta davvero il tono, la lunghezza resta e il colpo resta al suo posto
+  const tp = await page.evaluate(async () => {
+    const n = 44100 * 3, a = [new Float32Array(n), new Float32Array(n)];
+    for (let i = 0; i < n; i++) { const v = 0.4 * Math.sin((2 * Math.PI * 440 * i) / 44100); a[0][i] = v; a[1][i] = v; }
+    const up = await Transpose.apply(a, 2);
+    const C = IsoLR.Compare, x = C.decimate(up[0]), hz = [];
+    for (let t = Math.floor(x.length / 4); t < (3 * x.length) / 4; t += 200) { const h = C.yin(x, t, C.rate / C.down); if (h) hz.push(h); }
+    hz.sort((p, q) => p - q);
+    const b = [new Float32Array(88200), new Float32Array(88200)];
+    for (let i = 0; i < 2000; i++) { const v = 0.8 * Math.sin(i * 0.2) * Math.exp(-i / 400); b[0][44100 + i] = v; b[1][44100 + i] = v; }
+    const s = await Transpose.apply(b, 3);
+    let best = 0, m = 0; for (let i = 0; i < s[0].length; i++) if (Math.abs(s[0][i]) > m) { m = Math.abs(s[0][i]); best = i; }
+    return { len: up[0].length === n, hz: hz[Math.floor(hz.length / 2)], at: best / 44100,
+      capo: JSON.stringify(Transpose.capo([{ start: 0, end: 2, root: 11, minor: false }, { start: 2, end: 4, root: 6, minor: false }, { start: 4, end: 6, root: 8, minor: true }, { start: 6, end: 8, root: 4, minor: false }], 0)),
+      key: Transpose.keyName(0, false, 2) };
+  });
+  check(tp.len && Math.abs(tp.hz - 493.88) < 6, `Transpose +2: ${tp.hz && tp.hz.toFixed(1)} Hz (atteso 493,9), stessa lunghezza`);
+  check(Math.abs(tp.at - 1) < 0.03, `Transpose allineato: colpo a ${tp.at.toFixed(3)} s`);
+  check(tp.capo === '{"capo":4,"shapes":["G","D","Em","C"]}' && tp.key === "Re maggiore", `capotasto ${tp.capo}, ${tp.key}`);
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));
   await browser.close();
   server.close();
