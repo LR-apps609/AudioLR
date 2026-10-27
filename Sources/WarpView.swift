@@ -106,12 +106,16 @@ struct WarpView: View {
     @State private var fitPPS: CGFloat = 4
     private var currentPPS: CGFloat { zoom > 0 ? zoom : fitPPS }
     private func setZoom(_ v: CGFloat) { zoom = max(fitPPS, min(240, v)) }
+    /// Margine ai lati della forma d'onda (metà della larghezza di un segnaposto).
+    static let pad: CGFloat = 14
 
     private var wave: some View {
         GeometryReader { geo in
-            let fit = duration > 0 ? max(1, (geo.size.width - 2) / CGFloat(duration)) : 4
+            // Un margine ai lati: la maniglia del primo e dell'ultimo segnaposto resta intera
+            let pad = Self.pad
+            let fit = duration > 0 ? max(1, (geo.size.width - 2 - 2 * pad) / CGFloat(duration)) : 4
             let pps = zoom > 0 ? zoom : fit
-            let width = max(geo.size.width - 2, CGFloat(duration) * pps)
+            let width = max(geo.size.width - 2, CGFloat(duration) * pps + 2 * pad)
             ScrollView(.horizontal, showsIndicators: true) {
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.well)
@@ -119,11 +123,13 @@ struct WarpView: View {
                         ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         WaveformView(peaks: peaks, color: Theme.color("drums").opacity(0.75), barWidth: 2, spacing: 1)
+                            .frame(width: CGFloat(duration) * pps)
                             .padding(.top, 30).padding(.bottom, 8)
+                            .offset(x: pad)
                     }
                     // Doppio clic su un punto vuoto: un segnaposto nuovo
                     Color.clear.contentShape(Rectangle())
-                        .onTapGesture(count: 2, coordinateSpace: .local) { p in add(at: Double(p.x / pps)) }
+                        .onTapGesture(count: 2, coordinateSpace: .local) { p in add(at: Double((p.x - pad) / pps)) }
                         .onTapGesture { selected = nil }
                     ForEach(Array(marks.enumerated()), id: \.offset) { i, t in
                         marker(i, t, pps: pps, height: geo.size.height - 16)
@@ -131,7 +137,7 @@ struct WarpView: View {
                     TimelineView(.periodic(from: .now, by: 0.05)) { _ in
                         if preview.isPlaying {
                             Rectangle().fill(Theme.ink.opacity(0.85)).frame(width: 2)
-                                .offset(x: CGFloat(preview.position) * pps - 1)
+                                .offset(x: pad + CGFloat(preview.position) * pps - 1)
                                 .allowsHitTesting(false)
                         }
                     }
@@ -158,9 +164,9 @@ struct WarpView: View {
                 .overlay(Capsule().strokeBorder(Theme.brass.opacity(0.7), lineWidth: 1))
             Rectangle().fill(on ? Theme.brass : Theme.brass.opacity(0.55)).frame(width: on ? 2 : 1)
         }
-        .frame(height: height)
-        .contentShape(Rectangle().inset(by: -4))
-        .offset(x: CGFloat(t) * pps - 10)
+        .frame(width: 2 * Self.pad, height: height)
+        .contentShape(Rectangle())
+        .offset(x: CGFloat(t) * pps)
         .gesture(DragGesture(minimumDistance: 2)
             .onChanged { v in
                 if dragStart == nil { dragStart = t; selected = i }
@@ -273,9 +279,11 @@ struct WarpView: View {
         Task {
             do {
                 let (dir, seconds) = try await Task.detached(priority: .userInitiated) {
-                    try EditAudio.writeVersion(stems, title: title, into: root, format: format,
-                                               progress: { p in Task { @MainActor in working = p } },
-                                               transform: { try Warp.render($0, map: m) })
+                    // Il calendario dei cambi di velocità si misura una volta e vale per tutte le tracce
+                    let plan = try Warp.schedule(for: m, duration: length)
+                    return try EditAudio.writeVersion(stems, title: title, into: root, format: format,
+                                                      progress: { p in Task { @MainActor in working = p } },
+                                                      transform: { try Warp.render($0, map: m, schedule: plan) })
                 }.value
                 working = nil
                 onClose()

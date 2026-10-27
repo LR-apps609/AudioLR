@@ -136,8 +136,63 @@ enum Warp {
     }
 
     /// La traccia (stereo, 44,1 kHz) stirata secondo `map`, con il tono di prima.
-    /// La velocità si aggiorna ogni `block` campioni, secondo il tratto dell'originale che si sta leggendo.
-    static func render(_ audio: [[Float]], map: WarpMap, block: Int = 512) throws -> [[Float]] {
+    /// `schedule` (da `schedule(for:duration:)`, uguale per tutte le tracce) dice quando cambiare velocità;
+    /// senza, si calcola qui.
+    static func render(_ audio: [[Float]], map: WarpMap, schedule: WarpMap? = nil) throws -> [[Float]] {
+        let n = audio.first?.count ?? 0
+        let plan = try schedule ?? Self.schedule(for: map, duration: Double(n) / AudioIO.sampleRate)
+        return try stretch(audio, map: map, schedule: plan)
+    }
+
+    /// Quando cambiare velocità perché ogni battuta finisca dove dice `map`.
+    /// L'effetto ha un suo ritardo, e cambiando velocità quel ritardo si allunga o si accorcia: invece di
+    /// indovinarlo, si fa passare un «pilota» (un colpo su ogni segnaposto) con lo stesso calendario, si
+    /// misura dove arriva ogni colpo e si sposta il cambio di velocità di quanto serve (due giri bastano).
+    static func schedule(for map: WarpMap, duration: Double) throws -> WarpMap {
+        guard map.anchors.count >= 2, duration > 0.2 else { return map }
+        let sr = AudioIO.sampleRate
+        let n = Int(duration * sr)
+        var pilot = [Float](repeating: 0, count: n)
+        let marks = map.anchors.filter { $0.src >= 0.15 && $0.src <= duration - 0.15 }
+        for a in marks {
+            let i = Int(a.src * sr)
+            for k in 0..<88 where i + k < n { pilot[i + k] = Float(0.8 * exp(-Double(k) / 20)) * (k % 2 == 0 ? 1 : -1) }
+        }
+        var plan = map
+        for _ in 0..<2 {
+            let out = try stretch([pilot, pilot], map: map, schedule: plan)[0]
+            var worst = 0.0
+            let fixed = plan.anchors.map { a -> WarpMap.Anchor in
+                guard marks.contains(where: { $0.src == a.src }) else { return a }
+                let want = map.map(a.src)
+                guard let got = loudest(out, near: want, sampleRate: sr) else { return a }
+                let err = max(-0.1, min(0.1, got - want))
+                worst = max(worst, abs(err))
+                return WarpMap.Anchor(src: a.src, dst: a.dst - err)
+            }
+            plan = WarpMap(anchors: fixed)
+            if worst < 0.002 { break }
+        }
+        return plan
+    }
+
+    /// Dove, vicino a `t` (±150 ms), c'è più energia in 2 ms: il centro di un colpo.
+    static func loudest(_ x: [Float], near t: Double, sampleRate sr: Double) -> Double? {
+        let a = max(0, Int((t - 0.15) * sr)), b = min(x.count, Int((t + 0.15) * sr))
+        let w = Int(0.002 * sr)
+        guard b - a > w else { return nil }
+        var e = 0.0, best = 0.0, at = a
+        for i in a..<(a + w) { e += Double(x[i] * x[i]) }
+        for i in a..<(b - w) {
+            if e > best { best = e; at = i }
+            e += Double(x[i + w] * x[i + w]) - Double(x[i] * x[i])
+        }
+        return best > 1e-4 ? Double(at) / sr : nil
+    }
+
+    /// Lo stiramento vero e proprio: la lunghezza viene da `map`, i cambi di velocità da `schedule`.
+    /// La velocità si aggiorna ogni `block` campioni.
+    private static func stretch(_ audio: [[Float]], map: WarpMap, schedule: WarpMap, block: Int = 512) throws -> [[Float]] {
         guard let n = audio.first?.count, n > 0 else { return audio }
         let sr = AudioIO.sampleRate
         let total = Int((map.map(Double(n) / sr) * sr).rounded())
@@ -172,7 +227,7 @@ enum Warp {
         while e.manualRenderingSampleTime < want {
             // Quello che si legge adesso finirà, tolto il ritardo, a questo istante della canzone nuova
             let now = Double(e.manualRenderingSampleTime) / sr
-            tp.rate = Float(max(1.0 / 32, min(32, map.rate(atSource: map.inverse(now)))))
+            tp.rate = Float(max(1.0 / 32, min(32, schedule.rate(atSource: schedule.inverse(now)))))
             let k = AVAudioFrameCount(min(AVAudioFramePosition(block), want - e.manualRenderingSampleTime))
             let status = try e.renderOffline(k, to: buf)
             guard status == .success, let d = buf.floatChannelData else { break }
