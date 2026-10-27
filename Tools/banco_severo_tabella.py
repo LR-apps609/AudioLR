@@ -15,7 +15,7 @@ for f in sorted(glob.glob(os.path.join(src, "severo_*.json"))):
         a[0] += sec
         a[1] += mus
 
-RECIPES = ["Studio", "Massima", "Veloce"]
+RECIPES = ["Studio", "Studio senza Demucs", "Leggera A", "Leggera B", "Massima", "Veloce"]
 STEMS = [("vocals", "Voce"), ("drums", "Batteria"), ("bass", "Basso"), ("other", "Altro"), ("instrumental", "Base")]
 METRICS = [("sdr", "SDR globale (dB, canzone intera, come la Music Demixing Challenge)"),
            ("sdr_1s", "SDR su finestre da 1 s (dB, mediana delle finestre)"),
@@ -55,7 +55,7 @@ n_songs = len(songs)
 tot = sum(durate.values())
 md = [f"**{n_songs} canzoni intere** di prova di MUSDB18-HQ ({tot / 60:.0f} minuti di musica). Più alto = meglio.",
       "Per ogni ricetta: mediana e media sulle canzoni" + (" — tra parentesi la differenza dalla corsa precedente." if prev else "."),
-      "", "Studio = voce media(Revive, Kim, SW), strumenti dalle medie sulla base; Massima = BS-RoFormer SW da solo; Veloce = HTDemucs da solo.", ""]
+      "", "Studio = voce media(Revive, Kim, SW), strumenti dalle medie sulla base; Massima = BS-RoFormer SW da solo; Veloce = HTDemucs da solo. Leggera A = voce media(Revive, SW), strumenti media(SW sulla canzone, SW sulla base); Leggera B = voce media(Revive, SW), strumenti da SW.", ""]
 for m, title in METRICS:
     if not any(k.endswith("|" + m) for k in summary):
         continue

@@ -135,6 +135,18 @@ def recipes(mix, rate, studio_only=False):
         "other": (swb["other"] + htb["other"] + sw["other"]) / 3,
         "instrumental": base,
     }}
+    # Ricette leggere per i computer lenti (Mac Intel, PC senza scheda grafica): stessi modelli, meno passaggi
+    v2 = (revive + sw["vocals"]) / 2
+    out["Leggera A"] = {          # niente Kim e niente Demucs: Revive + SW sulla canzone + SW sulla base
+        "vocals": v2,
+        "drums": (swb["drums"] + sw["drums"]) / 2, "bass": (swb["bass"] + sw["bass"]) / 2,
+        "other": (swb["other"] + sw["other"]) / 2, "instrumental": (mix - v2).astype(np.float32)}
+    out["Leggera B"] = {          # due modelli: Revive + SW sulla canzone
+        "vocals": v2, **{k: sw[k] for k in ("drums", "bass", "other")}, "instrumental": (mix - v2).astype(np.float32)}
+    out["Studio senza Demucs"] = {
+        "vocals": voice,
+        "drums": (swb["drums"] + sw["drums"]) / 2, "bass": (swb["bass"] + sw["bass"]) / 2,
+        "other": (swb["other"] + sw["other"]) / 2, "instrumental": base}
     if not studio_only:
         out["Massima"] = {**{s: sw[s] for s in STEMS}, "instrumental": mix - sw["vocals"]}
         ht = demucs("htdemucs", mix, rate)
