@@ -114,7 +114,7 @@
         <li><b>Scarica</b> quello che ti serve dal riquadro a destra: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ.</li>
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
-        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr>
+        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
         <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
         <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr></table>
       <p class="muted">La prima volta Massima e Studio scaricano i loro modelli (una volta sola); poi IsoLR funziona anche senza internet. Le canzoni non lasciano mai il computer.</p>

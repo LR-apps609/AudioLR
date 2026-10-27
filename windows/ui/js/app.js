@@ -144,6 +144,10 @@
           <p>Scegli tu dove salvare. Le tracce restano anche in Musica › IsoLR.</p>
         </div>
         <div class="box"><h3>Vai più a fondo</h3>
+          <div class="pair">
+            <button class="btn" data-act="warp" title="Warp: correggi i segnaposto sulle battute e metti la canzone a tempo fisso">${Icon("warp")}Warp</button>
+            <button class="btn" data-act="arrange" title="Rimonta: taglia sulle battute, sposta, duplica o togli le parti">${Icon("scissors")}Rimonta</button>
+          </div>
           <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "Note, spartito e tab"}</option>
             ${m.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].includes(s.key)).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
           <button class="btn" data-act="details">Dettagli della separazione</button>
@@ -200,8 +204,6 @@
         <select class="pop" data-input="without" title="Togli uno strumento"><option value="">${w ? "Senza " + Separation.NAMES[w].toLowerCase() : "Senza…"}</option>${insts.map((k) => `<option value="${k}">Senza ${Separation.NAMES[k].toLowerCase()}</option>`).join("")}</select>
         <button class="btn" data-act="transpose" title="Transpose: la canzone in un'altra tonalità, senza cambiare la velocità (Ctrl+Alt+↑ e ↓)">${Icon("up")}${esc(transposeTitle())}</button>
         <div class="tools">
-          <button class="btn" data-act="warp" title="Warp: correggi i segnaposto sulle battute e metti la canzone a tempo fisso">${Icon("warp")}Warp</button>
-          <button class="btn" data-act="arrange" title="Rimonta: taglia sulle battute, sposta, duplica o togli le parti">${Icon("scissors")}Rimonta</button>
           <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button></div>
       </div>
       ${ui.practice ? practice() : ""}`;
@@ -452,6 +454,9 @@
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
+    // Come sul Mac (⌥⌘G e ⌥⌘X): Warp e Rimonta
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "g" && job.current) { e.preventDefault(); $('[data-act="warp"]') && $('[data-act="warp"]').click(); }
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "x" && job.current) { e.preventDefault(); $('[data-act="arrange"]') && $('[data-act="arrange"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
     if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
   });
