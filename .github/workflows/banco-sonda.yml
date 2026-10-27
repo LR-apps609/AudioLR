@@ -1,0 +1,58 @@
+# Sonda per il banco severo: controlla dal server di GitHub che si possano scaricare a pezzi le canzoni di
+# MUSDB18-HQ da Zenodo (richieste «Range» dentro lo zip) e il dataset Multisong di MVSep; il resoconto va
+# nella release «banco-di-prova» (sonda.txt).
+name: Sonda del banco severo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Prova
+        run: |
+          pip install -q remotezip soundfile
+          df -h / > sonda.txt
+          python3 - <<'PY' >> sonda.txt 2>&1
+          import time, os, io
+          from remotezip import RemoteZip
+          t = time.time()
+          z = RemoteZip("https://zenodo.org/records/3338373/files/musdb18hq.zip?download=1")
+          names = z.namelist()
+          test = [n for n in names if n.startswith("test/") and n.endswith(".wav")]
+          print("voci", len(names), "test wav", len(test), "elenco in", round(time.time() - t, 1), "s")
+          print("\n".join(sorted(test)[:12]))
+          songs = sorted({n.split("/")[1] for n in test})
+          print("canzoni test", len(songs))
+          print("\n".join(songs))
+          t = time.time(); tot = 0
+          for n in [x for x in test if x.split("/")[1] == songs[0]]:
+              tot += len(z.read(n))
+          print("prima canzone", tot, "byte in", round(time.time() - t, 1), "s")
+          import soundfile as sf
+          sizes = {}
+          for n in test:
+              if n.endswith("mixture.wav"):
+                  sizes[n.split("/")[1]] = z.getinfo(n).file_size / (44100 * 4)
+          print("durate (s):", sorted((round(v), k) for k, v in sizes.items()))
+          print("totale s", round(sum(sizes.values())))
+          PY
+          t0=$(date +%s)
+          curl -sSL -o ms.zip https://de.mvsep.com/storage/public/multisong_dataset.zip
+          echo "multisong scaricato in $(( $(date +%s) - t0 )) s, $(du -h ms.zip | cut -f1)" >> sonda.txt
+          unzip -l ms.zip | head -20 >> sonda.txt
+          unzip -l ms.zip | tail -3 >> sonda.txt
+          cat sonda.txt
+      - name: Nella release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload banco-di-prova sonda.txt --clobber

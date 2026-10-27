@@ -1,0 +1,119 @@
+# Invio a MVSep (classifica «Multisong»): scarica il dataset Multisong pubblico di mvsep.com (100 canzoni da 1 minuto),
+# lo separa con la ricetta di Studio (Tools/banco_severo.py multisong) e prepara i file nel formato della classifica:
+# song_XXX_{vocals,instrum,bass,drums,other}.flac. Il risultato va nella pre-release «mvsep-invio», un .zip per
+# strumento (ogni file delle release deve stare sotto i 2 GB) e LEGGIMI.txt con le istruzioni per caricarlo.
+name: Invio MVSep Multisong
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PARTI: "20"
+  DATASET: https://de.mvsep.com/storage/public/multisong_dataset.zip
+
+jobs:
+  separa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/audio-separator-models
+            ~/.cache/torch/hub/checkpoints
+          key: modelli-severo-v1
+      - name: Strumenti
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "audio-separator[cpu]" soundfile remotezip
+          pip install -q --no-deps "demucs==4.0.1" "openunmix==1.3.0"
+          pip install -q dora-search einops julius omegaconf pyyaml tqdm
+      - name: Dataset Multisong
+        run: |
+          for i in 1 2 3 4 5; do curl -sSL --fail -o ms.zip "$DATASET" && break; sleep 60; done
+          mkdir ms && unzip -q ms.zip -d ms && rm ms.zip
+          find ms -name "*_mixture.wav" -exec mv {} ms/ \;
+          echo "::notice::$(ls ms/*_mixture.wav | wc -l) canzoni"
+      - name: Separazione con Studio
+        run: SHARD=${{ matrix.parte }}/$PARTI python Tools/banco_severo.py multisong ms uscita
+      - uses: actions/upload-artifact@v6
+        with:
+          name: multisong_${{ matrix.parte }}
+          path: uscita/*.flac
+          compression-level: 0
+
+  impacchetta:
+    needs: separa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: multisong_*
+          merge-multiple: true
+          path: uscita
+      - name: Zip per strumento
+        run: |
+          n=$(ls uscita/*.flac | wc -l)
+          echo "::notice::$n file separati (ne servono 500)"
+          [ "$n" -eq 500 ] || { echo "::error::mancano dei file: $n su 500"; exit 1; }
+          cd uscita
+          for s in vocals instrum bass drums other; do zip -q -0 ../IsoLR_Studio_multisong_$s.zip song_*_$s.flac; done
+          cd ..; ls -la *.zip
+      - name: Istruzioni
+        run: |
+          cat > LEGGIMI.txt <<'TXT'
+          IsoLR Studio sulla classifica Multisong di MVSep: come caricarlo
+          ===============================================================
+
+          Cosa c'è qui: le 100 canzoni del dataset Multisong di mvsep.com separate con la ricetta di Studio
+          (voce = media di Revive, Kim e SW; base = canzone meno la voce; batteria, basso e altro dalle medie
+          di SW, HTDemucs e Demucs FT sulla base e di SW sulla canzone). Sono 500 file FLAC, divisi in 5 zip
+          da 100 (uno per strumento) perché GitHub non accetta file oltre i 2 GB:
+            IsoLR_Studio_multisong_vocals.zip, _instrum, _bass, _drums, _other
+          Nomi come vuole MVSep: song_000_vocals.flac, song_000_instrum.flac, song_000_bass.flac,
+          song_000_drums.flac, song_000_other.flac ... fino a song_099.
+
+          1. Scarica i 5 zip in Download.
+          2. Uniscili in un solo zip con i 500 file (consigliato: un solo invio = una sola riga in classifica).
+             Apri il Terminale e incolla:
+               cd ~/Downloads && mkdir -p invio && for f in IsoLR_Studio_multisong_*.zip; do unzip -oq "$f" -d invio; done && cd invio && zip -q -0 ../IsoLR_Studio_multisong.zip *.flac && ls | wc -l
+             Deve stampare 500. Il file da caricare è ~/Downloads/IsoLR_Studio_multisong.zip
+             (non usare «Comprimi» del Finder: aggiunge la cartella __MACOSX).
+             In alternativa si può caricare ogni zip da solo: MVSep misura anche un solo strumento per volta,
+             ma ogni invio diventa una riga diversa in classifica.
+          3. Vai su https://mvsep.com/quality_checker (non serve un account; c'è solo la verifica anti-robot).
+             Trascina lo zip nel riquadro «Drag & Drop to Upload File» e aspetta che finisca di caricarsi.
+          4. Compila:
+             - Dataset Type: «Multisong dataset»
+             - Algorithm name and team name: per esempio «IsoLR Studio (Revive+Kim+SW / SW+HTDemucs+FT)»
+             - Description: la ricetta qui sopra
+             - Is it ensemble?: sì (è una media di più modelli)
+             - Deletion Password: una parola a scelta, serve per cancellare l'invio
+             e premi «Submit».
+          5. Il risultato compare dopo un po' in https://mvsep.com/quality_checker/queue e poi in
+             https://mvsep.com/quality_checker/multisong_leaderboard (SDR di bass, drums, other, vocals, instrum).
+             Per confronto: BS-Roformer SW da solo (la nostra «Massima») ha lì vocals 11.30, instrum 17.51,
+             bass 14.62, drums 14.11, other 8.72.
+          TXT
+          sed -i 's/^          //' LEGGIMI.txt
+      - name: Nella pre-release «mvsep-invio»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view mvsep-invio >/dev/null 2>&1 || gh release create mvsep-invio --prerelease --target "$GITHUB_SHA" \
+            --title "Invio a MVSep (Multisong)" --notes "Le separazioni di IsoLR Studio sul dataset Multisong di MVSep, pronte da caricare: istruzioni in LEGGIMI.txt."
+          gh release upload mvsep-invio LEGGIMI.txt IsoLR_Studio_multisong_*.zip --clobber
+          echo "::notice::caricati in mvsep-invio: $(ls -la IsoLR_Studio_multisong_*.zip | awk '{s+=$5} END {print int(s/1e6)}') MB"
