@@ -1146,6 +1146,23 @@ final class SeparationJob: ObservableObject {
         stepStarted = Date()
     }
 
+    /// Warp: la griglia corretta a mano diventa quella della canzone (metronomo, parti, passaggio A–B).
+    func saveGrid(_ structure: SongStructure) {
+        guard var a = analysis else { return }
+        a.structure = structure
+        analysis = a
+        if let dir = folder { History.setAnalysis(a, folder: dir) }
+        history = History.all()
+    }
+
+    /// Una versione nuova della canzone aperta (messa a tempo o rimontata), già scritta in `dir`:
+    /// entra nella libreria con la sua analisi e si apre.
+    func addVersion(folder dir: URL, duration: Double, analysis a: SongAnalysis?) {
+        History.add(song: nil, folder: dir, quality: quality, duration: duration, seconds: elapsed, engine: engineText, analysis: a)
+        history = History.all()
+        if let item = history.first(where: { $0.folder == dir.path }) { open(item) }
+    }
+
     /// Per le schermate di prova (ScreenshotTests): mostra una separazione finita senza farla davvero.
     func showcase(title: String, stems: [Stem], folder: URL, quality: Quality, duration: Double,
                   analysis: SongAnalysis?, elapsed: Double, engine: String, timings: [Timing]) {

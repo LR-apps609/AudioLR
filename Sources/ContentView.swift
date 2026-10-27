@@ -23,6 +23,9 @@ extension Notification.Name {
     static let audiolrStemFile = Notification.Name("audiolrStemFile")
     /// Menu Mix › Inizio / fine del passaggio da ripetere (⌘[ e ⌘]): l'oggetto è «A» o «B».
     static let audiolrLoop = Notification.Name("audiolrLoop")
+    /// Menu Mix › Warp (⌥⌘G) e Rimonta (⌥⌘X): gli editor della canzone aperta.
+    static let audiolrWarp = Notification.Name("audiolrWarp")
+    static let audiolrArrange = Notification.Name("audiolrArrange")
     /// Menu Vista › Dettagli della separazione (⌘I).
     static let audiolrDetails = Notification.Name("audiolrDetails")
 }
@@ -55,6 +58,8 @@ struct ContentView: View {
     @State private var showGuide = false
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
+    @State private var showWarp = false
+    @State private var showArrange = false
     @AppStorage("showPractice") private var showPractice = false
     @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
@@ -133,6 +138,14 @@ struct ContentView: View {
             showPractice = true
             if (n.object as? String) == "A" { mixer.markLoopStart() } else { mixer.markLoopEnd() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrWarp)) { _ in
+            if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showWarp = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audiolrArrange)) { _ in
+            if job.phase == .done, !job.stems.isEmpty { mixer.stop(); showArrange = true }
+        }
+        .sheet(isPresented: $showWarp) { WarpView(mixer: mixer) { showWarp = false }.environmentObject(job) }
+        .sheet(isPresented: $showArrange) { ArrangeView(mixer: mixer) { showArrange = false }.environmentObject(job) }
         .onReceive(NotificationCenter.default.publisher(for: .audiolrDetails)) { _ in
             if job.phase == .done { showDetails = true }
         }
@@ -1004,6 +1017,14 @@ struct ContentView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Vai più a fondo").font(.system(size: 15, weight: .bold, design: .rounded))
+                // Warp e Rimonta: le versioni nuove della canzone (a tempo, rimontata)
+                HStack(spacing: 6) {
+                    Button { mixer.stop(); showWarp = true } label: { Label("Warp", systemImage: "metronome").frame(maxWidth: .infinity) }
+                        .help("Warp: correggi la griglia dei battiti e metti la canzone a tempo fisso (⌥⌘G)")
+                    Button { mixer.stop(); showArrange = true } label: { Label("Rimonta", systemImage: "scissors").frame(maxWidth: .infinity) }
+                        .help("Rimonta: taglia, sposta, duplica o togli le parti della canzone (⌥⌘X)")
+                }
+                .disabled(job.stems.isEmpty || job.folder == nil)
                 Menu {
                     ForEach(job.midiStems) { s in
                         Button(job.midiFiles[downloadShift == 0 ? s.key : "\(s.key)\(downloadShift)"] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s, shift: downloadShift) }

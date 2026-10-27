@@ -140,12 +140,13 @@ struct GuideView: View {
         ("sparkles", "Veloce, Massima o Studio", "Massima separa anche chitarra e piano; Studio ha la voce più pulita; Veloce è la più rapida."),
         ("slider.horizontal.3", "Il mixer", "Muto (M), solo (S) e volume per ogni traccia; Karaoke e Solo voce in un clic."),
         ("square.and.arrow.up", "Esporta il mix", "Salva quello che senti, accanto alle tracce."),
+        ("metronome", "Warp e Rimonta", "Metti a tempo la canzone, oppure taglia, sposta e ripeti le sue parti: nasce una versione nuova."),
         ("hand.draw", "Trascina le tracce", "Direttamente in GarageBand, Logic o nel Finder."),
     ]
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
         ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
-        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌘Y", "Cronologia"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
+        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌥⌘G", "Warp"), ("⌥⌘X", "Rimonta"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌘Y", "Cronologia"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
         ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]

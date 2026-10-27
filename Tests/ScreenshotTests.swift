@@ -135,6 +135,19 @@ final class ScreenshotTests: XCTestCase {
         try shot(ContentView().environmentObject(job), "12-aggiornamento-risultati", width: 1280, height: 820)
     }
 
+    /// Gli editor Warp e Rimonta su una canzone con battiti e parti.
+    func testShotWarpAndArrange() throws {
+        let job = SeparationJob.shared
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.reset() }
+        job.showcase(title: "Canzone di prova", stems: stems, folder: dir, quality: .best, duration: 6,
+                     analysis: SongAnalysis(bpm: 120, keyRoot: 9, minor: true, keyConfidence: 0.8, structure: Self.parts),
+                     elapsed: 312, engine: "Neural Engine", timings: [])
+        let mixer = MixPlayer()
+        try shot(WarpView(mixer: mixer) {}.environmentObject(job), "15-warp", width: 960, height: 520)
+        try shot(ArrangeView(mixer: mixer) {}.environmentObject(job), "16-rimonta", width: 960, height: 520)
+    }
+
     /// Una canzone trascinata in attesa di «Separa».
     func testShotPending() throws {
         let job = SeparationJob.shared

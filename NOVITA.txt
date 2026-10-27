@@ -1,3 +1,8 @@
+Novità della 0.33.0 «Warp e Rimonta»:
+• Warp (in «Vai più a fondo», o ⌥⌘G): un segnaposto sul primo battito di ogni battuta. Se IsoLR ne ha sbagliato uno lo trascini al suo posto, e lo ascolti con il clic del metronomo. «Salva la griglia» la usa per metronomo, parti e passaggio A–B
+• Metti a tempo: scegli il BPM e IsoLR crea una versione nuova della canzone in cui ogni battuta dura uguale, senza cambiare il tono. Tutte le tracce, pronte per Ableton, Logic o un set da DJ. L'originale resta com'è
+• Rimonta (⌥⌘X): la canzone divisa nelle sue parti. Trascinale per cambiare l'ordine, dividile sulla battuta, duplica un ritornello o togli una strofa, ascolta, poi «Crea versione»: tutte le tracce rimontate nello stesso modo, senza clic alle giunzioni
+
 Novità della 0.32.1:
 • Corretto: su alcuni Mac la qualità Studio si fermava con «Unable to compute the prediction using ML Program». Adesso, se il Neural Engine o la grafica non riescono a fare il calcolo, IsoLR riprova da sola sulla grafica e poi sul solo processore (più lento, ma funziona), e se lo ricorda per le volte successive
 • Nuovo tasto «Segnala» (la coccinella) in alto accanto ad «Aiuto»: un problema si segnala con un clic, con il Mac e l'ultimo errore già scritti

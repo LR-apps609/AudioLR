@@ -122,6 +122,13 @@ struct AudioLRCommands: Commands {
                 .keyboardShortcut("]")
                 .disabled(job.phase != .done)
             Divider()
+            Button("Warp: metti a tempo…") { post(.audiolrWarp) }
+                .keyboardShortcut("g", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
+            Button("Rimonta: taglia e sposta…") { post(.audiolrArrange) }
+                .keyboardShortcut("x", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
+            Divider()
             Button("Esporta il mix") { post(.audiolrExport) }
                 .keyboardShortcut("e")
                 .disabled(job.phase != .done)

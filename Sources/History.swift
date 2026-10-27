@@ -57,6 +57,14 @@ enum History {
         save(Array(items.prefix(limit)), defaults: defaults)
     }
 
+    /// La griglia corretta a mano (Warp): l'analisi nuova della separazione in `folder`.
+    static func setAnalysis(_ analysis: SongAnalysis, folder: URL, defaults: UserDefaults = .standard) {
+        guard let data = defaults.data(forKey: key),
+              var items = try? JSONDecoder().decode([HistoryItem].self, from: data) else { return }
+        for i in items.indices where items[i].folder == folder.path { items[i].analysis = analysis }
+        save(items, defaults: defaults)
+    }
+
     static func clear(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: key)
     }
