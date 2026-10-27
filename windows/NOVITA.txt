@@ -1,3 +1,9 @@
+Novità di IsoLR per Windows 0.7.0 «Warp e Rimonta»:
+• Warp (nella barra del mixer): la forma d'onda con un segnaposto sul primo battito di ogni battuta. Se IsoLR ha sbagliato, li trascini al posto giusto, ne aggiungi uno con un doppio clic o lo togli con Canc; ascolti con il metronomo per controllare. «Salva la griglia»: metronomo, parti della canzone e passaggio A–B usano i segnaposto corretti
+• «Metti a tempo»: scegli un BPM (per esempio 120) e IsoLR crea una versione nuova della canzone con ogni battuta lunga uguale, senza cambiare il tono. Tutte le tracce, pronte per Ableton, FL Studio o un set da DJ
+• Rimonta (taglia e sposta): la canzone come fila di blocchi (intro, strofa, ritornello…). Dividi sulla battuta, trascina per cambiare l'ordine, duplica un ritornello o togli una strofa, ascolti il risultato e «Crea versione»: tutte le tracce rimontate, con giunzioni morbide
+• Le versioni nuove compaiono nella libreria accanto all'originale, che resta com'era
+
 Novità di IsoLR per Windows 0.6.1:
 • Corretto: se la scheda grafica apre i modelli ma poi non riesce a fare il calcolo, IsoLR riprova da sola con il processore (più lento, ma funziona) invece di fermarsi. Come sul Mac 0.32.1
 • Nuovo tasto «Segnala» (la coccinella) in alto accanto ad «Aiuto», e nel messaggio quando una separazione non riesce: il rapporto è già compilato con il computer, l'ultimo errore e gli ultimi passi; si invia su GitHub o si copia (anche con Ctrl+Alt+B)

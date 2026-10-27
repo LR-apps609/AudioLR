@@ -7,10 +7,11 @@
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-  function open(html, onReady) {
+  function open(html, onReady, onClose) {
     const o = $("#overlay");
     o.innerHTML = `<div class="sheet-bg"><div class="sheet" role="dialog">${html}</div></div>`;
-    const close = () => { o.innerHTML = ""; document.removeEventListener("keydown", esc_); };
+    let closed = false;
+    const close = () => { if (closed) return; closed = true; o.innerHTML = ""; document.removeEventListener("keydown", esc_); if (onClose) onClose(); };
     const esc_ = (e) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", esc_);
     o.querySelector(".sheet-bg").addEventListener("click", (e) => { if (e.target.classList.contains("sheet-bg")) close(); });
@@ -109,10 +110,13 @@
         <li><b>Scegli la qualità</b>: Veloce per provare, Massima per quasi tutto, Studio quando conta il massimo. Poi <b>Separa</b>.</li>
         <li><b>Ascolta e mescola</b>: volume, muto (altoparlante) e solo (cuffie) per traccia; Tutto, Karaoke, Solo voce; «Senza…» toglie uno strumento.</li>
         <li><b>Esercitati</b>: velocità e tono, ripetizione di un passaggio (A e B, o un clic su una parte della canzone), rampa, metronomo, conteggio, accordi, registrati sopra la base e confronta.</li>
+        <li><b>Warp</b>: correggi i segnaposto sulle battute (metronomo e parti diventano più precisi) e crea una versione a tempo fisso, per esempio a 120 BPM. <b>Rimonta</b>: taglia la canzone sulle battute, sposta, duplica o togli le parti e crea la versione nuova.</li>
         <li><b>Scarica</b> quello che ti serve dal riquadro a destra: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ.</li>
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
-        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr></table>
+        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
+        <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
+        <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr></table>
       <p class="muted">La prima volta Massima e Studio scaricano i loro modelli (una volta sola); poi IsoLR funziona anche senza internet. Le canzoni non lasciano mai il computer.</p>
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
   }
@@ -289,6 +293,6 @@
     });
   }
 
-  window.Sheets = { settings, details, help, report, history, compare, notes, transpose, applyAppearance };
+  window.Sheets = { open, settings, details, help, report, history, compare, notes, transpose, applyAppearance };
   applyAppearance();
 })();

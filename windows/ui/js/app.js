@@ -144,6 +144,10 @@
           <p>Scegli tu dove salvare. Le tracce restano anche in Musica › IsoLR.</p>
         </div>
         <div class="box"><h3>Vai più a fondo</h3>
+          <div class="pair">
+            <button class="btn" data-act="warp" title="Warp: correggi i segnaposto sulle battute e metti la canzone a tempo fisso">${Icon("warp")}Warp</button>
+            <button class="btn" data-act="arrange" title="Rimonta: taglia sulle battute, sposta, duplica o togli le parti">${Icon("scissors")}Rimonta</button>
+          </div>
           <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "Note, spartito e tab"}</option>
             ${m.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].includes(s.key)).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
           <button class="btn" data-act="details">Dettagli della separazione</button>
@@ -199,8 +203,8 @@
         <div class="seg">${[["all", "Tutto"], ["karaoke", "Karaoke"], ...(hasLead ? [["backing", "Karaoke con cori"]] : []), ["voice", "Solo voce"]].map(([k, l]) => `<button class="${p === k ? "on" : ""}" data-preset="${k}">${l}</button>`).join("")}</div>
         <select class="pop" data-input="without" title="Togli uno strumento"><option value="">${w ? "Senza " + Separation.NAMES[w].toLowerCase() : "Senza…"}</option>${insts.map((k) => `<option value="${k}">Senza ${Separation.NAMES[k].toLowerCase()}</option>`).join("")}</select>
         <button class="btn" data-act="transpose" title="Transpose: la canzone in un'altra tonalità, senza cambiare la velocità (Ctrl+Alt+↑ e ↓)">${Icon("up")}${esc(transposeTitle())}</button>
-        <div class="grow"></div>
-        <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button>
+        <div class="tools">
+          <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button></div>
       </div>
       ${ui.practice ? practice() : ""}`;
   }
@@ -390,6 +394,8 @@
       case "pitch-down": transposeBy(-1); return;
       case "pitch-up": transposeBy(1); return;
       case "transpose": return window.Sheets.transpose(job.current, player, transposeBy);
+      case "warp": return window.Editors.warp(job.current, player);
+      case "arrange": return window.Editors.arrange(job.current, player);
       case "dl-transposed": ui.downloadTransposed = !ui.downloadTransposed; return panel();
       case "mark-a": player.markA(); return transport();
       case "mark-b": player.markB(); return panel();
@@ -441,11 +447,16 @@
   // Spazio = suona/pausa; ⌘[ e ⌘] (qui Ctrl) = A e B; Ctrl+N = nuova canzone
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input[type=text],input:not([type]),select,textarea")) return;
+    // Con una finestra aperta sopra (Warp, Rimonta…) i tasti sono suoi
+    if ($("#overlay").childElementCount) return;
     if (e.code === "Space" && job.phase === "done") { e.preventDefault(); player.toggle(); transport(); }
     if (e.ctrlKey && e.key === "[") { player.markA(); transport(); }
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
+    // Come sul Mac (⌥⌘G e ⌥⌘X): Warp e Rimonta
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "g" && job.current) { e.preventDefault(); $('[data-act="warp"]') && $('[data-act="warp"]').click(); }
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "x" && job.current) { e.preventDefault(); $('[data-act="arrange"]') && $('[data-act="arrange"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
     if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
   });
@@ -475,5 +486,5 @@
   setTimeout(checkUpdate, 3000);
   setInterval(checkUpdate, 3 * 3600 * 1000);
 
-  window.IsoApp = { job, player, ui, render, toast, fmt, esc, refreshLibrary, IT_NAMES, KEY_NAMES };
+  window.IsoApp = { job, player, ui, render, toast, fmt, esc, refreshLibrary, openEntry, transport, IT_NAMES, KEY_NAMES };
 })();
