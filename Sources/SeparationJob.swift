@@ -549,11 +549,16 @@ final class SeparationJob: ObservableObject {
                     }
                     let vo: [[Float]]
                     do { vo = try await runVoice(d.units) } catch is ImplausibleResult {
-                        do { vo = try await runVoice(.cpuAndGPU) } catch is ImplausibleResult {
-                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                        // Il Neural Engine sbaglia o non riesce: la grafica; se nemmeno lei, solo il processore (lento ma sicuro)
+                        do {
+                            vo = try await runVoice(.cpuAndGPU)
+                            d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                        } catch is ImplausibleResult {
+                            do { vo = try await runVoice(.cpuOnly) } catch is ImplausibleResult {
+                                throw SeparationError("il calcolo su questo Mac non riesce, nemmeno con il solo processore")
+                            }
+                            d = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
                         }
-                        // 0: il Neural Engine qui ha dato un risultato sbagliato, si resta sulla grafica
-                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: used)
                     }
                     decisions[used] = d
@@ -602,8 +607,11 @@ final class SeparationJob: ObservableObject {
                             // Se il Neural Engine dà un risultato sbagliato si rifà sulla grafica, e lo si ricorda
                             let got: (names: [String], audio: [[[Float]]])
                             do { got = try await runMix(wd.units) } catch is ImplausibleResult {
-                                got = try await runMix(.cpuAndGPU)
-                                let g = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                                var g = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                                do { got = try await runMix(.cpuAndGPU) } catch is ImplausibleResult {
+                                    got = try await runMix(.cpuOnly)
+                                    g = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
+                                }
                                 EngineChoice.store(g, for: w)
                                 decisions[w] = g
                             }
@@ -652,10 +660,15 @@ final class SeparationJob: ObservableObject {
                     }
                     var res: (names: [String], audio: [[[Float]]])
                     do { res = try await runSW(d.units) } catch is ImplausibleResult {
-                        do { res = try await runSW(.cpuAndGPU) } catch is ImplausibleResult {
-                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                        do {
+                            res = try await runSW(.cpuAndGPU)
+                            d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                        } catch is ImplausibleResult {
+                            do { res = try await runSW(.cpuOnly) } catch is ImplausibleResult {
+                                throw SeparationError("il calcolo su questo Mac non riesce, nemmeno con il solo processore")
+                            }
+                            d = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
                         }
-                        d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: w)
                     }
                     decisions[w] = d
@@ -681,14 +694,14 @@ final class SeparationJob: ObservableObject {
                         var result: [[[Float]]]?
                         var found: [String] = []
                         var implausible = false
-                        for units in d.units == .cpuAndGPU ? [MLComputeUnits.cpuAndGPU] : [d.units, .cpuAndGPU] where result == nil {
+                        for units in (d.units == .cpuAndGPU ? [MLComputeUnits.cpuAndGPU] : [d.units, .cpuAndGPU]) + [.cpuOnly] where result == nil {
                             guard let core = try? await ModelStore.shared.load(name, units: units, progress: { _ in }) else { continue }
                             do {
                                 result = try run(core)
                                 found = core.sources
                                 // Solo se il Neural Engine ha dato un risultato sbagliato si ricorda la grafica
                                 if units != d.units && implausible {
-                                    let g = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
+                                    let g = EngineChoice.Decision(units: units, agreement: 0)
                                     EngineChoice.store(g, for: name)
                                     decisions[name] = g
                                 }
@@ -748,10 +761,14 @@ final class SeparationJob: ObservableObject {
                     } catch is ImplausibleResult {
                         // Il calcolo ha sbagliato: si riprova solo con grafica e processore, e lo si ricorda
                         core = try await ModelStore.shared.load(name, units: .cpuAndGPU) { _ in }
+                        var d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         do { result = try run(core) } catch is ImplausibleResult {
-                            throw SeparationError("il calcolo su questo Mac dà risultati sbagliati")
+                            core = try await ModelStore.shared.load(name, units: .cpuOnly) { _ in }
+                            do { result = try run(core) } catch is ImplausibleResult {
+                                throw SeparationError("il calcolo su questo Mac non riesce, nemmeno con il solo processore")
+                            }
+                            d = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
                         }
-                        let d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
                         EngineChoice.store(d, for: name)
                         decisions[name] = d
                     }
@@ -840,6 +857,7 @@ final class SeparationJob: ObservableObject {
                                     say: @escaping (String) async -> Void = { _ in }) async throws -> (RoFormer, [RoFormer]) {
         let what = label.isEmpty ? "il modello" : "il modello \(label)"
         // Senza Neural Engine (Mac Intel) o se è stata scelta la grafica: una copia sola, sulla grafica
+        if units == .cpuOnly { return (try await ModelStore.shared.roformer(name, units: .cpuOnly) { _ in }, []) }
         if !hasNeuralEngine || Prefs.gpuOnly || units == .cpuAndGPU {
             let u: MLComputeUnits = hasNeuralEngine ? .cpuAndGPU : units
             await say("Apro \(what) sulla grafica…")

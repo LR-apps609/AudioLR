@@ -171,6 +171,7 @@ enum EngineChoice {
                     ? String(format: "Neural Engine e grafica (verificato: %.0f dB)", agreement)
                     : "Grafica e processore"
             }
+            if units == .cpuOnly { return "Solo processore (Neural Engine e grafica qui non riescono a calcolare)" }
             if agreement > 0 { return String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement) }
             if agreement == EngineChoice.chosenGPU { return "Grafica (scelta nelle Impostazioni)" }
             if agreement == EngineChoice.slowANE { return "Grafica (il Neural Engine era troppo lento ad aprire il modello)" }

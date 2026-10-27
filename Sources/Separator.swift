@@ -263,7 +263,12 @@ final class CoreMLSeparationCore: SeparationCore {
         let specIn = try Self.array(spec, shape: [1, 4, bins, frames])
         let waveIn = try Self.array(wave, shape: [1, 2, segment])
         let input = try MLDictionaryFeatureProvider(dictionary: ["spec": specIn, "wave": waveIn])
-        let out = try model.prediction(from: input)
+        // Se Core ML non riesce a calcolare su questo motore (Neural Engine o grafica), si riprova su un altro
+        let out: MLFeatureProvider
+        do { out = try model.prediction(from: input) } catch {
+            AppLog.write("Core ML non riesce a calcolare (si riprova su un altro motore): \(error.localizedDescription)")
+            throw ImplausibleResult()
+        }
         guard let s = out.featureValue(for: "spec_out")?.multiArrayValue,
               let w = out.featureValue(for: "wave_out")?.multiArrayValue else {
             throw SeparationError("il modello non ha dato risultati")

@@ -61,7 +61,12 @@ final class DrumSplitter {
         } else {
             guard let model else { throw SeparationError("modello della batteria non disponibile") }
             let input = try MLDictionaryFeatureProvider(dictionary: ["spec": try CoreMLSeparationCore.array(x, shape: [1, 4, DF, T])])
-            guard let out = try model.prediction(from: input).featureValue(for: "spec_out")?.multiArrayValue else {
+            let prediction: MLFeatureProvider
+            do { prediction = try model.prediction(from: input) } catch {
+                AppLog.write("Core ML non riesce a calcolare la batteria: \(error.localizedDescription)")
+                throw ImplausibleResult()
+            }
+            guard let out = prediction.featureValue(for: "spec_out")?.multiArrayValue else {
                 throw SeparationError("il modello della batteria non ha dato risultati")
             }
             y = CoreMLSeparationCore.floats(out)

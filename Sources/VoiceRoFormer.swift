@@ -143,7 +143,13 @@ final class VoiceRoFormer {
         } else {
             guard let model else { throw SeparationError("modello voce non disponibile") }
             let input = try MLDictionaryFeatureProvider(dictionary: ["x": try CoreMLSeparationCore.array(x, shape: [1, T, FS * 2])])
-            guard let out = try model.prediction(from: input).featureValue(for: "mask")?.multiArrayValue else {
+            // Se Core ML non riesce a calcolare su questo motore (Neural Engine o grafica), si riprova su un altro
+            let prediction: MLFeatureProvider
+            do { prediction = try model.prediction(from: input) } catch {
+                AppLog.write("Core ML non riesce a calcolare (si riprova su un altro motore): \(error.localizedDescription)")
+                throw ImplausibleResult()
+            }
+            guard let out = prediction.featureValue(for: "mask")?.multiArrayValue else {
                 throw SeparationError("il modello voce non ha dato risultati")
             }
             mask = CoreMLSeparationCore.floats(out)

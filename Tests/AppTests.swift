@@ -540,6 +540,15 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(EngineChoice.decide(agreement: 15).units, .cpuAndGPU)
     }
 
+    func testProcessorOnlyChoiceIsRemembered() {
+        // Su un Mac dove Neural Engine e grafica non riescono a calcolare si resta sul solo processore
+        let d = UserDefaults(suiteName: "processore-\(UUID().uuidString)")!
+        let cpu = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
+        EngineChoice.store(cpu, for: "VoceRoFormer8", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("VoceRoFormer8", defaults: d), cpu)
+        XCTAssertTrue(cpu.text.hasPrefix("Solo processore"))
+    }
+
     func testEngineChoiceRememberedPerModel() {
         let d = UserDefaults(suiteName: "audiolr-test-\(UUID().uuidString)")!
         XCTAssertNil(EngineChoice.stored("HTDemucs", defaults: d))
