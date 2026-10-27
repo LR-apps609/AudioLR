@@ -64,6 +64,13 @@ async function fakeSong(page) {
       await page.click('[data-act="practice"]');
       await shot("4-esercitati");
       await page.click('[data-act="practice"]');
+      await page.evaluate(() => IsoApp.player.setSemitones(2));
+      await page.evaluate(() => IsoApp.render());
+      await page.click('[data-act="transpose"]');
+      await page.waitForTimeout(1200);
+      await shot("7-transpose");
+      await page.keyboard.press("Escape");
+      await page.evaluate(() => { IsoApp.player.setSemitones(0); IsoApp.render(); });
       await page.click('[data-act="settings"]');
       await shot("5-impostazioni");
       await page.keyboard.press("Escape");

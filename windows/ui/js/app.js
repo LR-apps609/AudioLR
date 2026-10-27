@@ -15,7 +15,7 @@
   const ui = {
     quality: Prefs.get("quality", "best"), library: [], search: "", showLibrary: Prefs.get("showLibrary", true),
     practice: Prefs.get("showPractice", false), unselected: new Set(), update: null, updating: null, toast: null,
-    italian: Prefs.get("italianChords", false), takes: [], comparing: false,
+    italian: Prefs.get("italianChords", false), takes: [], comparing: false, downloadTransposed: true,
   };
 
   // ── Testata ──
@@ -134,6 +134,7 @@
       <div class="side">
         <div class="box"><h3>Scarica</h3>
           <div class="form-line">Formato <select class="pop" data-input="format">${Object.entries(Encode.FORMATS).map(([k, f]) => `<option value="${k}" ${k === Prefs.get("downloadFormat", "wav24") ? "selected" : ""}>${f.title}</option>`).join("")}</select></div>
+          ${player.semitones ? `<label class="form-line" style="font-size:12px"><input type="checkbox" data-act="dl-transposed" ${ui.downloadTransposed ? "checked" : ""}> ${esc(m.analysis && m.analysis.keyRoot != null ? "In " + Transpose.keyName(m.analysis.keyRoot, m.analysis.minor, player.semitones) : "Nella tonalità scelta")} (${Transpose.label(player.semitones)})</label>` : ""}
           <button class="btn" data-act="dl-all">${Icon("download")}Tutte le tracce</button>
           <button class="btn" data-act="dl-sel" ${sel.length && sel.length < m.stems.length ? "" : "disabled"}>Le ${sel.length} selezionate</button>
           <button class="btn" data-act="dl-mix">Il mix che senti</button>
@@ -196,6 +197,7 @@
         <span class="time" id="time">${fmt(player.position)} / ${fmt(player.duration)}</span>
         <div class="seg">${[["all", "Tutto"], ["karaoke", "Karaoke"], ...(hasLead ? [["backing", "Karaoke con cori"]] : []), ["voice", "Solo voce"]].map(([k, l]) => `<button class="${p === k ? "on" : ""}" data-preset="${k}">${l}</button>`).join("")}</div>
         <select class="pop" data-input="without" title="Togli uno strumento"><option value="">${w ? "Senza " + Separation.NAMES[w].toLowerCase() : "Senza…"}</option>${insts.map((k) => `<option value="${k}">Senza ${Separation.NAMES[k].toLowerCase()}</option>`).join("")}</select>
+        <button class="btn" data-act="transpose" title="Transpose: la canzone in un'altra tonalità, senza cambiare la velocità (Ctrl+Alt+↑ e ↓)">${Icon("up")}${esc(transposeTitle())}</button>
         <div class="grow"></div>
         <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button>
       </div>
@@ -283,47 +285,62 @@
   }
   async function refreshLibrary() { ui.library = await Separation.library(); library(); }
 
+  /** Di quanti semitoni spostare i file scaricati (0 = tonalità originale). */
+  const shift = () => (ui.downloadTransposed ? player.semitones : 0);
+  function transposeBy(d) {
+    player.setSemitones(Math.max(Transpose.RANGE[0], Math.min(Transpose.RANGE[1], player.semitones + d)));
+    panel();
+  }
+  function transposeTitle() {
+    const s = player.semitones, a = job.current && job.current.meta.analysis;
+    if (!a || a.keyRoot == null) return s ? Transpose.label(s) : "Tonalità";
+    const k = Transpose.keyShort(a.keyRoot, a.minor, s);
+    return s ? `${k} · ${Transpose.label(s)}` : k;
+  }
+
   async function downloadStems(list) {
-    const f = Prefs.get("downloadFormat", "wav24"), title = job.current.meta.title;
+    const f = Prefs.get("downloadFormat", "wav24"), sh = shift(), title = job.current.meta.title, sx = Transpose.suffix(sh);
     try {
       if (list.length === 1) {
         const s = list[0], ext = Encode.FORMATS[f].ext;
-        const path = await Bridge.askFile(`${title} – ${s.name}.${ext}`, ext);
+        const path = await Bridge.askFile(`${title} – ${s.name}${sx}.${ext}`, ext);
         if (!path) return;
-        const ch = Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file));
+        const ch = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
         await Bridge.writeFile(path, await Encode.encode(ch, f));
         Bridge.reveal(path);
       } else {
         const dir = await Bridge.askFolder();
         if (!dir) return;
-        let target = `${dir}/${title} (IsoLR)`, n = 2;
-        while (await Bridge.exists(target)) target = `${dir}/${title} (IsoLR ${n++})`;
+        const tag = sh ? " " + Transpose.label(sh) : "";
+        let target = `${dir}/${title} (IsoLR${tag})`, n = 2;
+        while (await Bridge.exists(target)) target = `${dir}/${title} (IsoLR${tag} ${n++})`;
         for (const s of list) {
-          const ch = Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file));
-          await Bridge.writeFile(`${target}/${title} – ${s.name}.${Encode.FORMATS[f].ext}`, await Encode.encode(ch, f));
+          const ch = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
+          await Bridge.writeFile(`${target}/${title} – ${s.name}${sx}.${Encode.FORMATS[f].ext}`, await Encode.encode(ch, f));
         }
         Bridge.reveal(target);
       }
     } catch (e) { toast("Download non riuscito: " + (e.message || e)); }
   }
   async function downloadMix(range) {
-    const f = Prefs.get("downloadFormat", "wav24"), ext = Encode.FORMATS[f].ext;
-    const name = player.exportName(job.current.meta.title) + (range ? ` (${fmt(range[0])}–${fmt(range[1])})` : "");
+    const f = Prefs.get("downloadFormat", "wav24"), ext = Encode.FORMATS[f].ext, sh = shift();
+    const name = player.exportName(job.current.meta.title) + Transpose.suffix(sh) + (range ? ` (${fmt(range[0])}–${fmt(range[1])})` : "");
     const path = await Bridge.askFile(`${name}.${ext}`.replace(/:/g, "."), ext);
     if (!path) return;
     try {
       const m = player.mixdown(range);
-      await Bridge.writeFile(path, await Encode.encode(m.channels, f, m.gain));
+      await Bridge.writeFile(path, await Encode.encode(await Transpose.apply(m.channels, sh), f, m.gain));
       Bridge.reveal(path);
     } catch (e) { toast("Download non riuscito: " + (e.message || e)); }
   }
   async function downloadStemFile() {
-    const path = await Bridge.askFile(`${job.current.meta.title}.stem.mp4`, "mp4");
+    const sh = shift();
+    const path = await Bridge.askFile(`${job.current.meta.title}${Transpose.suffix(sh)}.stem.mp4`, "mp4");
     if (!path) return;
     try {
       toast("Preparo il file per DJ…");
       const tracks = {};
-      for (const s of MixPlayer.mixable(job.current.meta.stems)) tracks[s.key] = Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file));
+      for (const s of MixPlayer.mixable(job.current.meta.stems)) tracks[s.key] = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
       await Bridge.writeFile(path, await Encode.stemMp4(tracks));
       Bridge.reveal(path);
     } catch (e) { toast("File per DJ non riuscito: " + (e.message || e)); }
@@ -369,8 +386,10 @@
       case "practice": ui.practice = !ui.practice; Prefs.set("showPractice", ui.practice); return transport();
       case "metronome": player.metronome = !player.metronome; return transport();
       case "count": player.countIn = !player.countIn; return transport();
-      case "pitch-down": player.setSemitones(Math.max(-6, player.semitones - 1)); return transport();
-      case "pitch-up": player.setSemitones(Math.min(6, player.semitones + 1)); return transport();
+      case "pitch-down": transposeBy(-1); return;
+      case "pitch-up": transposeBy(1); return;
+      case "transpose": return window.Sheets.transpose(job.current, player, transposeBy);
+      case "dl-transposed": ui.downloadTransposed = !ui.downloadTransposed; return panel();
       case "mark-a": player.markA(); return transport();
       case "mark-b": player.markB(); return panel();
       case "clear-loop": player.clearLoop(); return panel();
@@ -409,7 +428,7 @@
     const el = ev.target, d = el.dataset;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
     if (d.input === "take") { await player.loadTake(el.value); return transport(); }
-    if (d.input === "midi" && el.value) return window.Sheets.notes(job.current, el.value, (k) => { ui.midi = k; panel(); });
+    if (d.input === "midi" && el.value) return window.Sheets.notes(job.current, el.value, (k) => { ui.midi = k; panel(); }, shift());
     if (d.input === "compare" && el.value) {
       ui.comparing = true; transport();
       try { await window.Sheets.compare(job.current, player.take, el.value); } catch (e) { toast(e.message || String(e)); }
@@ -423,6 +442,8 @@
     if (e.code === "Space" && job.phase === "done") { e.preventDefault(); player.toggle(); transport(); }
     if (e.ctrlKey && e.key === "[") { player.markA(); transport(); }
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
+    if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
+    if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
     if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
   });
   // Una canzone trascinata ovunque nella finestra

@@ -161,21 +161,22 @@
   }
 
   // ── Note, spartito e tab ──
-  async function notes(cur, key, busy) {
+  async function notes(cur, key, busy, shift = 0) {
     busy(key);
     try {
       const { Midi, Sheet } = IsoLR;
       const stem = cur.meta.stems.find((s) => s.key === key);
       const ch = Encode.readWav(await Bridge.readFile(cur.folder + "/" + stem.file));
-      const list = await IsoApp.job.transcribe(ch);                           // Basic Pitch nel lavoratore
-      const a = cur.meta.analysis || {}, bpm = a.bpm || 120, name = `${cur.meta.title} – ${stem.name}`;
+      // Basic Pitch nel lavoratore; con il Transpose le note si spostano di tanti semitoni
+      const list = (await IsoApp.job.transcribe(ch)).map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + shift)) }));
+      const a = cur.meta.analysis || {}, bpm = a.bpm || 120, name = `${cur.meta.title} – ${stem.name}${Transpose.suffix(shift)}`;
       const files = [];
       const mid = `${cur.folder}/${name}.mid`;
       await Bridge.writeFile(mid, Midi.data(list, { bpm, program: Midi.program(key), name }));
       files.push(mid);
       // Spartito (MusicXML) sulle battute vere della canzone; per chitarra e basso anche la tablatura
       const kind = Sheet.MusicXML.kind(key, list);
-      const score = Sheet.Score.build(list, { structure: a.structure || null, bpm, keyRoot: a.keyRoot || 0, minor: !!a.minor,
+      const score = Sheet.Score.build(list, { structure: a.structure || null, bpm, keyRoot: (((a.keyRoot || 0) + shift) % 12 + 12) % 12, minor: !!a.minor,
         monophonic: ["bass", "vocals", "lead", "male", "female"].includes(key) });
       if (score.bars.length) {
         const xml = `${cur.folder}/${name}.musicxml`;
@@ -189,6 +190,54 @@
     busy(null);
   }
 
-  window.Sheets = { settings, details, help, history, compare, notes, applyAppearance };
+  // ── Transpose: tonalità, − e +, porta alla mia voce, capotasto ──
+  async function transpose(cur, player, by) {
+    const a = cur.meta.analysis || {}, has = a.keyRoot != null;
+    let range = null;
+    const draw = (sheet) => {
+      const s = player.semitones, my = Prefs.get("myTopNote", 0);
+      const c = Transpose.capo(a.chords, s);
+      const sug = range && my ? Transpose.suggest(range.high, my) : null;
+      sheet.querySelector("#tp").innerHTML = `
+        <div class="label">Tonalità</div>
+        ${has ? `<div style="display:flex;gap:8px;align-items:baseline"><span style="font-size:15px;${s ? "color:var(--muted)" : "font-weight:600"}">${Transpose.keyName(a.keyRoot, a.minor, 0)}</span>
+          ${s ? `<span class="muted">→</span><b style="font:700 18px var(--font-display);color:var(--brass)">${Transpose.keyName(a.keyRoot, a.minor, s)}</b>` : ""}</div>`
+          : `<div class="muted">Tonalità non misurata</div>`}
+        <div class="form-line"><button class="btn icon" data-tp="-1" ${s <= Transpose.RANGE[0] ? "disabled" : ""}>−</button>
+          <b style="min-width:110px;text-align:center">${s ? Transpose.label(s) + " semitoni" : "Originale"}</b>
+          <button class="btn icon" data-tp="1" ${s >= Transpose.RANGE[1] ? "disabled" : ""}>+</button><div class="grow"></div>
+          <button class="btn" data-tp="0" ${s ? "" : "disabled"}>Originale</button></div>
+        <p class="muted" style="margin:0">Cambia solo il tono: la velocità resta quella. Anche i file scaricati e gli accordi seguono la tonalità scelta.</p>
+        <hr style="border:0;border-top:1px solid var(--stroke);width:100%">
+        <b>Per chi canta</b>
+        ${range ? `<span class="muted">La voce della canzone va da ${Transpose.noteName(Math.round(range.low))} a ${Transpose.noteName(Math.round(range.high))}</span>
+          <div class="form-line"><select class="pop" id="mytop"><option value="0">La tua nota più alta comoda…</option>${Array.from({ length: 37 }, (_, i) => 84 - i).map((m) => `<option value="${m}" ${m === my ? "selected" : ""}>${Transpose.noteName(m)}</option>`).join("")}</select>
+          ${sug != null ? `<button class="btn prominent" data-tp-set="${sug}" ${sug === s ? "disabled" : ""}>${sug === 0 ? "È già giusta" : "Porta alla mia voce (" + Transpose.label(sug) + ")"}</button>` : ""}</div>
+          <span class="faint" style="font-size:11px">Do4 è il Do centrale. Una voce maschile arriva in genere a Sol4–La4, una femminile a Do5–Mi5.</span>`
+          : `<span class="muted">${range === null ? "Misuro la voce…" : "Serve la traccia della voce con abbastanza canto"}</span>`}
+        ${c ? `<hr style="border:0;border-top:1px solid var(--stroke);width:100%"><b>Per la chitarra</b><span>Capotasto al ${c.capo}° tasto: suoni le forme di ${c.shapes.join(" · ")}</span>` : ""}`;
+    };
+    open(`<h2>Transpose</h2><div id="tp" style="display:grid;gap:10px"></div><div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`, async (sheet) => {
+      sheet.style.width = "min(440px, 92vw)";
+      draw(sheet);
+      sheet.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-tp],[data-tp-set]"); if (!b) return;
+        if (b.dataset.tpSet != null) by(+b.dataset.tpSet - player.semitones);
+        else if (+b.dataset.tp === 0) by(-player.semitones); else by(+b.dataset.tp);
+        draw(sheet);
+      });
+      sheet.addEventListener("change", (e) => { if (e.target.id === "mytop") { Prefs.set("myTopNote", +e.target.value); draw(sheet); } });
+      // L'estensione della voce, misurata adesso (qualche secondo)
+      const v = cur.meta.stems.find((x) => x.key === "vocals") || cur.meta.stems.find((x) => x.key === "lead");
+      if (v) {
+        const ch = Encode.readWav(await Bridge.readFile(cur.folder + "/" + v.file));
+        const mono = new Float32Array(ch[0].length); for (let i = 0; i < mono.length; i++) mono[i] = (ch[0][i] + ch[1][i]) / 2;
+        range = Transpose.vocalRange(mono) || false;
+      } else range = false;
+      if (sheet.isConnected) draw(sheet);
+    });
+  }
+
+  window.Sheets = { settings, details, help, history, compare, notes, transpose, applyAppearance };
   applyAppearance();
 })();

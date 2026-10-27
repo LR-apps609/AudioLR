@@ -1,3 +1,9 @@
+Novità di IsoLR per Windows 0.6.0 «Transpose»:
+• Nuovo tasto «Tonalità» nella barra del mixer: la canzone in un'altra tonalità (da −7 a +7 semitoni) senza cambiare la velocità, con la tonalità nuova a parole. Anche con Ctrl+Alt+↑ e ↓
+• I download seguono la tonalità scelta (tracce, mix, passaggio A–B, file per DJ, note, spartito e tablatura); con la casella nel riquadro «Scarica» puoi scegliere l'originale
+• «Porta alla mia voce»: scegli la nota più alta che canti comodo e IsoLR ti dice di quanto spostare la canzone
+• Per la chitarra: il capotasto consigliato, con le forme facili da suonare
+
 Novità di IsoLR per Windows 0.5.0 «Come sul Mac»:
 • AudioLR per Windows ora si chiama IsoLR, con la stessa finestra dell'app per Mac: le tue canzoni a sinistra, le schede della qualità, il mixer e il riquadro «Scarica»
 • Massima e Studio con la stessa qualità del Mac (Studio: voce media di tre modelli, strumenti di tre passaggi). La prima volta scaricano i modelli, poi funziona senza internet
