@@ -89,13 +89,20 @@ final class WarpTests: XCTestCase {
         XCTAssertLessThan(err / e, 0.05, "a rapporto 1 la traccia resta quasi uguale")
     }
 
-    /// Il primo colpo forte dopo `t - 0,1` s.
+    /// Dove il colpo vicino a `t` ha più energia (media su 2 ms): lo stiramento allarga un po' l'attacco,
+    /// il centro del colpo resta il punto più affidabile.
     private func onset(_ x: [Float], near t: Double) -> Double {
         let a = max(0, Int((t - 0.1) * sr)), b = min(x.count, Int((t + 0.1) * sr))
-        guard b > a else { return -1 }
-        let peak = x[a..<b].map(abs).max() ?? 0
-        for i in a..<b where abs(x[i]) > peak * 0.5 { return Double(i) / sr }
-        return -1
+        let w = Int(0.002 * sr)
+        guard b - a > w else { return -1 }
+        var best = -1.0, at = a
+        var e = 0.0
+        for i in a..<(a + w) { e += Double(x[i] * x[i]) }
+        for i in a..<(b - w) {
+            if e > best { best = e; at = i }
+            e += Double(x[i + w] * x[i + w]) - Double(x[i] * x[i])
+        }
+        return Double(at) / sr
     }
 
     // MARK: Rimonta

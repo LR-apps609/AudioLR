@@ -144,8 +144,9 @@ final class ScreenshotTests: XCTestCase {
                      analysis: SongAnalysis(bpm: 120, keyRoot: 9, minor: true, keyConfidence: 0.8, structure: Self.parts),
                      elapsed: 312, engine: "Neural Engine", timings: [])
         let mixer = MixPlayer()
-        try shot(WarpView(mixer: mixer) {}.environmentObject(job), "15-warp", width: 960, height: 520)
-        try shot(ArrangeView(mixer: mixer) {}.environmentObject(job), "16-rimonta", width: 960, height: 520)
+        let mix = EditAudio.mix(stems, state: MixState())
+        try shot(WarpView(mixer: mixer, preloaded: mix) {}.environmentObject(job), "15-warp", width: 960, height: 520)
+        try shot(ArrangeView(mixer: mixer, preloaded: mix, preselect: 1) {}.environmentObject(job), "16-rimonta", width: 960, height: 520)
     }
 
     /// Una canzone trascinata in attesa di «Separa».

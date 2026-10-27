@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 struct ArrangeView: View {
     @EnvironmentObject private var job: SeparationJob
     @ObservedObject var mixer: MixPlayer
+    /// Il mix già pronto e la parte da mostrare scelta (le schermate di prova); nil = si calcola all'apertura.
+    var preloaded: [[Float]]? = nil
+    var preselect: Int? = nil
     var onClose: () -> Void
 
     @StateObject private var preview = PreviewPlayer()
@@ -40,7 +43,8 @@ struct ArrangeView: View {
         .padding(22)
         .frame(minWidth: 860, idealWidth: 960, minHeight: 470, idealHeight: 520)
         .background(Theme.background)
-        .task { await load() }
+        .onAppear { if let m = preloaded { setUp(m) } }
+        .task { if preloaded == nil { await load() } }
         .onDisappear { preview.stop() }
     }
 
@@ -232,11 +236,16 @@ struct ArrangeView: View {
     private func load() async {
         let stems = job.stems, state = mixer.state
         let audio = await Task.detached(priority: .userInitiated) { EditAudio.mix(stems, state: state) }.value
+        setUp(audio)
+    }
+
+    private func setUp(_ audio: [[Float]]) {
         mix = audio
         let d = Double(audio.first?.count ?? 0) / AudioIO.sampleRate
         arr = Arrangement.from(job.analysis?.structure, duration: d)
         original = arr
         undo = []
+        if let k = preselect, arr.blocks.indices.contains(k) { selected = arr.blocks[k].id; cutAt = arr.blocks[k].length / 2 }
     }
 
     private func listen() {

@@ -10,6 +10,8 @@ import AppKit
 struct WarpView: View {
     @EnvironmentObject private var job: SeparationJob
     @ObservedObject var mixer: MixPlayer
+    /// Il mix già pronto (le schermate di prova); nil = si calcola all'apertura.
+    var preloaded: [[Float]]? = nil
     var onClose: () -> Void
 
     @StateObject private var preview = PreviewPlayer()
@@ -46,7 +48,8 @@ struct WarpView: View {
         .padding(22)
         .frame(minWidth: 860, idealWidth: 960, minHeight: 470, idealHeight: 520)
         .background(Theme.background)
-        .task { await load() }
+        .onAppear { if let m = preloaded { setUp(m, peaks: EditAudio.peaks(m)) } }
+        .task { if preloaded == nil { await load() } }
         .onDisappear { preview.stop() }
     }
 
@@ -206,10 +209,14 @@ struct WarpView: View {
 
     private func load() async {
         let stems = job.stems, state = mixer.state
-        let a = job.analysis
-        bpm = Int((a?.bpm ?? 120).rounded())
         let audio = await Task.detached(priority: .userInitiated) { EditAudio.mix(stems, state: state) }.value
         let p = await Task.detached(priority: .userInitiated) { EditAudio.peaks(audio) }.value
+        setUp(audio, peaks: p)
+    }
+
+    private func setUp(_ audio: [[Float]], peaks p: [Float]) {
+        let a = job.analysis
+        bpm = Int((a?.bpm ?? 120).rounded())
         mix = audio
         peaks = p
         duration = Double(audio.first?.count ?? 0) / AudioIO.sampleRate
