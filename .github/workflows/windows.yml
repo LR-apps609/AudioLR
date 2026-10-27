@@ -135,9 +135,9 @@ jobs:
           print(t.split("\n\n")[0])
           PY
           )
-            gh release create "win-v$V" "$F" --latest=false --title "IsoLR per Windows $V" --notes "$NOTE
+            gh release create "win-v$V" "$F" --title "IsoLR per Windows $V" --notes "$NOTE
 
-          Non firmata: la prima volta Windows può mostrare un avviso (Ulteriori informazioni › Esegui comunque)."
+          Non firmata: la prima volta Windows può mostrare un avviso (Ulteriori informazioni › Esegui comunque)." 2> rel.err || { sed 's/^/::error::/' rel.err; exit 1; }
             echo "::notice::Rilasciata IsoLR per Windows $V"
           else
             gh release view windows-prova >/dev/null 2>&1 || gh release create windows-prova --prerelease --title "IsoLR per Windows (prova, non ufficiale)" --notes "Versioni di prova dei rami di lavoro. Non firmata."
