@@ -781,7 +781,7 @@ struct ContentView: View {
                     .frame(width: 38, alignment: .leading)
             }
             .help("Velocità senza cambiare il tono")
-            Stepper(value: $mixer.semitones, in: -6...6) {
+            Stepper(value: $mixer.semitones, in: PitchShift.range) {
                 Text("Tono \(mixer.semitones > 0 ? "+" : "")\(mixer.semitones)").font(.system(size: 11.5, weight: .medium)).monospacedDigit()
             }
             .help("Semitoni in su o in giù, senza cambiare la velocità")
@@ -819,9 +819,9 @@ struct ContentView: View {
 
     /// Ci stanno i tasti affiancati? Lo spazio della barra (la colonna meno i margini) contro quello che serve
     /// agli altri tasti più ai segmenti, con le misure di macOS 26 (controlli più grandi) e un po' di margine.
-    private var segmentsFit: Bool { transportSpace >= 300 + segmentsWidth }
+    private var segmentsFit: Bool { transportSpace >= 390 + segmentsWidth }
     /// «Esercitati» e «Senza…» con il nome: solo se c'è posto anche per i segmenti affiancati
-    private var transportLabels: Bool { transportSpace >= 440 + segmentsWidth }
+    private var transportLabels: Bool { transportSpace >= 530 + segmentsWidth }
     /// Lo spazio della barra: la colonna meno i margini e il riquadro «Scarica» a destra
     private var transportSpace: CGFloat { mainWidth - 108 - 288 }
     private var segmentsWidth: CGFloat { mixer.keys.contains("lead") ? 350 : 260 }
@@ -880,6 +880,8 @@ struct ContentView: View {
             }
             presetControl(segmented: segmented)
             withoutMenu
+            // Transpose: sempre a vista, non solo in «Esercitati»
+            TransposeButton(mixer: mixer, compact: !transportLabels).fixedSize()
             Spacer(minLength: 4)
             // Velocità, tono, ripetizione di un passaggio: tutto quello che serve a chi suona
             Toggle(isOn: $showPractice) { Label("Esercitati", systemImage: "music.note") }
@@ -939,6 +941,10 @@ struct ContentView: View {
     // MARK: Scarica e vai più a fondo
 
     @AppStorage("downloadFormat") private var downloadFormatRaw = OutputFormat.wav24.rawValue
+    /// Con la tonalità cambiata: i file si scaricano trasposti (di serie) o nell'originale.
+    @State private var downloadTransposed = true
+    /// Di quanti semitoni spostare i file scaricati (0 = tonalità originale).
+    private var downloadShift: Int { downloadTransposed ? mixer.semitones : 0 }
     private var downloadFormat: OutputFormat { OutputFormat(rawValue: downloadFormatRaw) ?? .wav24 }
 
     /// Le tracce scelte per «Scarica le selezionate»: di serie tutte (si tiene chi è stato tolto).
@@ -955,6 +961,14 @@ struct ContentView: View {
                     ForEach(OutputFormat.allCases) { f in Text(f.title).tag(f.rawValue) }
                 }
                 .help(downloadFormat.detail)
+                if mixer.semitones != 0 {
+                    Toggle(isOn: $downloadTransposed) {
+                        Text(job.analysis.map { "In \(Transpose.keyName(root: $0.keyRoot, minor: $0.minor, shift: mixer.semitones)) (\(PitchShift.label(mixer.semitones)))" }
+                             ?? "Nella tonalità scelta (\(PitchShift.label(mixer.semitones)))")
+                            .font(.system(size: 12))
+                    }
+                    .help(downloadTransposed ? "I file si scaricano nella tonalità che senti" : "I file si scaricano nella tonalità originale")
+                }
                 Button { downloadMany(job.stems) } label: {
                     Label("Tutte le tracce", systemImage: "square.and.arrow.down.on.square").frame(maxWidth: .infinity)
                 }
@@ -988,7 +1002,7 @@ struct ContentView: View {
                 Text("Vai più a fondo").font(.system(size: 15, weight: .bold, design: .rounded))
                 Menu {
                     ForEach(job.midiStems) { s in
-                        Button(job.midiFiles[s.key] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s) }
+                        Button(job.midiFiles[downloadShift == 0 ? s.key : "\(s.key)\(downloadShift)"] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s, shift: downloadShift) }
                     }
                 } label: {
                     Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note, spartito e tab")
@@ -1013,12 +1027,12 @@ struct ContentView: View {
     }
 
     private func downloadOne(_ stem: Stem) {
-        let f = downloadFormat
-        guard let url = Downloads.askFile(name: Downloads.fileName(title: job.title, stem: stem, format: f), format: f) else { return }
+        let f = downloadFormat, shift = downloadShift
+        guard let url = Downloads.askFile(name: Downloads.fileName(title: job.title, stem: stem, format: f, shift: shift), format: f) else { return }
         downloading = true
         Task {
             do {
-                try await Task.detached(priority: .userInitiated) { try Downloads.write(stem, to: url, format: f) }.value
+                try await Task.detached(priority: .userInitiated) { try Downloads.write(stem, to: url, format: f, shift: shift) }.value
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
             downloading = false
@@ -1027,11 +1041,11 @@ struct ContentView: View {
 
     private func downloadMany(_ stems: [Stem]) {
         guard !stems.isEmpty, let folder = Downloads.askFolder() else { return }
-        let f = downloadFormat, title = job.title
+        let f = downloadFormat, title = job.title, shift = downloadShift
         downloading = true
         Task {
             do {
-                let dir = try await Task.detached(priority: .userInitiated) { try Downloads.writeAll(stems, title: title, into: folder, format: f) }.value
+                let dir = try await Task.detached(priority: .userInitiated) { try Downloads.writeAll(stems, title: title, into: folder, format: f, shift: shift) }.value
                 NSWorkspace.shared.activateFileViewerSelecting([dir])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
             downloading = false
@@ -1040,13 +1054,13 @@ struct ContentView: View {
 
     private func downloadMix(range: (Double, Double)?) {
         guard job.phase == .done, !mixer.exporting, let folder = job.folder else { return }
-        let f = downloadFormat
-        var name = MixPlayer.exportName(state: mixer.state, title: job.title)
+        let f = downloadFormat, shift = downloadShift
+        var name = MixPlayer.exportName(state: mixer.state, title: job.title) + Downloads.suffix(shift)
         if let r = range { name += " (\(formatTime(r.0))–\(formatTime(r.1)))" }
         guard let url = Downloads.askFile(name: "\(name).\(f.fileExtension)", format: f) else { return }
         Task {
             do {
-                let done = try await mixer.export(stems: job.stems, folder: folder, title: job.title, to: url, format: f, range: range)
+                let done = try await mixer.export(stems: job.stems, folder: folder, title: job.title, to: url, format: f, range: range, shift: shift)
                 exported = done
                 NSWorkspace.shared.activateFileViewerSelecting([done])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
@@ -1164,11 +1178,11 @@ struct ContentView: View {
         guard job.phase == .done, !makingStemFile, let f = job.folder else { return }
         let song = job.song
         makingStemFile = true
-        let stems = job.stems, title = job.title
+        let stems = job.stems, title = job.title, shift = downloadShift
         Task {
             defer { makingStemFile = false }
             do {
-                let url = try await StemFile.make(stems: stems, song: song, folder: f, title: title)
+                let url = try await StemFile.make(stems: stems, song: song, folder: f, title: title, shift: shift)
                 exported = url
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {

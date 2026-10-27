@@ -1,3 +1,9 @@
+Novità della 0.32.0 «Transpose»:
+• Nuovo tasto «Tonalità» nella barra del mixer: la canzone in un'altra tonalità (da −7 a +7 semitoni) senza cambiare la velocità, con la tonalità nuova a parole («Do maggiore → Re maggiore»). Anche con ⌥⌘↑ e ⌥⌘↓
+• I download seguono la tonalità scelta: una traccia, tutte, il mix, il passaggio A–B, il file per DJ, le note MIDI, lo spartito e la tablatura. Con la casella nel riquadro «Scarica» puoi scegliere l'originale
+• «Porta alla mia voce»: scegli la nota più alta che canti comodo e IsoLR ti dice di quanto spostare la canzone
+• Per la chitarra: il capotasto consigliato, con le forme facili da suonare (per esempio «Capotasto al 4° tasto: G · D · Em · C»)
+
 Novità della 0.31.0 «Per chi suona»:
 • Metronomo: in «Esercitati» un clic su ogni battito vero della canzone, più forte sul primo della battuta. Con «Conteggio» una battuta di clic prima di partire
 • Parti della canzone: intro, strofa, ritornello, ponte… in una striscia sopra la musica. Un clic e quella parte si ripete

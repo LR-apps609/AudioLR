@@ -136,6 +136,8 @@ final class MixPlayer: ObservableObject {
     }
     /// Semitoni in su o in giù.
     @Published var semitones: Int = 0 { didSet { timePitch.pitch = Float(semitones * 100) } }
+    /// Transpose: il passo sopra e sotto (e «Originale»), nei limiti in cui la voce resta naturale.
+    func transpose(by d: Int) { semitones = max(PitchShift.range.lowerBound, min(PitchShift.range.upperBound, semitones + d)) }
     /// Il passaggio da ripetere, in secondi (entrambi presenti = ripetizione attiva).
     @Published private(set) var loopA: Double?
     @Published private(set) var loopB: Double?
@@ -487,7 +489,7 @@ final class MixPlayer: ObservableObject {
     /// Salva il mix attuale: accanto alle tracce nel formato delle Impostazioni, oppure in `to` nel formato `format`.
     /// Con `range` (secondi) solo quel passaggio, per esempio la ripetizione A–B.
     func export(stems: [Stem], folder: URL, title: String, to chosenURL: URL? = nil, format chosenFormat: OutputFormat? = nil,
-                range: (Double, Double)? = nil) async throws -> URL {
+                range: (Double, Double)? = nil, shift: Int = 0) async throws -> URL {
         exporting = true
         defer { exporting = false }
         let state = self.state
@@ -510,6 +512,8 @@ final class MixPlayer: ObservableObject {
                 let s0 = max(0, min(n, Int(r.0 * AudioIO.sampleRate))), s1 = max(s0, min(n, Int(r.1 * AudioIO.sampleRate)))
                 mixed = mixed.map { Array($0[s0..<s1]) }
             }
+            // Nella tonalità scelta (dopo il taglio: si sposta solo il passaggio)
+            mixed = try PitchShift.apply(mixed, semitones: shift)
             let url = target
             // Con i volumi alzati il mix può superare il massimo: si abbassa tutto quanto basta, senza tagliare
             try AudioIO.write(mixed, to: url, format: format, gain: Stem.safeGain(peaks: [Stem.measure(mixed).peak]))

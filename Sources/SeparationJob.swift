@@ -131,23 +131,27 @@ final class SeparationJob: ObservableObject {
     }
 
     /// Le note di una traccia in un file MIDI accanto alle tracce, al tempo della canzone.
-    func makeMidi(_ stem: Stem) {
+    /// Con `shift` (Transpose) note, tonalità e accordi dei file sono spostati di tanti semitoni.
+    func makeMidi(_ stem: Stem, shift: Int = 0) {
         guard midiWorking == nil, let dir = folder else { return }
-        if let done = midiFiles[stem.key] { NSWorkspace.shared.activateFileViewerSelecting([done]); return }
+        let cacheKey = shift == 0 ? stem.key : "\(stem.key)\(shift)"
+        if let done = midiFiles[cacheKey] { NSWorkspace.shared.activateFileViewerSelecting([done]); return }
         midiWorking = stem.key
         midiError = nil
         let title = self.title, bpm = analysis?.bpm ?? 120, a = analysis
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let audio = try AudioIO.read(stem.url)
-                let notes = try MidiTranscriber.bundled().transcribe(audio)
-                let name = "\(title) – \(stem.name)"
+                let notes = try MidiTranscriber.bundled().transcribe(audio).map {
+                    Note(start: $0.start, end: $0.end, pitch: max(0, min(127, $0.pitch + shift)), velocity: $0.velocity)
+                }
+                let name = "\(title) – \(stem.name)\(Downloads.suffix(shift))"
                 let url = dir.appendingPathComponent("\(name).mid")
                 try MidiFile.data(notes, bpm: bpm, program: MidiFile.program(for: stem.key), name: name)
                     .write(to: url, options: .atomic)
                 // Spartito (MusicXML) sulle battute vere della canzone; per chitarra e basso anche la tablatura
                 let kind = MusicXML.kind(for: stem.key, notes: notes)
-                let score = Score.build(notes, structure: a?.structure, bpm: bpm, keyRoot: a?.keyRoot ?? 0, minor: a?.minor ?? false,
+                let score = Score.build(notes, structure: a?.structure, bpm: bpm, keyRoot: ((a?.keyRoot ?? 0) + shift + 12) % 12, minor: a?.minor ?? false,
                                         monophonic: ["bass", "vocals", "lead", "male", "female"].contains(stem.key))
                 var files = [url]
                 if !score.bars.isEmpty {
@@ -161,7 +165,7 @@ final class SeparationJob: ObservableObject {
                         files.append(tab)
                     }
                 }
-                await self?.midiDone(stem.key, url, folder: dir, files: files)
+                await self?.midiDone(cacheKey, url, folder: dir, files: files)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 await self?.midiFailed(msg, folder: dir)

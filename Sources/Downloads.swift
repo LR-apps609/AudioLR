@@ -8,28 +8,31 @@ import UniformTypeIdentifiers
 // ════════════════════════════════════════════════════════════════════
 
 enum Downloads {
-    /// «Canzone – Voce.wav»
-    static func fileName(title: String, stem: Stem, format: OutputFormat) -> String {
-        "\(title) – \(stem.name).\(format.fileExtension)"
+    /// «Canzone – Voce.wav», «Canzone – Voce (+2).wav» se è trasposta.
+    static func fileName(title: String, stem: Stem, format: OutputFormat, shift: Int = 0) -> String {
+        "\(title) – \(stem.name)\(suffix(shift)).\(format.fileExtension)"
     }
 
-    /// Una traccia, letta e riscritta nel formato scelto.
-    nonisolated static func write(_ stem: Stem, to url: URL, format: OutputFormat) throws {
-        let audio = try AudioIO.read(stem.url)
+    /// « (+2)» per i file trasposti, niente per quelli nella tonalità originale.
+    static func suffix(_ shift: Int) -> String { shift == 0 ? "" : " (\(PitchShift.label(shift)))" }
+
+    /// Una traccia, letta e riscritta nel formato scelto (e nella tonalità scelta).
+    nonisolated static func write(_ stem: Stem, to url: URL, format: OutputFormat, shift: Int = 0) throws {
+        let audio = try PitchShift.apply(AudioIO.read(stem.url), semitones: shift)
         try AudioIO.write(audio, to: url, format: format)
     }
 
     /// Più tracce in una cartella nuova «Canzone (IsoLR)» dentro `folder` (se c'è già: «Canzone (IsoLR 2)»…).
-    nonisolated static func writeAll(_ stems: [Stem], title: String, into folder: URL, format: OutputFormat) throws -> URL {
+    nonisolated static func writeAll(_ stems: [Stem], title: String, into folder: URL, format: OutputFormat, shift: Int = 0) throws -> URL {
         let fm = FileManager.default
-        var dir = folder.appendingPathComponent("\(title) (IsoLR)", isDirectory: true)
+        var dir = folder.appendingPathComponent("\(title) (IsoLR\(shift == 0 ? "" : " " + PitchShift.label(shift)))", isDirectory: true)
         var n = 2
         while fm.fileExists(atPath: dir.path) {
             dir = folder.appendingPathComponent("\(title) (IsoLR \(n))", isDirectory: true)
             n += 1
         }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for s in stems { try write(s, to: dir.appendingPathComponent(fileName(title: title, stem: s, format: format)), format: format) }
+        for s in stems { try write(s, to: dir.appendingPathComponent(fileName(title: title, stem: s, format: format, shift: shift)), format: format, shift: shift) }
         return dir
     }
 

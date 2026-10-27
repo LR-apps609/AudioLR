@@ -22,8 +22,8 @@ enum StemFile {
 
     /// «Canzone.stem.mp4» nella cartella delle tracce, dalle tracce già salvate.
     /// Senza la canzone originale (una separazione riaperta dalla Cronologia), la canzone intera è voce + base.
-    static func make(stems: [Stem], song: URL?, folder: URL, title: String) async throws -> URL {
-        let url = folder.appendingPathComponent("\(title).stem.mp4")
+    static func make(stems: [Stem], song: URL?, folder: URL, title: String, shift: Int = 0) async throws -> URL {
+        let url = folder.appendingPathComponent("\(title)\(Downloads.suffix(shift)).stem.mp4")
         let chosen = MixPlayer.mixable(stems)
         let (master, parts) = try await Task.detached(priority: .userInitiated) { () -> ([[Float]], [[[Float]]]) in
             var mix: [[Float]]
@@ -51,7 +51,9 @@ enum StemFile {
             }
             // Senza canzone né base: la canzone intera è la somma delle quattro tracce
             if mix.isEmpty { mix = (0..<2).map { c in (0..<n).map { i in parts.reduce(Float(0)) { (sum: Float, p: [[Float]]) -> Float in sum + p[c][i] } } } }
-            return (mix.map { Array($0.prefix(n)) + [Float](repeating: 0, count: max(0, n - $0.count)) }, parts)
+            let master = mix.map { Array($0.prefix(n)) + [Float](repeating: 0, count: max(0, n - $0.count)) }
+            // Nella tonalità scelta: la canzone intera e le quattro tracce, tutte allo stesso modo
+            return (try PitchShift.apply(master, semitones: shift), try parts.map { try PitchShift.apply($0, semitones: shift) })
         }.value
         try await write(master: master, stems: parts, to: url)
         return url
