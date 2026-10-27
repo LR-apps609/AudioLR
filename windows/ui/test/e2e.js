@@ -61,6 +61,61 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     check(mix.pos > 0.2, `il mixer suona (posizione ${mix.pos.toFixed(2)} s)`);
     check(mix.pre === "karaoke" && mix.name === "Canzone – Karaoke", `karaoke: ${mix.name}`);
     check(mix.flac > 1000, `mix in FLAC: ${mix.flac} byte`);
+
+    // Warp: colpi sulle ancore stirati a 100 BPM cadono dove dice la mappa (±10 ms), lunghezza esatta
+    const wp = await page.evaluate(async () => {
+      const W = IsoLR.Warp, RATE = 44100;
+      const marks = W.downbeats(IsoApp.job.current.meta.analysis.structure);
+      const dur = IsoApp.player.duration, map = W.WarpMap.toTempo(marks, 100, 4), n = Math.round(dur * RATE);
+      const ch = [new Float32Array(n), new Float32Array(n)];
+      for (const m of marks) for (let i = 0; i < 1500; i++) { const j = Math.round(m * RATE) + i; if (j < n) { const v = 0.8 * Math.sin(i * 0.3) * Math.exp(-i / 300); ch[0][j] = v; ch[1][j] = v; } }
+      const out = await Editors.renderWarp(ch, map, dur), d = out[0], off = map.map(0);
+      let worst = 0;
+      for (const m of marks.slice(1, -1)) {
+        const t = map.map(m) - off; let best = 0, top = 0;
+        for (let i = Math.round((t - 0.1) * RATE); i < Math.round((t + 0.1) * RATE); i++) if (Math.abs(d[i]) > top) { top = Math.abs(d[i]); best = i; }
+        worst = Math.max(worst, Math.abs(best / RATE - t - 0.0001));
+      }
+      return { marks: marks.length, len: d.length, want: Math.round(map.length(dur) * RATE), worst };
+    });
+    check(wp.marks >= 3 && wp.len === wp.want, `Warp a 100 BPM: ${wp.marks} segnaposto, ${wp.len} campioni (attesi ${wp.want})`);
+    check(wp.worst < 0.01, `Warp: i colpi cadono sulle ancore (scarto massimo ${(wp.worst * 1000).toFixed(1)} ms)`);
+    // Dall'editor: versione a tempo nella libreria
+    await page.click('[data-act="warp"]');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: path.join(out, "win-e2e-warp.png") });
+    await page.fill("#w-bpm", "100");
+    await page.evaluate(() => document.querySelector(".sheet").api.makeTempo());
+    await page.waitForFunction(() => /\(100 BPM\)$/.test(IsoApp.job.current.meta.title), null, { timeout: 5 * 60 * 1000, polling: 500 });
+    const wv = await page.evaluate(async () => {
+      const c = IsoApp.job.current, a = c.meta.analysis, b = a.structure.beats;
+      const gaps = b.slice(1).map((x, i) => x - b[i]).filter((g, i) => b[i] > 0.6 && b[i + 1] < c.meta.duration - 0.6);
+      const v = Encode.readWav(await Bridge.readFile(c.folder + "/" + c.meta.stems.find((s) => s.key === "drums").file));
+      return { bpm: a.bpm, dur: c.meta.duration, len: v[0].length / 44100, spread: Math.max(...gaps) - Math.min(...gaps), stems: c.meta.stems.length, lib: IsoApp.ui.library.length };
+    });
+    check(wv.bpm === 100 && Math.abs(wv.len - wv.dur) < 0.01 && wv.spread < 0.002, `versione a tempo: ${wv.bpm} BPM, ${wv.dur.toFixed(2)} s, battiti regolari (±${(wv.spread * 1000).toFixed(1)} ms), ${wv.stems} tracce`);
+
+    // Rimonta: togliere un blocco accorcia la canzone proprio della sua durata
+    await page.evaluate(async () => { await IsoApp.openEntry(IsoApp.ui.library.find((e) => !e.meta.derivedFrom)); });
+    await page.click('[data-act="arrange"]');
+    await page.waitForTimeout(500);
+    const rm = await page.evaluate(async () => {
+      const A = IsoLR.Arrange, api = document.querySelector(".sheet").api, dur = IsoApp.player.duration;
+      let b = api.blocks;
+      if (b.length < 2) b = A.split(b, 0, dur / 2, IsoLR.Warp.downbeats(IsoApp.job.current.meta.analysis.structure));
+      const cut = b[0].srcEnd - b[0].srcStart;
+      api.set(A.remove(b, 0));
+      await new Promise((r) => setTimeout(r, 300));
+      return { dur, cut, blocks: b.length };
+    });
+    await page.screenshot({ path: path.join(out, "win-e2e-rimonta.png") });
+    await page.evaluate(() => document.querySelector(".sheet").api.make());
+    await page.waitForFunction(() => /\(rimontata\)$/.test(IsoApp.job.current.meta.title), null, { timeout: 5 * 60 * 1000, polling: 500 });
+    const rv = await page.evaluate(async () => {
+      const c = IsoApp.job.current, v = Encode.readWav(await Bridge.readFile(c.folder + "/" + c.meta.stems.find((s) => s.key === "vocals").file));
+      return { dur: c.meta.duration, len: v[0].length / 44100, parts: c.meta.analysis.structure.sections.length };
+    });
+    check(Math.abs(rv.dur - (rm.dur - rm.cut)) < 0.001 && Math.abs(rv.len - rv.dur) < 0.001, `Rimonta: tolto un blocco di ${rm.cut.toFixed(2)} s, da ${rm.dur.toFixed(2)} a ${rv.dur.toFixed(2)} s (${rv.parts} parti)`);
   }
   // Transpose: +2 semitoni sposta davvero il tono, la lunghezza resta e il colpo resta al suo posto
   const tp = await page.evaluate(async () => {

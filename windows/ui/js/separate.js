@@ -281,6 +281,30 @@
     return { folder, meta };
   }
 
+  /** Una versione nuova di una canzone già separata (a tempo, rimontata): stesse tracce e dati, cartella nuova. */
+  async function saveVersion(cur, title, tracks, { duration, analysis, kind }) {
+    const folder = await Bridge.newSongDir(title);
+    const format = Prefs.get("outputFormat", "wav24"), ext = Encode.FORMATS[format].ext;
+    let top = 0;
+    const m = {};
+    for (const k of Object.keys(tracks)) { m[k] = measure(tracks[k]); top = Math.max(top, m[k].peak); }
+    const gain = top > 0.98 ? 0.98 / top : 1;
+    const stems = [];
+    for (const s of cur.meta.stems) {
+      const ch = tracks[s.key];
+      if (!ch) continue;
+      const file = `${title} – ${s.name}.${ext}`;
+      await Bridge.writeFile(`${folder}/${file}`, await Encode.encode(ch, format, gain));
+      let work = file;
+      if (format !== "wav24") { work = `.lavoro/${s.key}.wav`; await Bridge.writeFile(`${folder}/${work}`, Encode.wav(ch, 24, gain)); }
+      stems.push(Object.assign({}, s, { file: work, export: file, peakDB: m[s.key].peak > 0 ? +(20 * Math.log10(m[s.key].peak * gain)).toFixed(1) : -120, peaks: m[s.key].peaks }));
+    }
+    const meta = Object.assign({}, cur.meta, { title, created: new Date().toISOString(), duration, analysis, stems,
+      gainDB: +((cur.meta.gainDB || 0) + 20 * Math.log10(gain)).toFixed(2), derivedFrom: cur.meta.title, derivation: kind });
+    await Bridge.writeText(`${folder}/isolr.json`, JSON.stringify(meta));
+    return { folder, meta };
+  }
+
   /** Aggiunge tracce (le divisioni in più) a una canzone già salvata. */
   async function addStems(cur, parts) {
     const format = Prefs.get("outputFormat", "wav24");
@@ -320,5 +344,5 @@
     } catch {}
   }
 
-  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, library, decode, measure };
+  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, library, decode, measure, saveVersion };
 })();

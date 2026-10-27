@@ -1,6 +1,6 @@
 [package]
 name = "isolr"
-version = "0.6.1"
+version = "0.7.0"
 description = "IsoLR: separa voce e strumenti, tutto sul computer"
 edition = "2021"
 

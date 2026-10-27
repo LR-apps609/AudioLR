@@ -71,6 +71,18 @@ async function fakeSong(page) {
       await shot("7-transpose");
       await page.keyboard.press("Escape");
       await page.evaluate(() => { IsoApp.player.setSemitones(0); IsoApp.render(); });
+      // Warp: segnaposto sulle battute (uno spostato, scelto) e Rimonta: blocchi (uno spostato e uno diviso)
+      await page.click('[data-act="warp"]');
+      await page.waitForTimeout(600);
+      await page.evaluate(() => { const a = document.querySelector(".sheet").api; const m = a.marks.slice(); m[3] += 0.12; a.set(m); });
+      await page.click("#w-canvas", { position: { x: 300, y: 120 } });
+      await shot("9-warp");
+      await page.keyboard.press("Escape");
+      await page.click('[data-act="arrange"]');
+      await page.waitForTimeout(600);
+      await page.evaluate(() => { const a = document.querySelector(".sheet").api; const b = IsoLR.Arrange; a.set(b.split(b.move(a.blocks, 2, 0), 1, 0.5, [0, 1, 2, 3, 4, 5, 6, 7])); });
+      await shot("10-rimonta");
+      await page.keyboard.press("Escape");
       await page.click('[data-act="report"]');
       await page.fill("#r-sum", "Studio si ferma a metà");
       await shot("8-segnala");
