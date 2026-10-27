@@ -204,7 +204,7 @@ struct ContentView: View {
                 .accessibilityLabel("Aggiornamento disponibile, versione \(rel.version)")
                 .transition(.scale.combined(with: .opacity))
             }
-            // A destra solo tre tasti, con il loro nome: libreria, aiuto, impostazioni.
+            // A destra quattro tasti, con il loro nome: libreria, aiuto, segnala, impostazioni.
             // Cronologia e account sono in fondo alla libreria; la privacy nella riga in fondo alla finestra
             HStack(spacing: 8) {
                 toolButton("sidebar.left", help: showLibrary ? "Nascondi la libreria (⌘L)" : "Mostra la libreria (⌘L)") {
@@ -216,6 +216,10 @@ struct ContentView: View {
                     .popover(isPresented: $showGuide, arrowEdge: .bottom) {
                         GuideView { showGuide = false; openWindow(id: "faq") }
                     }
+                // In vista, non solo nei menu: chi ha un problema lo segnala con un clic, con il Mac e il registro già scritti
+                Button { openWindow(id: "bug") } label: { Label("Segnala", systemImage: "ladybug") }
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                    .help("Segnala un problema o un'idea (⌥⌘B): il rapporto è già compilato con il Mac e l'ultimo errore")
                 SettingsLink { Label("Impostazioni", systemImage: "gearshape") }
                     .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                     .help("Impostazioni (⌘,)")

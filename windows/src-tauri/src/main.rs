@@ -194,6 +194,18 @@ fn reveal(path: String) {
     let _ = path;
 }
 
+/// Apre nel browser la segnalazione su GitHub, già compilata. Solo quella pagina: nessun altro indirizzo.
+#[tauri::command]
+fn open_report(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/LR-apps609/AudioLR/issues/new?") {
+        return Err("indirizzo non permesso".into());
+    }
+    // rundll32 apre il browser predefinito senza passare dalla riga di comando (le «&» restano intatte)
+    #[cfg(windows)]
+    std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Mentre separa il computer non va in stop da solo (album di notte); lo schermo può spegnersi.
 #[tauri::command]
 fn keep_awake(on: bool) {
@@ -389,7 +401,7 @@ fn main() {
         .manage(Allowed::default())
         .invoke_handler(tauri::generate_handler![
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
-            ask_file, ask_folder, ask_open, reveal, keep_awake, sleep_now, notify, bring_to_front,
+            ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, read_model, models_ready, check_update, install_update
         ])
         .run(tauri::generate_context!())

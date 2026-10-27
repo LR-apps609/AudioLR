@@ -1,5 +1,6 @@
 Novità della 0.32.1:
 • Corretto: su alcuni Mac la qualità Studio si fermava con «Unable to compute the prediction using ML Program». Adesso, se il Neural Engine o la grafica non riescono a fare il calcolo, IsoLR riprova da sola sulla grafica e poi sul solo processore (più lento, ma funziona), e se lo ricorda per le volte successive
+• Nuovo tasto «Segnala» (la coccinella) in alto accanto ad «Aiuto»: un problema si segnala con un clic, con il Mac e l'ultimo errore già scritti
 
 Novità della 0.32.0 «Transpose»:
 • Nuovo tasto «Tonalità» nella barra del mixer: la canzone in un'altra tonalità (da −7 a +7 semitoni) senza cambiare la velocità, con la tonalità nuova a parole («Do maggiore → Re maggiore»). Anche con ⌥⌘↑ e ⌥⌘↓

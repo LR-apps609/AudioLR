@@ -117,6 +117,57 @@
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
   }
 
+  // ── Segnala (come BugReportView in Help.swift) ──
+  const KINDS = [["bug", "Qualcosa non funziona"], ["sound", "Problema di suono"], ["slow", "Troppo lenta"], ["idea", "Idea o richiesta"]];
+
+  /** Versione, Windows, processori, memoria, scheda grafica, impostazioni, ultimo errore e ultimi passi. */
+  async function systemInfo(job) {
+    const ua = navigator.userAgentData;
+    let win = "Windows";
+    try { if (ua) { const h = await ua.getHighEntropyValues(["platformVersion"]); win = +h.platformVersion.split(".")[0] >= 13 ? "Windows 11" : "Windows 10"; } } catch (e) { /* resta «Windows» */ }
+    let gpu = "nessuna (WebGPU assente)";
+    try { const a = navigator.gpu && await navigator.gpu.requestAdapter(); if (a) { const i = a.info || {}; gpu = [i.vendor, i.architecture, i.description].filter(Boolean).join(" · ") || "presente"; } } catch (e) { /* resta com'è */ }
+    const lines = [
+      `IsoLR per Windows ${await Bridge.version()}`,
+      win,
+      `Processori: ${navigator.hardwareConcurrency || "?"} · memoria: ${navigator.deviceMemory ? "almeno " + navigator.deviceMemory + " GB" : "?"}`,
+      `Scheda grafica: ${gpu}`,
+      `Qualità: ${(Separation.QUALITY[Prefs.get("quality", "best")] || {}).title || "?"} · solo processore: ${Prefs.get("forceCpu", false) || job.cpu ? "sì" : "no"}`,
+    ];
+    if (job.current && job.current.meta) lines.push(`Ultima canzone: ${job.current.meta.engine || job.current.meta.backend || "?"} · ${IsoApp.fmt(job.current.meta.duration || 0)}`);
+    if (job.error) lines.push(`Ultimo errore: ${job.error}`);
+    if (Separation.Job.lines.length) lines.push("Registro (ultimi passi):\n" + Separation.Job.lines.slice(-20).join("\n"));
+    return lines.join("\n");
+  }
+
+  async function report(job) {
+    const system = await systemInfo(job);
+    open(`<div style="display:flex;gap:12px;align-items:center"><span class="bug-badge">${Icon("bug")}</span>
+        <div><h2>Segnala un problema</h2><div class="muted">Più dettagli dai, più in fretta si sistema</div></div></div>
+      <label class="setting"><span>Tipo</span><select class="pop" id="r-kind">${KINDS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+      <label class="field"><span>Cosa è successo</span><textarea id="r-sum" rows="3" placeholder="Es. la voce si sente nella batteria">${job.error ? esc("Si è fermata con: " + job.error) : ""}</textarea></label>
+      <label class="field"><span>Come rifarlo</span><textarea id="r-steps" rows="3" placeholder="Es. Studio, canzone MP3 di 3 min, al minuto 1:20"></textarea></label>
+      <label class="setting"><span>Includi le informazioni del computer<small>Nessuna canzone, nessun nome di file personale: solo versione, computer e impostazioni.</small></span><input type="checkbox" id="r-sys" checked></label>
+      <pre class="sysinfo" id="r-info">${esc(system)}</pre>
+      <div class="actions"><button class="btn" id="r-copy">Copia il rapporto</button><span style="flex:1"></span><button class="btn" data-close>Annulla</button><button class="btn prominent" id="r-send">Invia su GitHub…</button></div>`, (sheet, close) => {
+      const v = (id) => sheet.querySelector(id);
+      const kindTitle = () => KINDS.find(([k]) => k === v("#r-kind").value)[1];
+      const title = () => { const s = v("#r-sum").value.trim(); return `[${kindTitle()}] ` + (s ? s.slice(0, 80) : "senza titolo"); };
+      const body = () => `### Cosa è successo\n${v("#r-sum").value.trim() || "—"}\n\n### Come rifarlo\n${v("#r-steps").value.trim() || "—"}\n`
+        + (v("#r-sys").checked ? `\n### Il computer\n\`\`\`\n${system}\n\`\`\`\n` : "");
+      const ready = () => { v("#r-send").disabled = !v("#r-sum").value.trim(); v("#r-info").hidden = !v("#r-sys").checked; };
+      sheet.addEventListener("input", ready); ready();
+      v("#r-copy").addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(title() + "\n\n" + body()); v("#r-copy").textContent = "Copiato"; } catch (e) { v("#r-copy").textContent = "Copia non riuscita"; }
+      });
+      v("#r-send").addEventListener("click", async () => {
+        const q = new URLSearchParams({ title: title(), body: body().slice(0, 6000), labels: v("#r-kind").value === "idea" ? "enhancement" : "bug" });
+        await Bridge.openReport("https://github.com/LR-apps609/AudioLR/issues/new?" + q.toString());
+        close();
+      });
+    });
+  }
+
   // ── Cronologia ──
   function history(list, openEntry) {
     open(`<h2>Cronologia</h2>
@@ -238,6 +289,6 @@
     });
   }
 
-  window.Sheets = { settings, details, help, history, compare, notes, transpose, applyAppearance };
+  window.Sheets = { settings, details, help, report, history, compare, notes, transpose, applyAppearance };
   applyAppearance();
 })();

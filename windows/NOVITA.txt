@@ -1,5 +1,6 @@
 Novità di IsoLR per Windows 0.6.1:
 • Corretto: se la scheda grafica apre i modelli ma poi non riesce a fare il calcolo, IsoLR riprova da sola con il processore (più lento, ma funziona) invece di fermarsi. Come sul Mac 0.32.1
+• Nuovo tasto «Segnala» (la coccinella) in alto accanto ad «Aiuto», e nel messaggio quando una separazione non riesce: il rapporto è già compilato con il computer, l'ultimo errore e gli ultimi passi; si invia su GitHub o si copia (anche con Ctrl+Alt+B)
 • L'impostazione «Usa solo il processore» vale adesso anche per il modello Veloce
 
 Novità di IsoLR per Windows 0.6.0 «Transpose»:

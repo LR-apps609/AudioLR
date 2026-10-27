@@ -65,6 +65,8 @@
       return null;
     },
 
+    /** La pagina di GitHub con la segnalazione già compilata, nel browser. */
+    openReport(url) { if (DESKTOP) return invoke("open_report", { url }); window.lastReportUrl = url; },
     reveal(path) { if (DESKTOP) invoke("reveal", { path }); },
 
     /** Il computer resta sveglio mentre separa (album di notte). */

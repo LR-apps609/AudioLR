@@ -28,6 +28,7 @@
       ${u ? `<button class="btn round update" data-act="update">${Icon("up")}${ui.updating != null ? `Aggiorno… ${Math.round(ui.updating * 100)}%` : `Aggiornamento disponibile · ${esc(u.version)}`}</button>` : ""}
       <button class="btn round icon" data-act="library" title="Mostra o nascondi le tue canzoni">${Icon("sidebar")}</button>
       <button class="btn round" data-act="help">${Icon("help")}Aiuto</button>
+      <button class="btn round" data-act="report" title="Segnala un problema o un'idea (Ctrl+Alt+B): il rapporto è già compilato con il computer e l'ultimo errore">${Icon("bug")}Segnala</button>
       <button class="btn round" data-act="settings">${Icon("gear")}Impostazioni</button>`;
   }
 
@@ -76,7 +77,7 @@
         <div class="picked">${Icon("note")}${esc(f.name.replace(/\.[^.]+$/, ""))}<button class="btn borderless icon small" data-act="clear-pending" title="Togli">${Icon("x")}</button></div>
         <div class="muted">Scegli la qualità, poi premi «Separa»</div>`
       : `<h2>Trascina qui una canzone</h2><div class="muted">MP3, WAV, FLAC, M4A… oppure <button class="btn small" data-act="choose">Scegli un file</button></div>`}
-      ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)}</div>` : ""}
+      ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
         <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
@@ -403,6 +404,7 @@
       case "details": return window.Sheets.details(job.current);
       case "settings": return window.Sheets.settings();
       case "help": return window.Sheets.help();
+      case "report": return window.Sheets.report(job);
       case "history": return window.Sheets.history(ui.library, openEntry);
       case "update": if (ui.update && ui.updating == null) { ui.updating = 0; header(); try { await Bridge.installUpdate(ui.update.url, (p) => { ui.updating = p; header(); }); } catch (e) { ui.updating = null; toast("Aggiornamento non riuscito: " + (e.message || e)); header(); } } return;
       case "rec": return window.Recorder.start(player, job.current, async (path) => { ui.takes = await Bridge.listFiles(job.current.folder + "/Registrazioni", "wav"); await player.loadTake(path); transport(); }, (msg) => toast(msg), () => transport());
@@ -444,6 +446,7 @@
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
     if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
   });
   // Una canzone trascinata ovunque nella finestra

@@ -68,7 +68,17 @@
       this.worker = null; this.loaded = new Set(); this.batch = null;
       this.cpu = false;           // la scheda grafica qui non riesce a calcolare: si lavora con il processore
     }
-    emit() { this.dispatchEvent(new Event("change")); }
+    emit() {
+      // Il registro: gli ultimi passi, per «Segnala» (dicono dove si è fermata una separazione)
+      const line = this.error && this.phase === "failed" ? "Errore: " + this.error : this.step;
+      if (line && line !== this.lastLine) { this.lastLine = line; Job.log(line); }
+      this.dispatchEvent(new Event("change"));
+    }
+    static log(line) {
+      const t = new Date().toLocaleTimeString("it-IT");
+      Job.lines.push(`${t} ${line.replace(/ \d+%$/, "")}`);
+      if (Job.lines.length > 40) Job.lines.shift();
+    }
     get busy() { return this.phase === "working"; }
 
     /** Canzoni trascinate: la prima diventa «pronta» (si sceglie la qualità), le altre in coda se si lavora già. */
@@ -121,7 +131,7 @@
     async withFallback(work) {
       try { return await work(); } catch (e) {
         if (this.onCpu || String(e.message || e) === "annullato") throw e;
-        console.warn("La scheda grafica non riesce, si riprova con il processore:", e);
+        Job.log("La scheda grafica non riesce (" + String(e.message || e) + "): si riprova con il processore");
         if (this.worker) this.worker.terminate();
         this.worker = null; this.loaded = new Set(); this.cpu = true;
         this.step = "La scheda grafica non riesce: riprovo con il processore…"; this.progress = 0; this.emit();
@@ -221,6 +231,7 @@
 
     async open(entry) { if (this.busy) return; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
   }
+  Job.lines = [];
 
   // ── Analisi: tempo, tonalità, battiti, parti e accordi (core/*.js, come Analysis.swift), in un lavoratore ──
   function analyze(tracks) {

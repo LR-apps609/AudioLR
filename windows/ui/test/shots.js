@@ -71,6 +71,10 @@ async function fakeSong(page) {
       await shot("7-transpose");
       await page.keyboard.press("Escape");
       await page.evaluate(() => { IsoApp.player.setSemitones(0); IsoApp.render(); });
+      await page.click('[data-act="report"]');
+      await page.fill("#r-sum", "Studio si ferma a metà");
+      await shot("8-segnala");
+      await page.keyboard.press("Escape");
       await page.click('[data-act="settings"]');
       await shot("5-impostazioni");
       await page.keyboard.press("Escape");

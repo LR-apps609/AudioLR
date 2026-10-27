@@ -208,3 +208,9 @@ canvas.pitch { width: 100%; height: 220px; background: var(--well); border-radiu
 }
 .box { grid-template-columns: minmax(0, 1fr); }
 .box select { width: 100%; }
+/* Segnala (come la finestra «Segnala un bug» del Mac) */
+.sheet .field { display: grid; gap: 4px; font-size: 13px; }
+.sheet textarea { font: inherit; resize: vertical; border: 1px solid var(--stroke2); border-radius: 8px; background: var(--card); color: inherit; padding: 8px 10px; }
+.sheet .sysinfo { margin: 0; font: 11px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; max-height: 160px; overflow: auto; background: var(--bg2, transparent); border: 1px solid var(--stroke); border-radius: 8px; padding: 8px 10px; }
+.bug-badge { width: 36px; height: 36px; border-radius: 9px; background: var(--red); color: #fff; display: grid; place-items: center; flex: none; }
+.bug-badge svg { width: 20px; height: 20px; }
