@@ -819,9 +819,9 @@ struct ContentView: View {
 
     /// Ci stanno i tasti affiancati? Lo spazio della barra (la colonna meno i margini) contro quello che serve
     /// agli altri tasti più ai segmenti, con le misure di macOS 26 (controlli più grandi) e un po' di margine.
-    private var segmentsFit: Bool { transportSpace >= 390 + segmentsWidth }
+    private var segmentsFit: Bool { transportSpace >= 360 + segmentsWidth }
     /// «Esercitati» e «Senza…» con il nome: solo se c'è posto anche per i segmenti affiancati
-    private var transportLabels: Bool { transportSpace >= 530 + segmentsWidth }
+    private var transportLabels: Bool { transportSpace >= 500 + segmentsWidth }
     /// Lo spazio della barra: la colonna meno i margini e il riquadro «Scarica» a destra
     private var transportSpace: CGFloat { mainWidth - 108 - 288 }
     private var segmentsWidth: CGFloat { mixer.keys.contains("lead") ? 350 : 260 }
