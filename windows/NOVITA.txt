@@ -1,3 +1,7 @@
+Novità di IsoLR per Windows 0.6.1:
+• Corretto: se la scheda grafica apre i modelli ma poi non riesce a fare il calcolo, IsoLR riprova da sola con il processore (più lento, ma funziona) invece di fermarsi. Come sul Mac 0.32.1
+• L'impostazione «Usa solo il processore» vale adesso anche per il modello Veloce
+
 Novità di IsoLR per Windows 0.6.0 «Transpose»:
 • Nuovo tasto «Tonalità» nella barra del mixer: la canzone in un'altra tonalità (da −7 a +7 semitoni) senza cambiare la velocità, con la tonalità nuova a parole. Anche con Ctrl+Alt+↑ e ↓
 • I download seguono la tonalità scelta (tracce, mix, passaggio A–B, file per DJ, note, spartito e tablatura); con la casella nel riquadro «Scarica» puoi scegliere l'originale

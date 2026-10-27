@@ -10,7 +10,7 @@ importScripts("../core/midi.js");
 ort.env.wasm.wasmPaths = new URL("../vendor/", self.location).href;
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 2) : 1;
 
-let demucs = null, demucsCfg = null, cancelled = false;
+let demucs = null, demucsCfg = null, cancelled = false, cpuOnly = false;
 const nets = {};                                   // nome → { session, cfg, backend }
 const post = (type, data = {}, transfer = []) => self.postMessage({ type, ...data }, transfer);
 
@@ -44,7 +44,7 @@ async function loadDemucs(forceWasm) {
 async function runDemucs(input, from, span, step, name) {
   let sess, cfg;
   if (name) { if (!nets[name]) throw new Error("modello " + name + " non caricato"); sess = nets[name].session; cfg = nets[name].cfg; }
-  else { await loadDemucs(false); sess = demucs.session; cfg = demucsCfg; }
+  else { await loadDemucs(cpuOnly); sess = demucs.session; cfg = demucsCfg; }
   const runCore = async (spec, wave, le, seg) => {
     const out = await sess.run({
       spec: new ort.Tensor("float32", spec, [1, 4, cfg.nfft / 2, le]),
@@ -164,6 +164,7 @@ async function extraSplit(kind, audio) {
 
 self.onmessage = async (e) => {
   const m = e.data;
+  if (m.forceWasm !== undefined) cpuOnly = m.forceWasm;
   try {
     if (m.type === "load") {
       if (!nets[m.name]) {

@@ -66,6 +66,7 @@
       this.pending = null;        // canzone scelta ma non ancora separata
       this.progress = 0; this.step = ""; this.error = null;
       this.worker = null; this.loaded = new Set(); this.batch = null;
+      this.cpu = false;           // la scheda grafica qui non riesce a calcolare: si lavora con il processore
     }
     emit() { this.dispatchEvent(new Event("change")); }
     get busy() { return this.phase === "working"; }
@@ -110,8 +111,22 @@
       await Bridge.prepareModel(name, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
       this.step = `Preparo ${label}…`; this.progress = 0; this.emit();
       const bytes = await Bridge.readModel(name, "onnx"), cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
-      await this.call({ type: "load", name, bytes: bytes.buffer, cfg, forceWasm: Prefs.get("forceCpu", false) }, [bytes.buffer]);
+      await this.call({ type: "load", name, bytes: bytes.buffer, cfg, forceWasm: this.onCpu }, [bytes.buffer]);
       this.loaded.add(name);
+    }
+
+    get onCpu() { return this.cpu || Prefs.get("forceCpu", false); }
+
+    /** Come sul Mac: se la scheda grafica apre i modelli ma poi non riesce a calcolare, si rifà tutto con il processore. */
+    async withFallback(work) {
+      try { return await work(); } catch (e) {
+        if (this.onCpu || String(e.message || e) === "annullato") throw e;
+        console.warn("La scheda grafica non riesce, si riprova con il processore:", e);
+        if (this.worker) this.worker.terminate();
+        this.worker = null; this.loaded = new Set(); this.cpu = true;
+        this.step = "La scheda grafica non riesce: riprovo con il processore…"; this.progress = 0; this.emit();
+        return work();
+      }
     }
 
     /** Separa la canzone pronta (e poi quelle in coda) con la qualità scelta. */
@@ -125,13 +140,15 @@
       try {
         const song = await decode(file);
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
-        for (const m of QUALITY[quality].models) await this.model(m, m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti");
-        this.step = "Separazione"; this.progress = 0; this.emit();
         const t0 = performance.now();
         const split = Prefs.get("splitGuitarPiano", true);
-        // Al lavoratore va una copia: la canzone serve ancora qui per la base
-        const L = song.left.slice(), R = song.right.slice();
-        const res = await this.call({ type: "separate", quality, left: L, right: R, split }, [L.buffer, R.buffer]);
+        const res = await this.withFallback(async () => {
+          for (const m of QUALITY[quality].models) await this.model(m, m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti");
+          this.step = "Separazione"; this.progress = 0; this.emit();
+          // Al lavoratore va una copia: la canzone serve ancora qui per la base
+          const L = song.left.slice(), R = song.right.slice();
+          return this.call({ type: "separate", quality, left: L, right: R, split, forceWasm: this.onCpu }, [L.buffer, R.buffer]);
+        });
         const tracks = {};
         res.keys.forEach((k, i) => { tracks[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
         // La base è sempre la canzone meno la voce (voce + base ridanno la canzone)
@@ -180,10 +197,12 @@
       const listen = () => { this.splitProgress = this.progress; this.emit(); };
       this.addEventListener("change", listen);
       try {
-        await this.model(x.model, "il modello");
         const src = cur.meta.stems.find((s) => s.key === x.source);
-        const audio = Encode.readWav(await Bridge.readFile(cur.folder + "/" + src.file));
-        const res = await this.call({ type: "split", kind, left: audio[0], right: audio[1] }, [audio[0].buffer, audio[1].buffer]);
+        const res = await this.withFallback(async () => {
+          await this.model(x.model, "il modello");
+          const audio = Encode.readWav(await Bridge.readFile(cur.folder + "/" + src.file));
+          return this.call({ type: "split", kind, left: audio[0], right: audio[1] }, [audio[0].buffer, audio[1].buffer]);
+        });
         const parts = {};
         res.keys.forEach((k, i) => { parts[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
         await addStems(cur, parts);
