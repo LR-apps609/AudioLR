@@ -540,6 +540,13 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(EngineChoice.decide(agreement: 15).units, .cpuAndGPU)
     }
 
+    func testNoNeuralEngineChoiceIsKept() {
+        // Mac Intel: nessuna prova del motore, il modello resta su grafica e processore anche dopo il riavvio
+        let d = UserDefaults(suiteName: "intel-\(UUID().uuidString)")!
+        EngineChoice.store(EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE), for: "VoceRevive", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("VoceRevive", defaults: d)?.units, .all)
+    }
+
     func testProcessorOnlyChoiceIsRemembered() {
         // Su un Mac dove Neural Engine e grafica non riescono a calcolare si resta sul solo processore
         let d = UserDefaults(suiteName: "processore-\(UUID().uuidString)")!
