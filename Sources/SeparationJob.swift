@@ -354,6 +354,9 @@ final class SeparationJob: ObservableObject {
         let wantedInstruments = quality.instrumentModel
         let split = Prefs.splitGuitarPiano
         let downloads = quality.allModels
+        // Modalità leggera (computer lenti): meno passaggi e un modello in memoria alla volta
+        let light = Prefs.light, lightText = Prefs.lightText
+        let swOnBase = quality.swOnBase
         phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
         cancelled = cancel
@@ -374,7 +377,7 @@ final class SeparationJob: ObservableObject {
             }
             /// Con poca memoria, un modello che ha finito il suo passaggio si libera subito.
             func done(_ names: String?...) {
-                guard Prefs.lowMemory else { return }
+                guard Prefs.lowMemory || light else { return }
                 for n in names.compactMap({ $0 }) { ModelStore.shared.release(n) }
             }
             do {
@@ -527,6 +530,8 @@ final class SeparationJob: ObservableObject {
                 var instrumentsInput = mix
                 // Studio: batteria, basso e altro (tutto il resto) di SW sulla canzone intera, per le medie
                 var mixParts: [String: [[Float]]] = [:]
+                // Studio leggera B: gli strumenti sono quelli di SW sulla canzone, senza ripassare sulla base
+                var mixAll: (names: [String], audio: [[[Float]]])? = nil
                 if let v = voiceName {
                     var d = EngineChoice.current(v) ?? EngineChoice.decide(agreement: 99)
                     // Il modello voce davvero usato: se quello scelto non riesce si passa al più leggero
@@ -623,7 +628,7 @@ final class SeparationJob: ObservableObject {
                                 }
                                 members += 1
                             }
-                            mixParts = SeparationJob.instrumentTotals(names, all)
+                            if swOnBase { mixParts = SeparationJob.instrumentTotals(names, all) } else { mixAll = got }
                             swMixApplied = true
                             lap("Terza voce e strumenti (SW sulla canzone)")
                         } catch {
@@ -659,7 +664,10 @@ final class SeparationJob: ObservableObject {
                         return (model.config.sources, audio)
                     }
                     var res: (names: [String], audio: [[[Float]]])
-                    do { res = try await runSW(d.units) } catch is ImplausibleResult {
+                    if let m = mixAll {
+                        res = m
+                        mixAll = nil
+                    } else { do { res = try await runSW(d.units) } catch is ImplausibleResult {
                         do {
                             res = try await runSW(.cpuAndGPU)
                             d = EngineChoice.Decision(units: .cpuAndGPU, agreement: 0)
@@ -670,7 +678,7 @@ final class SeparationJob: ObservableObject {
                             d = EngineChoice.Decision(units: .cpuOnly, agreement: 0)
                         }
                         EngineChoice.store(d, for: w)
-                    }
+                    } }
                     decisions[w] = d
                     (sources, out) = SeparationJob.arrange(res.names, res.audio, voice: voiceOut, split: split)
                     // Le tracce grezze di SW non servono più (centinaia di MB con le canzoni lunghe)
@@ -793,6 +801,7 @@ final class SeparationJob: ObservableObject {
                 let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url, base: base)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
+                    + (lightText.map { " · modalità \($0)" } ?? "")
                 lap("Salvataggio")
                 let analysis = Analysis.analyze(out, sources: sources)
                 lap("Tempo e tonalità")

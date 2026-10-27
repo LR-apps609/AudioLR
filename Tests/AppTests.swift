@@ -540,6 +540,43 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(EngineChoice.decide(agreement: 15).units, .cpuAndGPU)
     }
 
+    func testLightModeDecision() {
+        // Automatico: leggero solo senza Neural Engine; le scelte delle Impostazioni vincono
+        XCTAssertTrue(Prefs.isLight(mode: "auto", hasNeuralEngine: false))
+        XCTAssertFalse(Prefs.isLight(mode: "auto", hasNeuralEngine: true))
+        XCTAssertTrue(Prefs.isLight(mode: "light", hasNeuralEngine: true))
+        XCTAssertFalse(Prefs.isLight(mode: "full", hasNeuralEngine: false))
+    }
+
+    func testLightStudioRecipe() {
+        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
+        UserDefaults.standard.set("light", forKey: Prefs.loadKey)
+        XCTAssertTrue(Prefs.light)
+        // Ricetta leggera: niente seconda voce né Demucs, si scaricano due modelli; pezzi sovrapposti come «Rapida»
+        XCTAssertNil(Quality.studio.secondVoice)
+        XCTAssertNil(Quality.studio.bassModel)
+        XCTAssertNil(Quality.studio.helperModel)
+        XCTAssertTrue(Quality.studio.swOnMix, "la voce di SW resta nella squadra")
+        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "StrumentiSW2"])
+        XCTAssertEqual(Quality.studio.swOnBase, Quality.lightStudioRecipe == .a)
+        XCTAssertEqual(Prefs.voiceOverlapValue, 1.5)
+        XCTAssertEqual(Prefs.instrumentOverlap, 1.5)
+        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"])
+        XCTAssertTrue(Prefs.lightText?.contains("Impostazioni") ?? false)
+        XCTAssertNotEqual(Quality.studio.cardTime, "circa 15 minuti")
+        // Completo: la squadra intera
+        UserDefaults.standard.set("full", forKey: Prefs.loadKey)
+        XCTAssertNil(Prefs.lightText)
+        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1", "HTDemucs"])
+        XCTAssertTrue(Quality.studio.swOnBase)
+    }
+
+    func testLightAverages() {
+        // Ricetta A: gli strumenti sono la media di SW sulla base e di SW sulla canzone, come le medie di Studio
+        let base: [[Float]] = [[1, 2, 3], [1, 2, 3]], onMix: [[Float]] = [[3, 2, 1], [5, 4, 3]]
+        XCTAssertEqual(SeparationJob.average([base, onMix]), [[2, 2, 2], [3, 3, 3]])
+    }
+
     func testNoNeuralEngineChoiceIsKept() {
         // Mac Intel: nessuna prova del motore, il modello resta su grafica e processore anche dopo il riavvio
         let d = UserDefaults(suiteName: "intel-\(UUID().uuidString)")!

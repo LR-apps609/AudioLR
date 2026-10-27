@@ -100,6 +100,8 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testShotSettings() throws { try shot(SettingsView(), "4-impostazioni", width: 660, height: 470) }
+    /// La scheda Motore, con «Carico sul computer»
+    func testShotEngineSettings() throws { try shot(EngineSettings(), "4b-motore", width: 660, height: 560) }
     func testShotAccount() throws { try shot(AccountView().environmentObject(SeparationJob.shared), "5-account", width: 480, height: 600) }
     func testShotFAQ() throws { try skipOnVirtualMac(); try shot(FAQView(), "6-domande", width: 620, height: 620) }
     func testShotBugReport() throws { try skipOnVirtualMac(); try shot(BugReportView(), "7-segnala", width: 520, height: 600) }

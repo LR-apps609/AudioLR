@@ -54,12 +54,20 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Studio in modalità leggera (computer lenti). A: voce da Revive e SW sulla canzone, strumenti dalla media di SW
+    /// sulla base e sulla canzone, niente Demucs né seconda voce. B: come A, ma gli strumenti solo da SW sulla canzone
+    /// (un passaggio in meno). Si sceglie con il banco di prova (Tools/banco_severo.py, «Leggera A» e «Leggera B»).
+    enum LightRecipe { case a, b }
+    static let lightStudioRecipe: LightRecipe = .a
+    /// Studio leggera con la ricetta B: SW non ripassa sulla base, gli strumenti vengono da SW sulla canzone.
+    var swOnBase: Bool { !(self == .studio && Prefs.light && Quality.lightStudioRecipe == .b) }
+
     /// In Studio il basso è la media di SW e del Demucs specializzato nel basso, sulla base senza voce:
     /// sulle 50 canzoni di MUSDB 9,80 dB contro 9,16 di Demucs da solo e 8,61 di SW. Se non c'è, resta quello di SW.
-    var bassModel: String? { self == .studio ? "HTDemucsFT-1" : nil }
+    var bassModel: String? { self == .studio && !Prefs.light ? "HTDemucsFT-1" : nil }
 
     /// In Studio il secondo modello voce, Kim: in squadra con Revive e SW.
-    var secondVoice: String? { self == .studio ? "VoceRoFormer9" : nil }
+    var secondVoice: String? { self == .studio && !Prefs.light ? "VoceRoFormer9" : nil }
 
     /// In Studio SW passa anche sulla canzone intera: la sua voce è il terzo membro della squadra
     /// e i suoi strumenti entrano nelle medie di batteria, basso e altro.
@@ -67,7 +75,7 @@ enum Quality: String, CaseIterable, Identifiable {
 
     /// In Studio Demucs (quello di Veloce) sulla base senza voce, per le medie degli strumenti:
     /// batteria 11,19 dB contro 11,09, altro 7,97 contro 7,77 (media con SW sulla base e sulla canzone).
-    var helperModel: String? { self == .studio ? ModelStore.name : nil }
+    var helperModel: String? { self == .studio && !Prefs.light ? ModelStore.name : nil }
 
     /// Il modello Demucs specializzato nella voce: con il modello voce RoFormer non si usa.
     static let voiceSpecialist = "HTDemucsFT-3"
@@ -134,8 +142,15 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Quanto ci mette, circa, per una canzone di 4 minuti su un Mac con chip Apple.
+    /// Quanto ci mette, circa, per una canzone di 4 minuti su un Mac con chip Apple (in leggero, meno passaggi).
     var cardTime: String {
+        if Prefs.light {
+            switch self {
+            case .fast: return "circa 30 secondi"
+            case .best: return "circa 2 minuti"
+            case .studio: return "circa 7 minuti"
+            }
+        }
         switch self {
         case .fast: return "circa 30 secondi"
         case .best: return "circa 3 minuti"

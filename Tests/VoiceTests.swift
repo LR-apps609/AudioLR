@@ -141,6 +141,9 @@ final class VoiceTests: XCTestCase {
     }
 
     func testStemsShownForQuality() {
+        // La ricetta completa (sul Mac Intel di GitHub l'automatico sarebbe leggero)
+        UserDefaults.standard.set("full", forKey: Prefs.loadKey)
+        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
         XCTAssertEqual(Theme.stems(for: .fast, split: true), ["vocals", "drums", "bass", "other"])
         XCTAssertEqual(Theme.stems(for: .best, split: true).count, 6)
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)

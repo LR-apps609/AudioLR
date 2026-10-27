@@ -1,3 +1,7 @@
+Novità della 0.34.0 «Leggera»:
+• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli per la voce invece di tre, niente Demucs), sovrappone meno i pezzi e tiene in memoria un modello alla volta: un filo meno pulita, molto più rapida e leggera
+• Sui Mac Intel (senza Neural Engine) è leggera in automatico; le schede della qualità lo dicono con l'etichetta «leggera», e i Dettagli della separazione con «modalità leggera»
+
 Novità della 0.33.0 «Warp e Rimonta»:
 • Warp (in «Vai più a fondo», o ⌥⌘G): un segnaposto sul primo battito di ogni battuta. Se IsoLR ne ha sbagliato uno lo trascini al suo posto, e lo ascolti con il clic del metronomo. «Salva la griglia» la usa per metronomo, parti e passaggio A–B
 • Metti a tempo: scegli il BPM e IsoLR crea una versione nuova della canzone in cui ogni battuta dura uguale, senza cambiare il tono. Tutte le tracce, pronte per Ableton, Logic o un set da DJ. L'originale resta com'è

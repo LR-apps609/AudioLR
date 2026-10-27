@@ -112,9 +112,21 @@ enum Prefs {
     static let dualKey = "dualEngine"
     static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
 
-    /// Sovrapposizione dei pezzi per il modello voce e per quello degli strumenti.
-    static var voiceOverlapValue: Double { fast ? 1.5 : Double(voiceOverlap) }
-    static var instrumentOverlap: Double { fast ? 1.5 : 2 }
+    /// Carico sul computer: «auto» (di serie), «light» o «full». Leggero = meno passaggi, meno memoria, pezzi meno
+    /// sovrapposti: un filo meno pulita, molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine.
+    static let loadKey = "computerLoad"
+    static var loadMode: String { UserDefaults.standard.string(forKey: loadKey) ?? "auto" }
+    static func isLight(mode: String, hasNeuralEngine: Bool) -> Bool { mode == "light" || (mode == "auto" && !hasNeuralEngine) }
+    static var light: Bool { isLight(mode: loadMode, hasNeuralEngine: SeparationJob.hasNeuralEngine) }
+    /// Per «Dettagli» e «Segnala»: perché la modalità è leggera (nil se è completa).
+    static var lightText: String? {
+        guard light else { return nil }
+        return loadMode == "light" ? "leggera (scelta nelle Impostazioni)" : "leggera (automatica: Mac senza Neural Engine)"
+    }
+
+    /// Sovrapposizione dei pezzi per il modello voce e per quello degli strumenti (in leggero come «Rapida»).
+    static var voiceOverlapValue: Double { fast || light ? 1.5 : Double(voiceOverlap) }
+    static var instrumentOverlap: Double { fast || light ? 1.5 : 2 }
 
     /// Quante volte ogni punto della canzone passa nel modello voce: 2 equilibrio, 4 più preciso e più lento.
     static var voiceOverlap: Int {

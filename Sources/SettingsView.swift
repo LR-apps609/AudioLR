@@ -97,6 +97,7 @@ struct EngineSettings: View {
     @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
     @AppStorage(Prefs.engineModeKey) private var engineMode = "auto"
     @AppStorage(Prefs.dualKey) private var dual = true
+    @AppStorage(Prefs.loadKey) private var load = "auto"
 
     static func load() -> [(String, EngineChoice.Decision?)] {
         [("Veloce", EngineChoice.stored(ModelStore.name)),
@@ -125,6 +126,16 @@ struct EngineSettings: View {
                 Text("Motore")
             } footer: {
                 Text("Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("Carico sul computer", selection: $load) {
+                    Text(SeparationJob.hasNeuralEngine ? "Automatico (completo)" : "Automatico (leggero su questo Mac)").tag("auto")
+                    Text("Leggero").tag("light")
+                    Text("Completo").tag("full")
+                }
+            } footer: {
+                Text("Leggero: meno passaggi e meno memoria; un filo meno pulita, molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine (Mac Intel).")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

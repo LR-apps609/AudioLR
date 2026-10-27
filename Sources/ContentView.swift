@@ -55,6 +55,8 @@ struct ContentView: View {
     @State private var news: [String] = []
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
     @AppStorage("showLibrary") private var showLibrary = true
+    /// Il carico sul computer: con «leggero» le schede della qualità cambiano tempi ed etichetta
+    @AppStorage(Prefs.loadKey) private var loadMode = "auto"
     @State private var showGuide = false
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
@@ -333,6 +335,12 @@ struct ContentView: View {
                 HStack(spacing: 6) {
                     Image(systemName: q.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Theme.brass : Color.secondary)
                     Text(q == .best ? "Massima" : q.title).font(.system(size: 14, weight: .semibold))
+                    if q != .fast && Prefs.isLight(mode: loadMode, hasNeuralEngine: SeparationJob.hasNeuralEngine) {
+                        Text("leggera").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().strokeBorder(Theme.stroke))
+                            .help("Modalità leggera (Impostazioni › Motore): meno passaggi, più rapida sui computer lenti")
+                    }
                 }
                 Text("\(tracks) tracce · \(q.cardLine)").font(.system(size: 11.5)).foregroundStyle(.secondary)
                 Text(q.cardTime).font(.system(size: 11.5)).foregroundStyle(.secondary)
