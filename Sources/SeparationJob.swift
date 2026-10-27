@@ -880,6 +880,7 @@ final class SeparationJob: ObservableObject {
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
     nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]], label: String = "",
                                          say: @escaping (String) async -> Void = { _ in }) async throws -> EngineChoice.Decision {
+        if !hasNeuralEngine { return EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE) }
         let what = label.isEmpty ? "il modello" : "il modello \(label)"
         // La stessa copia che poi lavorerà sul Neural Engine (con i due motori insieme): una copia in meno in memoria
         let aneUnits: MLComputeUnits = useDual ? .cpuAndNeuralEngine : .all
@@ -951,6 +952,8 @@ final class SeparationJob: ObservableObject {
 
     /// Prova Neural Engine e grafica sul pezzo centrale della canzone e decide dove lavorare.
     nonisolated static func tune(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
+        // Senza Neural Engine il confronto metterebbe a confronto la grafica con sé stessa (sui Mac Intel, decine di minuti)
+        if !hasNeuralEngine { return EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE) }
         let ane = try await ModelStore.shared.load(name, units: .all) { _ in }
         let gpu = try await ModelStore.shared.load(name, units: .cpuAndGPU) { _ in }
         let norm = Separator.normalized(mix).norm

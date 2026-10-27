@@ -186,6 +186,8 @@ enum EngineChoice {
     static let slowANE = -1.0
     static let chosenGPU = -2.0
     static let lowMemoryGPU = -3.0
+    /// Mac senza Neural Engine (Intel): non c'è niente da confrontare, il modello lavora su grafica e processore
+    static let noANE = -4.0
 
     /// La scelta da usare adesso per un modello: quella delle Impostazioni («Solo grafica»), o quella ricordata.
     static func current(_ model: String) -> Decision? {
