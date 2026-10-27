@@ -129,12 +129,8 @@ jobs:
           F="IsoLR-Windows-$V.exe"
           if [ "${GITHUB_REF_NAME}" = "main" ]; then
             if gh release view "win-v$V" >/dev/null 2>&1; then echo "::notice::win-v$V esiste già: niente rilascio"; exit 0; fi
-            NOTE=$(python - <<'PY'
-          import re
-          t = open("windows/NOVITA.txt", encoding="utf-8").read()
-          print(t.split("\n\n")[0])
-          PY
-          )
+            # Il primo paragrafo di NOVITA.txt (awk: Python su Windows non sa stampare «−» e le frecce)
+            NOTE=$(awk 'BEGIN { RS = "" } NR == 1 { print; exit }' windows/NOVITA.txt)
             gh release create "win-v$V" "$F" --title "IsoLR per Windows $V" --notes "$NOTE
 
           Non firmata: la prima volta Windows può mostrare un avviso (Ulteriori informazioni › Esegui comunque)." 2> rel.err || { sed 's/^/::error::/' rel.err; exit 1; }
