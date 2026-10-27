@@ -57,6 +57,10 @@ async function fakeSong(page) {
       // Una canzone trascinata: pronta, con le schede della qualità
       await page.evaluate(() => IsoApp.job.add([new File([new Uint8Array(1000)], "Canzone di prova.mp3")]));
       await shot("2-pronta");
+      // Modalità leggera: le schede della qualità con l'etichetta e i tempi più brevi
+      await page.evaluate(() => { Prefs.set("computerLoad", "light"); IsoApp.render(); });
+      await shot("2b-leggera");
+      await page.evaluate(() => { Prefs.set("computerLoad", "auto"); IsoApp.render(); });
       await fakeSong(page);
       await page.evaluate(async () => { const e = IsoApp.ui.library[0]; await IsoApp.job.open(e); });
       await page.waitForTimeout(1500);
@@ -89,6 +93,8 @@ async function fakeSong(page) {
       await page.keyboard.press("Escape");
       await page.click('[data-act="settings"]');
       await shot("5-impostazioni");
+      await page.click('[data-t="motore"]');
+      await shot("5b-motore");
       await page.keyboard.press("Escape");
       await page.click('[data-act="details"]');
       await shot("6-dettagli");

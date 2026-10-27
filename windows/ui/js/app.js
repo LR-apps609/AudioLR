@@ -80,7 +80,7 @@
       ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
-        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
+        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}"><b>${Icon(v.icon)}${v.title}${k !== "fast" && job.light ? `<em class="tag" title="Modalità leggera (Impostazioni › Motore): meno passaggi, più rapida sui computer lenti">leggera</em>` : ""}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
       <button class="btn prominent round" data-act="separate" ${f ? "" : "disabled"}>${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa · ${Separation.QUALITY[q].title === "Massima" ? "Massima qualità" : Separation.QUALITY[q].title}</button>
       <div class="label">Riceverai</div>
       <div class="chips">${keys.map((k) => `<span class="chip" style="--c:var(--c-${k})">${Icon(ICON[k])}${Separation.NAMES[k]}</span>`).join("")}</div>

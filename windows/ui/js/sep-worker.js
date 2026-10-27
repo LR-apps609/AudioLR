@@ -2,10 +2,12 @@
 // (Sources/Engine.swift, SeparationJob.swift): Veloce = HTDemucs; Massima = BS-RoFormer SW; Studio = voce
 // media di Revive, Kim e SW, strumenti media di SW sulla base, HTDemucs sulla base e SW sulla canzone.
 // Più le divisioni in più: voce e cori, voce maschile e femminile, batteria nei suoi pezzi.
+// In modalità leggera (core/load.js): Studio con due modelli, pezzi meno sovrapposti, e ogni modello
+// chiesto alla finestra quando serve e chiuso appena ha finito (uno alla volta in memoria).
 /* global ort, AudioLREngine, AudioLRRoFormer, AudioLRMDX23C */
 importScripts("../vendor/ort.webgpu.min.js", "../app/engine-core.js", "../app/roformer-core.js");
 try { importScripts("../core/mdx23c-core.js"); } catch (e) { /* DrumSep arriva con i modelli nuovi */ }
-importScripts("../core/midi.js");
+importScripts("../core/midi.js", "../core/load.js");
 
 ort.env.wasm.wasmPaths = new URL("../vendor/", self.location).href;
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 2) : 1;
@@ -67,10 +69,28 @@ function netFor(name) {
   return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
 }
 
+// Modalità leggera: i modelli si chiedono alla finestra quando servono e si chiudono appena finito
+let light = false, lastBackend = null;
+const waiting = {};                                // nome → { resolve, reject }
+async function ensure(name) {
+  if (nets[name] || !light) return;
+  await new Promise((resolve, reject) => { waiting[name] = { resolve, reject }; post("need", { name }); });
+}
+function releaseNet(name) {
+  if (!light || !nets[name]) return;
+  lastBackend = nets[name].backend;
+  try { nets[name].session.release(); } catch (e) { /* già chiuso */ }
+  delete nets[name];
+  post("released", { name });
+}
+
 async function runRoformer(name, input, from, span, step) {
+  await ensure(name);
   const m = nets[name];
   if (!m) throw new Error("modello " + name + " non caricato");
+  lastBackend = m.backend;
   const out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
+    overlap: self.IsoLR.Load.overlap(light),
     onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
   const res = {};
   m.cfg.sources.forEach((k, i) => { res[String(k).toLowerCase()] = out[i]; });
@@ -105,7 +125,18 @@ async function separate(quality, mix, split) {
     tracks = { vocals: d.vocals, drums: d.drums, bass: d.bass, other: d.other };
   } else if (quality === "best") {
     const s = await runRoformer("StrumentiSW", mix, 0, 1, "Strumenti");
+    releaseNet("StrumentiSW");
     tracks = { vocals: s.vocals, drums: s.drums, bass: s.bass, guitar: s.guitar, piano: s.piano, other: s.other };
+  } else if (light) {
+    // Studio leggera (come sul Mac): voce da Revive e SW sulla canzone; strumenti da SW (ricetta A anche sulla base)
+    const L = self.IsoLR.Load, both = L.LIGHT_STUDIO === "a", P = both ? 1 / 3 : 1 / 2;
+    const revive = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 2")).vocals;
+    releaseNet("VoceRevive");
+    const onMix = await runRoformer("StrumentiSW", mix, P, P, "Voce 2 di 2 e strumenti");
+    const voice = L.voice(revive, onMix, n);
+    const onBase = both ? await runRoformer("StrumentiSW", minus(mix, voice, n), 2 * P, P, "Strumenti sulla base") : null;
+    releaseNet("StrumentiSW");
+    tracks = { vocals: voice, ...L.instruments(onMix, onBase, n) };
   } else {
     // Studio: 7 passaggi, la barra divisa in parti uguali
     const P = 1 / 7;
@@ -166,6 +197,21 @@ self.onmessage = async (e) => {
   const m = e.data;
   if (m.forceWasm !== undefined) cpuOnly = m.forceWasm;
   try {
+    if (m.type === "provide") {
+      // Un modello chiesto dalla separazione leggera
+      try {
+        const { s, ep } = await session(new Uint8Array(m.bytes), cpuOnly);
+        nets[m.name] = { session: s, cfg: m.cfg, backend: ep };
+        if (waiting[m.name]) waiting[m.name].resolve();
+      } catch (err) { if (waiting[m.name]) waiting[m.name].reject(err); }
+      delete waiting[m.name];
+      return;
+    }
+    if (m.type === "provide-error") {
+      if (waiting[m.name]) waiting[m.name].reject(new Error(m.message));
+      delete waiting[m.name];
+      return;
+    }
     if (m.type === "load") {
       if (!nets[m.name]) {
         const { s, ep } = await session(new Uint8Array(m.bytes), m.forceWasm);
@@ -176,11 +222,12 @@ self.onmessage = async (e) => {
       cancelled = true;
     } else if (m.type === "separate") {
       cancelled = false;
+      light = !!m.light;
       const t0 = performance.now();
       const tracks = await separate(m.quality, [m.left, m.right], m.split);
       const keys = Object.keys(tracks);
       const buffers = keys.flatMap((k) => tracks[k]);
-      const backend = (nets.StrumentiSW || demucs || {}).backend || "wasm";
+      const backend = (nets.StrumentiSW || demucs || {}).backend || lastBackend || "wasm";
       post("done", { keys, channels: buffers, seconds: (performance.now() - t0) / 1000, backend }, buffers.map((b) => b.buffer));
     } else if (m.type === "notes") {
       // Basic Pitch: le note di una traccia (finestre di 2 s a 22 050 Hz), poi le stesse regole del Mac

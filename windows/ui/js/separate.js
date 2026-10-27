@@ -7,10 +7,11 @@
   "use strict";
   const RATE = 44100;
 
+  // I modelli e i tempi di ogni qualità (completa o leggera) sono in core/load.js
   const QUALITY = {
-    fast: { title: "Veloce", icon: "bolt", line: "4 tracce · per provare un'idea", models: [], perMinute: 8, keys: ["vocals", "drums", "bass", "other"] },
-    best: { title: "Massima", icon: "sparkle", line: "6 tracce · pulita e veloce", models: ["StrumentiSW"], perMinute: 40, keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
-    studio: { title: "Studio", icon: "star", line: "6 tracce · la più pulita", models: ["VoceRevive", "VoceRoFormer9", "StrumentiSW", "HTDemucsFT-1"], perMinute: 200, keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
+    fast: { title: "Veloce", icon: "bolt", line: "4 tracce · per provare un'idea", keys: ["vocals", "drums", "bass", "other"] },
+    best: { title: "Massima", icon: "sparkle", line: "6 tracce · pulita e veloce", keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
+    studio: { title: "Studio", icon: "star", line: "6 tracce · la più pulita", keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
   };
   const EXTRA = {
     vocals: { source: "vocals", parts: ["lead", "backing"], model: "VoceCori3", title: "Separa voce e cori", detail: "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori", icon: "people", size: "circa 200 MB" },
@@ -18,9 +19,15 @@
     drums: { source: "drums", parts: ["kick", "snare", "toms", "hh", "ride", "crash"], model: "BatteriaDrumSep", title: "Dividi la batteria", detail: "Cassa, rullante, tom, charleston, ride e crash in corsie proprie", icon: "grid", size: "circa 200 MB" },
   };
 
-  // «circa 3 minuti» per una canzone di 4 minuti, come le schede della qualità sul Mac
-  function estimate(q, seconds = 240) {
-    const s = (QUALITY[q].perMinute * seconds) / 60;
+  /** Il carico sul computer (core/load.js): leggero sui computer lenti o se scelto nelle Impostazioni. */
+  function loadInfo(fellBack = false) {
+    return { mode: Prefs.get("computerLoad", "auto"), webgpu: "gpu" in navigator, forceCpu: Prefs.get("forceCpu", false),
+      fellBack, memoryGB: navigator.deviceMemory };
+  }
+
+  // «circa 3 minuti» per una canzone di 4 minuti, come le schede della qualità sul Mac (in leggero, meno passaggi)
+  function estimate(q, seconds = 240, light = IsoLR.Load.isLight(loadInfo())) {
+    const s = (IsoLR.Load.perMinute(q, light) * seconds) / 60;
     if (s < 50) return "circa 30 secondi";
     const m = Math.max(1, Math.round(s / 60));
     return `circa ${m} ${m === 1 ? "minuto" : "minuti"}`;
@@ -104,6 +111,9 @@
         const w = this.worker;
         const on = (e) => {
           const m = e.data;
+          // Separazione leggera: il lavoratore chiede un modello quando serve, e dice quando l'ha chiuso
+          if (m.type === "need") { this.provide(m.name); return; }
+          if (m.type === "released") { this.loaded.delete(m.name); return; }
           if (m.type === "progress") { this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
           w.removeEventListener("message", on);
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
@@ -113,6 +123,20 @@
         w.postMessage(msg, transfer);
       });
     }
+
+    /** Separazione leggera: il modello chiesto dal lavoratore (già scaricato), senza aspettare risposta. */
+    async provide(name) {
+      try {
+        const bytes = await Bridge.readModel(name, "onnx"), cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
+        this.worker.postMessage({ type: "provide", name, bytes: bytes.buffer, cfg }, [bytes.buffer]);
+        this.loaded.add(name);
+      } catch (e) {
+        if (this.worker) this.worker.postMessage({ type: "provide-error", name, message: String(e.message || e) });
+      }
+    }
+
+    get light() { return IsoLR.Load.isLight(loadInfo(this.cpu)); }
+    get lightText() { return IsoLR.Load.text(loadInfo(this.cpu)); }
 
     /** Scarica (la prima volta), verifica e carica nel lavoratore un modello. */
     async model(name, label) {
@@ -152,12 +176,20 @@
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
         const t0 = performance.now();
         const split = Prefs.get("splitGuitarPiano", true);
+        let light = false;
         const res = await this.withFallback(async () => {
-          for (const m of QUALITY[quality].models) await this.model(m, m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti");
+          // In leggero (computer lenti) meno modelli, e il lavoratore li apre uno alla volta quando servono
+          light = this.light;
+          for (const m of IsoLR.Load.models(quality, light)) {
+            const label = m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti";
+            if (!light) { await this.model(m, label); continue; }
+            this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
+            await Bridge.prepareModel(m, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
+          }
           this.step = "Separazione"; this.progress = 0; this.emit();
           // Al lavoratore va una copia: la canzone serve ancora qui per la base
           const L = song.left.slice(), R = song.right.slice();
-          return this.call({ type: "separate", quality, left: L, right: R, split, forceWasm: this.onCpu }, [L.buffer, R.buffer]);
+          return this.call({ type: "separate", quality, light, left: L, right: R, split, forceWasm: this.onCpu }, [L.buffer, R.buffer]);
         });
         const tracks = {};
         res.keys.forEach((k, i) => { tracks[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
@@ -171,7 +203,7 @@
         const analysis = await analyze(tracks);
         this.step = "Salvo le tracce"; this.emit();
         const took = (performance.now() - t0) / 1000;
-        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name });
+        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name, mode: light ? this.lightText : null });
         this.phase = "done"; this.batch.songs++;
         this.emit();
       } catch (e) {
@@ -275,7 +307,7 @@
         peakDB: m[k].peak > 0 ? +(20 * Math.log10(m[k].peak * gain)).toFixed(1) : -120, peaks: m[k].peaks });
     }
     const meta = { version: 1, title, created: new Date().toISOString(), quality: info.quality, duration: info.seconds, took: info.took,
-      engine: info.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore", gainDB: +(20 * Math.log10(gain)).toFixed(2),
+      engine: (info.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore") + (info.mode ? ` · modalità ${info.mode}` : ""), gainDB: +(20 * Math.log10(gain)).toFixed(2),
       source: info.source, analysis: info.analysis, stems };
     await Bridge.writeText(`${folder}/isolr.json`, JSON.stringify(meta));
     return { folder, meta };
@@ -344,5 +376,5 @@
     } catch {}
   }
 
-  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, library, decode, measure, saveVersion };
+  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, loadInfo, library, decode, measure, saveVersion };
 })();

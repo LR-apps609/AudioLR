@@ -240,3 +240,4 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 .arr-head { position: absolute; top: 0; bottom: 6px; width: 2px; background: var(--ink); pointer-events: none; border-radius: 1px; }
 .trow .tools { display: flex; gap: 8px; margin-left: auto; }
 .box .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.qcard b .tag { font: 600 10px/1 var(--font, inherit); font-style: normal; color: var(--muted); border: 1px solid var(--stroke2); border-radius: 99px; padding: 2px 6px; margin-left: 2px; }

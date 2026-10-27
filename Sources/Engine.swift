@@ -148,7 +148,7 @@ enum Quality: String, CaseIterable, Identifiable {
             switch self {
             case .fast: return "circa 30 secondi"
             case .best: return "circa 2 minuti"
-            case .studio: return "circa 7 minuti"
+            case .studio: return "circa 6 minuti"
             }
         }
         switch self {
