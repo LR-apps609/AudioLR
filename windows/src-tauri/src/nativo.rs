@@ -18,6 +18,13 @@ pub struct Net {
 
 static NETS: OnceLock<Mutex<HashMap<String, Net>>> = OnceLock::new();
 static INIT: OnceLock<Result<(), String>> = OnceLock::new();
+/// Perché la scheda grafica non ha aperto l'ultimo modello (per il registro e «Segnala»).
+static GPU_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+/// L'ultimo motivo per cui DirectML non ha aperto un modello, se c'è.
+pub fn gpu_error() -> Option<String> {
+    GPU_ERROR.lock().unwrap().clone()
+}
 
 fn nets() -> &'static Mutex<HashMap<String, Net>> {
     NETS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -52,7 +59,18 @@ pub fn load(name: &str, path: &Path, cpu_only: bool) -> Result<&'static str, Str
     if let Some(n) = nets().lock().unwrap().get(name) {
         return Ok(n.backend);
     }
-    let (session, backend) = match if cpu_only { None } else { build(path, true).ok() } {
+    let gpu = if cpu_only {
+        None
+    } else {
+        match build(path, true) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                *GPU_ERROR.lock().unwrap() = Some(e.to_string());
+                None
+            }
+        }
+    };
+    let (session, backend) = match gpu {
         Some(s) => (s, "Scheda grafica (DirectML)"),
         None => (build(path, false).map_err(|e| format!("non riesco ad aprire il modello: {e}"))?, "Processore"),
     };

@@ -376,6 +376,12 @@ fn native_release(name: String) {
     nativo::release(&name);
 }
 
+/// Perché la scheda grafica non ha aperto un modello (se è successo).
+#[tauri::command]
+fn native_gpu_error() -> Option<String> {
+    nativo::gpu_error()
+}
+
 /// Dove sta calcolando un modello aperto (dopo un ripiego può essere cambiato).
 #[tauri::command]
 fn native_backend(name: String) -> Option<String> {
@@ -460,7 +466,7 @@ fn main() {
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, read_model, models_ready, check_update, install_update,
-            native_load, native_run, native_release, native_backend
+            native_load, native_run, native_release, native_backend, native_gpu_error
         ])
         .run(tauri::generate_context!())
         .expect("IsoLR non è riuscita ad avviarsi");

@@ -130,7 +130,12 @@
     /** Apre un RoFormer fuori dalla finestra (ONNX Runtime nativo): dice dove calcola, o null se non si può. */
     async openNative(name, cfg) {
       if (!Bridge.desktop || !/roformer/i.test(cfg.kind || "")) return null;
-      try { return await Bridge.nativeLoad(name, this.onCpu); } catch (e) { Job.log(`Calcolo nativo non disponibile (${e.message || e}): resto nella finestra`); return null; }
+      try {
+        const backend = await Bridge.nativeLoad(name, this.onCpu);
+        Job.log(`${name}: ${backend}`);
+        if (backend === "Processore" && !this.onCpu) { const why = await Bridge.nativeGpuError(); if (why) Job.log(`DirectML non ha aperto il modello: ${why.slice(0, 300)}`); }
+        return backend;
+      } catch (e) { Job.log(`Calcolo nativo non disponibile (${e.message || e}): resto nella finestra`); return null; }
     }
 
     /** Un pezzo chiesto dal lavoratore: lo calcola il modello aperto fuori dalla finestra. */

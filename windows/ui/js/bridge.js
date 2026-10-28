@@ -103,6 +103,7 @@
     },
     nativeRelease(name) { if (DESKTOP) invoke("native_release", { name }).catch(() => {}); },
     async nativeBackend(name) { return DESKTOP ? invoke("native_backend", { name }) : null; },
+    async nativeGpuError() { return DESKTOP ? invoke("native_gpu_error") : null; },
 
     // ── Aggiornamenti ──
     async checkUpdate() { return DESKTOP ? invoke("check_update") : null; },

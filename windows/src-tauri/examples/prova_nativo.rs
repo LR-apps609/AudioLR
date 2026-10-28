@@ -10,7 +10,7 @@ fn main() {
     let model = Path::new(&a[2]);
     let (t, f): (usize, usize) = (a[3].parse().unwrap(), a[4].parse().unwrap());
     match nativo::load("gpu", model, false) {
-        Ok(b) => println!("::notice::Con la scheda grafica il modello si apre su: {b}"),
+        Ok(b) => println!("::notice::Con la scheda grafica il modello si apre su: {b} {}", nativo::gpu_error().map(|e| format!("(DirectML: {e})")).unwrap_or_default()),
         Err(e) => println!("::warning::Con la scheda grafica non si apre: {e}"),
     }
     nativo::release("gpu");
