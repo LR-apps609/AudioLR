@@ -69,11 +69,14 @@ function netFor(name) {
   return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
 }
 
-// Sui computer deboli: i modelli si chiedono alla finestra quando servono e si chiudono appena finito
+// Massima e Studio: i modelli si chiedono alla finestra quando servono e si chiudono appena finito
+// (uno alla volta in memoria: due RoFormer aperti insieme sulla scheda grafica possono bloccare il computer)
 let light = false, lastBackend = null;
 const waiting = {};                                // nome → { resolve, reject }
 async function ensure(name) {
   if (nets[name] || !light) return;
+  const label = name.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti";
+  post("progress", { step: `Preparo ${label} (la prima volta può volerci qualche minuto)…` });
   await new Promise((resolve, reject) => { waiting[name] = { resolve, reject }; post("need", { name }); });
 }
 function releaseNet(name) {

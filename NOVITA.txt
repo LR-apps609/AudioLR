@@ -1,3 +1,6 @@
+Novità della 0.34.1:
+• Mentre separa, le barre delle tracce hanno un riflesso che scorre finché il lavoro vero non parte (modello, lettura), e prima di leggere la canzone l'onda si muove: si vede sempre che IsoLR sta lavorando
+
 Novità della 0.34.0 «Studio più rapida»:
 • Studio è più rapida e pulita: tre passaggi invece di cinque (voce da Revive e SW, strumenti da SW sulla canzone e sulla base). Sulle 50 canzoni intere di prova è uguale o migliore di prima in ogni traccia: voce 12,21 dB contro 12,11, batteria 12,34 contro 12,29, basso 11,29 contro 10,93, altri strumenti 9,64 contro 9,45. Circa 2–3 volte più veloce, e molto di più sui Mac Intel
 • Tre qualità, uguali su tutti i Mac: Rapida (prima si chiamava «Veloce»), Massima e Studio. Cambia solo il tempo, non il risultato

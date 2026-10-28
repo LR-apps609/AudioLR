@@ -92,16 +92,83 @@
     drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); job.add(e.dataTransfer.files); };
   }
 
-  function work(p) {
-    p.innerHTML = `<div class="work">
-      <div class="wave" style="justify-content:center">${waveBars()}</div>
-      <h2 style="margin:0;font:700 19px var(--font-display)">${esc(job.title || "")}</h2>
-      <div class="muted">${esc(job.step)} · ${Separation.QUALITY[ui.quality].title}</div>
-      <div class="bar" style="margin:0 auto"><i style="width:${Math.round(job.progress * 100)}%"></i></div>
-      ${job.queue.length ? `<div class="queue">Dopo: ${job.queue.length} ${job.queue.length === 1 ? "canzone" : "canzoni"} in coda</div>` : ""}
-      <div><button class="btn" data-act="cancel">Annulla</button></div>
-    </div>`;
+  // ── Lavoro in corso (come la schermata del Mac): la canzone che si colora, le tracce che nascono,
+  // la percentuale, la fase e il tempo; barre che si muovono finché c'è da aspettare ──
+  const STAGES = [["reading", "Lettura"], ["model", "Modello"], ["separating", "Separazione"], ["saving", "Salvataggio"]];
+  const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  function workKeys() {
+    const keys = Separation.QUALITY[job.quality || ui.quality].keys.filter((k) => Prefs.get("splitGuitarPiano", true) || !["guitar", "piano"].includes(k));
+    return Prefs.get("makeInstrumental", true) ? [...keys, "instrumental"] : keys;
   }
+
+  /** Quanto è separata la canzone (0…1): solo durante la separazione vera e propria. */
+  const separated = () => (job.stage === "separating" ? job.progress : job.stage === "saving" ? 1 : 0);
+
+  function workDetail() {
+    const since = (Date.now() - (job.stageStarted || Date.now())) / 1000;
+    if (job.stage === "separating" && job.progress > 0.03) {
+      const left = (since / job.progress) * (1 - job.progress);
+      return left < 60 ? "Manca meno di un minuto" : `Mancano circa ${Math.round(left / 60)} min · da ${clock(since)}`;
+    }
+    if (job.stage === "model") return `Solo la prima volta · da ${clock(since)}`;
+    return `Da ${clock(since)}`;
+  }
+
+  function drawSong(canvas) {
+    const peaks = job.peaks, ctx = canvas.getContext("2d"), dpr = devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w) return;
+    canvas.width = w * dpr; canvas.height = h * dpr; ctx.scale(dpr, dpr);
+    const css = getComputedStyle(document.documentElement);
+    const on = css.getPropertyValue("--brass").trim(), off = css.getPropertyValue("--stroke2").trim();
+    const bars = Math.floor(w / 4), done = separated();
+    let top = 0; for (const v of peaks) top = Math.max(top, v);
+    for (let i = 0; i < bars; i++) {
+      const v = peaks[Math.floor((i * peaks.length) / bars)] / (top || 1);
+      const bh = Math.max(1.5, Math.sqrt(v) * h * 0.92);
+      ctx.fillStyle = i / bars < done ? on : off;
+      ctx.beginPath(); ctx.roundRect(i * 4, (h - bh) / 2, 2.5, bh, 1.25); ctx.fill();
+    }
+  }
+
+  function work(p) {
+    // Mentre un modello si apre non c'è una percentuale vera: tre puntini invece di uno «0%» fermo
+    const pct = job.stage === "saving" ? "100%" : (job.stage === "model" || job.stage === "reading") && !job.progress ? "…" : `${Math.round(job.progress * 100)}%`;
+    const queue = job.queue.length ? `${job.queue.length} in coda` : "";
+    const current = STAGES.findIndex(([k]) => k === job.stage);
+    // Se la schermata c'è già si aggiornano solo i valori: ridisegnarla farebbe ripartire le animazioni
+    let w = p.querySelector(".work2");
+    if (!w) {
+      p.innerHTML = `<div class="work2">
+        <h2 class="wtitle"></h2>
+        <div class="song">${`<div class="wave busy">${waveBars()}</div>`}<canvas hidden></canvas></div>
+        <div class="born">${workKeys().map((k) => `<div class="brow"><span class="stem-ic" style="--c:var(--c-${k})">${Icon(ICON[k] || "note")}</span><b>${Separation.NAMES[k]}</b><div class="bar busy" style="--c:var(--c-${k})"><i></i></div></div>`).join("")}</div>
+        <div class="wfoot"><span class="pct"></span><div class="wtext"><b class="step"></b><span class="detail muted"></span></div>
+          <span class="chip qchip"></span><button class="btn" data-act="cancel">Annulla</button></div>
+        <div class="stages"></div>
+      </div>`;
+      w = p.querySelector(".work2");
+    }
+    w.querySelector(".wtitle").textContent = job.title || "";
+    w.querySelector(".pct").textContent = pct;
+    w.querySelector(".step").textContent = `${job.step} · ${Separation.QUALITY[job.quality || ui.quality].title}`;
+    w.querySelector(".detail").textContent = workDetail();
+    const q = w.querySelector(".qchip"); q.textContent = queue; q.hidden = !queue;
+    w.querySelectorAll(".born .bar i").forEach((i) => { i.style.width = `${Math.round(separated() * 100)}%`; });
+    // Finché la separazione non parte, sulle barre scorre un riflesso: si vede che IsoLR sta lavorando
+    w.querySelector(".born").classList.toggle("waiting", job.stage !== "separating" && job.stage !== "saving");
+    w.querySelector(".stages").innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
+    if (job.peaks) {
+      // La forma d'onda vera al posto delle barre che aspettano
+      const c = w.querySelector(".song canvas"), waiting = w.querySelector(".song .wave");
+      if (waiting) waiting.remove();
+      c.hidden = false; drawSong(c);
+    }
+  }
+  // Il tempo scorre anche quando non arrivano aggiornamenti
+  setInterval(() => { const d = document.querySelector(".work2 .detail"); if (d && job.phase === "working") d.textContent = workDetail(); }, 1000);
+
 
   // ── Risultati ──
   function infoLine(m) {

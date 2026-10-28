@@ -74,6 +74,9 @@
       this.worker = null; this.loaded = new Set(); this.batch = null;
       this.cpu = false;           // la scheda grafica qui non riesce a calcolare: si lavora con il processore
     }
+    /** La fase del lavoro (come le spunte del Mac): model · reading · separating · saving; con l'ora d'inizio. */
+    setStage(stage) { if (this.stage !== stage) { this.stage = stage; this.stageStarted = Date.now(); } }
+
     emit() {
       // Il registro: gli ultimi passi, per «Segnala» (dicono dove si è fermata una separazione)
       const line = this.error && this.phase === "failed" ? "Errore: " + this.error : this.step;
@@ -113,7 +116,7 @@
           // Separazione leggera: il lavoratore chiede un modello quando serve, e dice quando l'ha chiuso
           if (m.type === "need") { this.provide(m.name); return; }
           if (m.type === "released") { this.loaded.delete(m.name); return; }
-          if (m.type === "progress") { this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
+          if (m.type === "progress") { if (m.progress != null) this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
           w.removeEventListener("message", on);
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
         };
@@ -134,12 +137,10 @@
       }
     }
 
-    /** Un modello alla volta in memoria (computer deboli): stesso risultato, meno memoria. */
-    get light() { return IsoLR.Load.oneAtATime(loadInfo(this.cpu)); }
-
     /** Scarica (la prima volta), verifica e carica nel lavoratore un modello. */
     async model(name, label) {
       if (this.loaded.has(name)) return;
+      this.setStage("model");
       this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
       await Bridge.prepareModel(name, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
       this.step = `Preparo ${label}…`; this.progress = 0; this.emit();
@@ -169,22 +170,28 @@
       const file = this.pending;
       this.pending = null;
       this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
+      this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading");
       this.emit();
       try {
         const song = await decode(file);
+        // La forma d'onda della canzone, che si colora man mano che viene separata
+        this.peaks = measure([song.left, song.right], 240).peaks; this.emit();
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
         const t0 = performance.now();
         const split = Prefs.get("splitGuitarPiano", true);
         let light = false;
         const res = await this.withFallback(async () => {
-          // In leggero (computer lenti) meno modelli, e il lavoratore li apre uno alla volta quando servono
-          light = this.light;
+          // Il lavoratore apre i modelli uno alla volta quando servono e li chiude appena finito: con la voce e
+          // gli strumenti aperti insieme la scheda grafica si poteva bloccare su «Preparo il modello degli strumenti»
+          light = true;
           for (const m of IsoLR.Load.models(quality)) {
             const label = m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti";
             if (!light) { await this.model(m, label); continue; }
+            this.setStage("model");
             this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
             await Bridge.prepareModel(m, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
           }
+          this.setStage("separating");
           this.step = "Separazione"; this.progress = 0; this.emit();
           // Al lavoratore va una copia: la canzone serve ancora qui per la base
           const L = song.left.slice(), R = song.right.slice();
@@ -198,6 +205,7 @@
           tracks.instrumental = [new Float32Array(n), new Float32Array(n)];
           for (let i = 0; i < n; i++) { tracks.instrumental[0][i] = mixL[i] - tracks.vocals[0][i]; tracks.instrumental[1][i] = mixR[i] - tracks.vocals[1][i]; }
         }
+        this.setStage("saving"); this.progress = 1;
         this.step = "Tempo, tonalità e accordi"; this.emit();
         const analysis = await analyze(tracks);
         this.step = "Salvo le tracce"; this.emit();

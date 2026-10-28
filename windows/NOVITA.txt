@@ -1,3 +1,7 @@
+Novità di IsoLR per Windows 0.8.1:
+• Corretto: Studio poteva restare fermo su «Preparo il modello degli strumenti». Adesso Massima e Studio aprono un modello alla volta e lo chiudono appena finito, così la scheda grafica non si riempie
+• La schermata di lavoro è come quella del Mac: la forma d'onda della canzone che si colora man mano, le tracce che nascono ognuna con la sua barra, la percentuale, il tempo che manca e le fasi (Lettura, Modello, Separazione, Salvataggio). Barre e riflessi si muovono sempre, anche mentre un modello si apre
+
 Novità di IsoLR per Windows 0.8.0 «Studio più rapida»:
 • Studio è più rapida e pulita: tre passaggi invece di sette (voce da Revive e SW, strumenti da SW sulla canzone e sulla base). Sulle 50 canzoni intere di prova è uguale o migliore di prima in ogni traccia (voce 12,21 dB contro 12,11, basso 11,29 contro 10,93) e ci mette molto meno, soprattutto sui computer senza una scheda grafica adatta
 • Tre qualità, uguali su tutti i computer: Rapida (prima si chiamava «Veloce»), Massima e Studio. Cambia solo il tempo, non il risultato

@@ -190,6 +190,25 @@ struct WaveformView: View {
     }
 }
 
+/// Un riflesso che scorre da sinistra a destra: «sto lavorando», quando non c'è ancora una percentuale.
+struct Shimmer: View {
+    var color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if reduceMotion { Color.clear } else {
+            TimelineView(.animation) { t in
+                GeometryReader { g in
+                    let phase = t.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+                    LinearGradient(colors: [.clear, color.opacity(0.45), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: g.size.width * 0.4)
+                        .offset(x: -g.size.width * 0.4 + phase * g.size.width * 1.4)
+                }
+            }
+        }
+    }
+}
+
 /// Barre che si muovono da sole: la musica «in attesa» nella schermata iniziale.
 struct IdleBars: View {
     var count = 28

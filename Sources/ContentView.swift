@@ -395,10 +395,15 @@ struct ContentView: View {
     private var working: some View {
         VStack(alignment: .leading, spacing: 18) {
             songTitle
-            // La canzone: si colora man mano che viene separata
-            WaveformView(peaks: job.mixPeaks.isEmpty ? Self.placeholderPeaks : job.mixPeaks,
-                         color: Theme.brass, dim: Theme.ink.opacity(job.mixPeaks.isEmpty ? 0.07 : 0.18),
-                         progress: separatingProgress, barWidth: 2.5, spacing: 1.5)
+            // La canzone: si colora man mano che viene separata. Prima di leggerla, barre che si muovono
+            Group {
+                if job.mixPeaks.isEmpty {
+                    IdleBars(count: 34, height: 64).frame(maxWidth: .infinity)
+                } else {
+                    WaveformView(peaks: job.mixPeaks, color: Theme.brass, dim: Theme.ink.opacity(0.18),
+                                 progress: separatingProgress, barWidth: 2.5, spacing: 1.5)
+                }
+            }
                 .frame(height: 64)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
@@ -412,6 +417,8 @@ struct ContentView: View {
                         GeometryReader { g in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(Theme.ink.opacity(0.08))
+                                // Finché la separazione non parte (modello, lettura, prova del motore) scorre un riflesso
+                                if (separatingProgress ?? 0) == 0 { Shimmer(color: Theme.color(key)).clipShape(Capsule()) }
                                 Capsule().fill(Theme.color(key).gradient)
                                     .frame(width: max(0, g.size.width * (separatingProgress ?? 0)))
                             }
@@ -1093,8 +1100,6 @@ struct ContentView: View {
 
     // MARK: Testi
 
-    /// Onda finta e bassa, mentre la canzone non è ancora letta.
-    static let placeholderPeaks: [Float] = (0..<200).map { Float(0.05 + 0.04 * sin(Double($0) * 0.3)) }
 
     private var separatingProgress: Double? {
         switch job.phase {
