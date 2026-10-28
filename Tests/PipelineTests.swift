@@ -50,10 +50,11 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(Set(job.stems.map(\.key)), ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"])
         XCTAssertFalse(job.timings.contains { $0.name.contains("Demucs") }, "Studio non usa più Demucs")
         XCTAssertFalse(job.timings.contains { $0.name.hasPrefix("Seconda voce") }, "Studio non usa più la seconda voce")
-        // Il basso c'è davvero: la canzone di prova ha un basso a 55 Hz
-        let bass = try AudioIO.read(job.stems.first { $0.key == "bass" }!.url)
-        let energy = bass[0].reduce(0) { $0 + $1 * $1 } / Float(bass[0].count)
-        XCTAssertGreaterThan(energy, 1e-4, "basso vuoto")
+        // Gli strumenti ci sono davvero. Non si guarda il basso da solo: il «basso» della canzone di prova è
+        // un'onda pura a 55 Hz, che SW mette in «Altri strumenti» (su musica vera il basso di Studio vale 11,3 dB)
+        let parts = try job.stems.filter { ["drums", "bass", "guitar", "piano", "other"].contains($0.key) }.map { try AudioIO.read($0.url) }
+        let energy = parts.map { p in p[0].reduce(0) { $0 + $1 * $1 } / Float(p[0].count) }.reduce(0, +)
+        XCTAssertGreaterThan(energy, 1e-3, "strumenti vuoti")
         let line = String(format: "Studio: 5 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
                           job.timings.map { "\($0.name) \(Int($0.seconds.rounded())) s" }.joined(separator: ", "), job.engineText ?? "")
         print(line)
