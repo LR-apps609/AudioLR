@@ -56,7 +56,6 @@ struct ContentView: View {
     @AppStorage(Quality.key) private var qualityRaw = Quality.best.rawValue
     @AppStorage("showLibrary") private var showLibrary = true
     /// Il carico sul computer: con «leggero» le schede della qualità cambiano tempi ed etichetta
-    @AppStorage(Prefs.loadKey) private var loadMode = "auto"
     @State private var showGuide = false
     @AppStorage(Prefs.sleepAfterBatchKey) private var sleepAfterBatch = false
     @State private var showDetails = false
@@ -120,7 +119,7 @@ struct ContentView: View {
             guard job.phase == .done else { return }
             if let raw = n.object as? String, let i = MixState.Instrument(rawValue: raw) { without(i); return }
             // ⇧⌘K: il mio strumento (l'ultimo scelto); se è già tolto, si torna a tutto
-            // Se nella canzone non c'è (es. chitarra in Veloce), il primo strumento che c'è
+            // Se nella canzone non c'è (es. chitarra in Rapida), il primo strumento che c'è
             let mine = MixState.Instrument.mine.flatMap { available.contains($0) ? $0 : nil }
             guard let i = mine ?? available.first else { return }
             if mixer.state.without == i { mixer.state.apply(.all) } else { without(i) }
@@ -269,7 +268,7 @@ struct ContentView: View {
             } else {
                 pendingSong
             }
-            // Qualità: Veloce, Massima (di serie) o Studio
+            // Qualità: Rapida, Massima (di serie) o Studio
             // Tre schede che dicono cosa si ottiene e quanto ci vuole, invece dei nomi dei modelli
             VStack(spacing: 8) {
                 Text("COME LA VUOI?").font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(.tertiary)
@@ -335,12 +334,6 @@ struct ContentView: View {
                 HStack(spacing: 6) {
                     Image(systemName: q.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? Theme.brass : Color.secondary)
                     Text(q == .best ? "Massima" : q.title).font(.system(size: 14, weight: .semibold))
-                    if q != .fast && Prefs.isLight(mode: loadMode, hasNeuralEngine: SeparationJob.hasNeuralEngine) {
-                        Text("leggera").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.secondary)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().strokeBorder(Theme.stroke))
-                            .help("Modalità leggera (Impostazioni › Motore): meno passaggi, più rapida sui computer lenti")
-                    }
                 }
                 Text("\(tracks) tracce · \(q.cardLine)").font(.system(size: 11.5)).foregroundStyle(.secondary)
                 Text(q.cardTime).font(.system(size: 11.5)).foregroundStyle(.secondary)

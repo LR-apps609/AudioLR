@@ -1,6 +1,8 @@
-Novità della 0.34.0 «Leggera»:
-• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli per la voce invece di tre, niente Demucs), sovrappone meno i pezzi e tiene in memoria un modello alla volta: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida e leggera
-• Sui Mac Intel (senza Neural Engine) è leggera in automatico; le schede della qualità lo dicono con l'etichetta «leggera», e i Dettagli della separazione con «modalità leggera»
+Novità della 0.34.0 «Studio più rapida»:
+• Studio è più rapida e pulita: tre passaggi invece di cinque (voce da Revive e SW, strumenti da SW sulla canzone e sulla base). Sulle 50 canzoni intere di prova è uguale o migliore di prima in ogni traccia: voce 12,21 dB contro 12,11, batteria 12,34 contro 12,29, basso 11,29 contro 10,93, altri strumenti 9,64 contro 9,45. Circa 2–3 volte più veloce, e molto di più sui Mac Intel
+• Tre qualità, uguali su tutti i Mac: Rapida (prima si chiamava «Veloce»), Massima e Studio. Cambia solo il tempo, non il risultato
+• Tolte le impostazioni «Velocità» e «Voce in Massima qualità»: non servono più. Sui Mac con poca memoria e sui Mac Intel IsoLR apre un modello alla volta da sola
+• Studio scarica due modelli invece di cinque: circa 550 MB in meno
 
 Novità della 0.33.0 «Warp e Rimonta»:
 • Warp (in «Vai più a fondo», o ⌥⌘G): un segnaposto sul primo battito di ogni battuta. Se IsoLR ne ha sbagliato uno lo trascini al suo posto, e lo ascolti con il clic del metronomo. «Salva la griglia» la usa per metronomo, parti e passaggio A–B

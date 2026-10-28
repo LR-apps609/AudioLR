@@ -25,13 +25,10 @@ final class PipelineTests: XCTestCase {
         return url
     }
 
-    /// Studio dall'inizio alla fine: voce viperx, SW sugli strumenti e il basso dal Demucs specializzato.
+    /// Studio dall'inizio alla fine: voce da Revive e SW, strumenti da SW sulla base e sulla canzone.
     func testStudioFromStartToFinish() async throws {
         // Sul Mac di GitHub (senza Neural Engine) va da 25 a 60 minuti secondo la macchina: margine ampio
         executionTimeAllowance = 5400
-        // La Studio completa anche sul Mac di GitHub, che senza Neural Engine sarebbe leggera in automatico
-        UserDefaults.standard.set("full", forKey: Prefs.loadKey)
-        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
         let q = Quality.studio
         for m in q.allModels {
             do { _ = try await ModelStore.shared.mlModel(m) { _ in } } catch { throw XCTSkip("\(m) non raggiungibile") }
@@ -51,51 +48,13 @@ final class PipelineTests: XCTestCase {
         if case .failed(let msg) = job.phase { return XCTFail("separazione non riuscita: \(msg)") }
         XCTAssertEqual(job.phase, .done)
         XCTAssertEqual(Set(job.stems.map(\.key)), ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"])
-        XCTAssertTrue(job.timings.contains { $0.name == "Basso (Demucs)" }, "il basso deve venire da Demucs")
+        XCTAssertFalse(job.timings.contains { $0.name.contains("Demucs") }, "Studio non usa più Demucs")
+        XCTAssertFalse(job.timings.contains { $0.name.hasPrefix("Seconda voce") }, "Studio non usa più la seconda voce")
         // Il basso c'è davvero: la canzone di prova ha un basso a 55 Hz
         let bass = try AudioIO.read(job.stems.first { $0.key == "bass" }!.url)
         let energy = bass[0].reduce(0) { $0 + $1 * $1 } / Float(bass[0].count)
         XCTAssertGreaterThan(energy, 1e-4, "basso vuoto")
-        let line = String(format: "Studio completa: 5 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
-                          job.timings.map { "\($0.name) \(Int($0.seconds.rounded())) s" }.joined(separator: ", "), job.engineText ?? "")
-        print(line)
-        let path = "/tmp/audiolr-passi.txt"
-        let old = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-        job.reset()
-        ModelStore.shared.forget()
-    }
-
-    /// Studio leggera (computer lenti): voce da Revive e SW, strumenti da SW, niente Demucs né seconda voce.
-    /// Il tempo si confronta con quello della Studio completa sullo stesso Mac di GitHub.
-    func testStudioLightFromStartToFinish() async throws {
-        executionTimeAllowance = 5400
-        UserDefaults.standard.set("light", forKey: Prefs.loadKey)
-        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
-        let q = Quality.studio
-        XCTAssertEqual(q.allModels, ["VoceRevive", "StrumentiSW2"], "in leggero si scaricano solo due modelli")
-        for m in q.allModels {
-            do { _ = try await ModelStore.shared.mlModel(m) { _ in } } catch { throw XCTSkip("\(m) non raggiungibile") }
-        }
-        let out = FileManager.default.temporaryDirectory.appendingPathComponent("uscita-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        UserDefaults.standard.set(out.path, forKey: Prefs.folderKey)
-        defer { UserDefaults.standard.removeObject(forKey: Prefs.folderKey); try? FileManager.default.removeItem(at: out) }
-
-        let job = SeparationJob.shared
-        job.reset()
-        let url = try song(seconds: 5)
-        let start = Date()
-        job.start(url, quality: q)
-        while job.isBusy { try await Task.sleep(nanoseconds: 500_000_000) }
-        if case .failed(let msg) = job.phase { return XCTFail("separazione non riuscita: \(msg)") }
-        XCTAssertEqual(job.phase, .done)
-        XCTAssertEqual(Set(job.stems.map(\.key)), ["vocals", "drums", "bass", "guitar", "piano", "other", "instrumental"])
-        XCTAssertFalse(job.timings.contains { $0.name.contains("Demucs") }, "in leggero niente Demucs")
-        XCTAssertFalse(job.timings.contains { $0.name.hasPrefix("Seconda voce") }, "in leggero niente seconda voce")
-        XCTAssertTrue(job.engineText?.contains("leggera") ?? false, "i dettagli dicono la modalità")
-        XCTAssertNil(job.qualityNote, "la modalità leggera non è una qualità ridotta per errore")
-        let line = String(format: "Studio leggera: 5 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
+        let line = String(format: "Studio: 5 s in %.0f s · %@ · %@", Date().timeIntervalSince(start),
                           job.timings.map { "\($0.name) \(Int($0.seconds.rounded())) s" }.joined(separator: ", "), job.engineText ?? "")
         print(line)
         let path = "/tmp/audiolr-passi.txt"

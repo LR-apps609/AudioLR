@@ -94,17 +94,14 @@ struct EngineSettings: View {
     @State private var size = ModelFiles.sizeText()
     @State private var decisions: [(String, EngineChoice.Decision?)] = EngineSettings.load()
     @State private var confirmDelete = false
-    @AppStorage(Prefs.speedKey) private var speed = "equilibrio"
     @AppStorage(Prefs.engineModeKey) private var engineMode = "auto"
     @AppStorage(Prefs.dualKey) private var dual = true
-    @AppStorage(Prefs.loadKey) private var load = "auto"
 
     static func load() -> [(String, EngineChoice.Decision?)] {
-        [("Veloce", EngineChoice.stored(ModelStore.name)),
+        [("Rapida", EngineChoice.stored(ModelStore.name)),
          ("Massima e Studio · Strumenti SW", EngineChoice.stored(Quality.best.instrumentModel ?? "")),
-         ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? "")),
-         ("Studio · Basso Demucs", EngineChoice.stored(Quality.studio.bassModel ?? ""))] +
-        Quality.best.models.enumerated().filter { $0.element != Quality.studio.bassModel }.map { (i, m) in
+         ("Studio · Voce BS-RoFormer", EngineChoice.stored(Quality.studio.voiceModel ?? ""))] +
+        Quality.best.models.enumerated().map { (i, m) in
             ("Riserva · " + Stem.info(["drums", "bass", "other", "vocals"][i]).name, EngineChoice.stored(m))
         }.filter { $0.1 != nil }
     }
@@ -129,33 +126,19 @@ struct EngineSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Picker("Carico sul computer", selection: $load) {
-                    Text(SeparationJob.hasNeuralEngine ? "Automatico (completo)" : "Automatico (leggero su questo Mac)").tag("auto")
-                    Text("Leggero").tag("light")
-                    Text("Completo").tag("full")
-                }
-            } footer: {
-                Text("Leggero: meno passaggi e meno memoria; quasi la stessa qualità (misurata su 50 canzoni), molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine (Mac Intel).")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
                 Picker("Dove calcolare", selection: $engineMode) {
                     Text("Automatico (Neural Engine e grafica)").tag("auto")
                     Text("Solo grafica").tag("grafica")
                 }
                 .disabled(!SeparationJob.hasNeuralEngine)
-                Picker("Velocità", selection: $speed) {
-                    Text("Equilibrio (più pulita)").tag("equilibrio")
-                    Text("Rapida (circa un quarto più veloce)").tag("rapida")
-                }
                 Toggle("Neural Engine e grafica insieme", isOn: $dual)
                     .disabled(!SeparationJob.hasNeuralEngine || engineMode == "grafica" || Prefs.lowMemory)
             } footer: {
                 Text(Prefs.lowMemory && SeparationJob.hasNeuralEngine
-                     ? "Questo Mac ha 8 GB di memoria: ogni modello si apre una volta sola (Neural Engine o grafica), perché due copie insieme lo rallenterebbero. «Solo grafica» evita l'attesa del primo adattamento al Neural Engine. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
+                     ? "Questo Mac ha 8 GB di memoria: ogni modello si apre una volta sola (Neural Engine o grafica), perché due copie insieme lo rallenterebbero. «Solo grafica» evita l'attesa del primo adattamento al Neural Engine. Il risultato è lo stesso su tutti i Mac: cambia solo il tempo."
                      : SeparationJob.hasNeuralEngine
-                     ? "Con i due insieme, i pezzi della canzone si dividono tra Neural Engine e grafica: molto più veloce sui Mac con chip Apple. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi."
-                     : "Questo Mac non ha il Neural Engine: lavora la grafica. «Rapida» sovrappone meno i pezzi: un filo meno pulita ai passaggi.")
+                     ? "Con i due insieme, i pezzi della canzone si dividono tra Neural Engine e grafica: molto più veloce sui Mac con chip Apple. Il risultato è lo stesso su tutti i Mac: cambia solo il tempo."
+                     : "Questo Mac non ha il Neural Engine: lavorano la grafica e il processore, un modello alla volta. Il risultato è lo stesso su tutti i Mac: cambia solo il tempo.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -210,11 +193,10 @@ struct UpdateSettings: View {
     }
 }
 
-/// Aspetto, libreria, precisione della voce.
+/// Aspetto e libreria.
 struct GeneralSettings: View {
     @AppStorage(Prefs.appearanceKey) private var appearance = "auto"
     @AppStorage("showLibrary") private var showLibrary = true
-    @AppStorage(Prefs.voiceOverlapKey) private var overlap = 2
 
     var body: some View {
         Form {
@@ -227,15 +209,6 @@ struct GeneralSettings: View {
                 .onChange(of: appearance) { _, v in Prefs.applyAppearance(v) }
                 Toggle("Mostra la libreria a sinistra", isOn: $showLibrary)
             }
-            Section {
-                Picker("Voce in Massima qualità", selection: $overlap) {
-                    Text("Equilibrio").tag(2)
-                    Text("Precisione (circa 2 volte più lenta)").tag(4)
-                }
-            } footer: {
-                Text("Con «Precisione» ogni punto della canzone passa quattro volte nel modello voce invece di due: passaggi più morbidi tra un pezzo e l'altro.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .frame(height: 400)
@@ -245,15 +218,15 @@ struct GeneralSettings: View {
 /// Versione, modelli installati, licenze.
 struct AboutSettings: View {
     private let models: [(String, String, String)] = [
-        ("HTDemucs", "Veloce; Studio · strumenti (in squadra)", "Demucs v4 · Meta · licenza MIT"),
+        ("HTDemucs", "Rapida", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori3", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
         ("VoceDuetto", "Voce maschile e femminile", "BS-RoFormer Chorus Male-Female · pesi di Sucial · codice MIT"),
         ("VoceRevive", "Studio · voce", "BS-RoFormer Vocals Revive V3e · pesi di unwa · codice MIT"),
-        ("VoceRoFormer9", "Studio · voce (in squadra); riserva", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
-        ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro; Studio · voce (in squadra)", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
+        ("VoceRoFormer9", "Riserva della voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),
+        ("StrumentiSW2", "Massima e Studio · batteria, basso, chitarra, piano, altro; Studio · voce (in coppia con Revive)", "BS-RoFormer SW · pesi di jarredou e altri · codice MIT"),
         ("HTDemucsFT-0", "Riserva · batteria", "Demucs v4 fine-tuned · MIT"),
-        ("HTDemucsFT-1", "Studio · basso; riserva", "Demucs v4 fine-tuned · MIT"),
+        ("HTDemucsFT-1", "Riserva · basso", "Demucs v4 fine-tuned · MIT"),
         ("HTDemucsFT-2", "Riserva · altri strumenti", "Demucs v4 fine-tuned · MIT"),
     ]
 

@@ -540,35 +540,18 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(EngineChoice.decide(agreement: 15).units, .cpuAndGPU)
     }
 
-    func testLightModeDecision() {
-        // Automatico: leggero solo senza Neural Engine; le scelte delle Impostazioni vincono
-        XCTAssertTrue(Prefs.isLight(mode: "auto", hasNeuralEngine: false))
-        XCTAssertFalse(Prefs.isLight(mode: "auto", hasNeuralEngine: true))
-        XCTAssertTrue(Prefs.isLight(mode: "light", hasNeuralEngine: true))
-        XCTAssertFalse(Prefs.isLight(mode: "full", hasNeuralEngine: false))
-    }
-
-    func testLightStudioRecipe() {
-        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
-        UserDefaults.standard.set("light", forKey: Prefs.loadKey)
-        XCTAssertTrue(Prefs.light)
-        // Ricetta leggera: niente seconda voce né Demucs, si scaricano due modelli; pezzi sovrapposti come «Rapida»
+    func testStudioRecipeIsTheSameEverywhere() {
+        // Studio: Revive + SW sulla canzone + SW sulla base, niente seconda voce né Demucs; sovrapposizione fissa 2
         XCTAssertNil(Quality.studio.secondVoice)
         XCTAssertNil(Quality.studio.bassModel)
         XCTAssertNil(Quality.studio.helperModel)
-        XCTAssertTrue(Quality.studio.swOnMix, "la voce di SW resta nella squadra")
-        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "StrumentiSW2"])
-        XCTAssertEqual(Quality.studio.swOnBase, Quality.lightStudioRecipe == .a)
-        XCTAssertEqual(Prefs.voiceOverlapValue, 1.5)
-        XCTAssertEqual(Prefs.instrumentOverlap, 1.5)
-        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"])
-        XCTAssertTrue(Prefs.lightText?.contains("Impostazioni") ?? false)
-        XCTAssertNotEqual(Quality.studio.cardTime, "circa 15 minuti")
-        // Completo: la squadra intera
-        UserDefaults.standard.set("full", forKey: Prefs.loadKey)
-        XCTAssertNil(Prefs.lightText)
-        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1", "HTDemucs"])
+        XCTAssertTrue(Quality.studio.swOnMix, "la voce di SW resta in coppia con Revive")
         XCTAssertTrue(Quality.studio.swOnBase)
+        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "StrumentiSW2"])
+        XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"])
+        XCTAssertEqual(Prefs.voiceOverlapValue, 2)
+        XCTAssertEqual(Prefs.instrumentOverlap, 2)
+        XCTAssertEqual(Quality.allCases.map(\.title), ["Rapida", "Massima qualità", "Studio"])
     }
 
     func testLightAverages() {

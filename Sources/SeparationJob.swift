@@ -355,7 +355,7 @@ final class SeparationJob: ObservableObject {
         let split = Prefs.splitGuitarPiano
         let downloads = quality.allModels
         // Modalità leggera (computer lenti): meno passaggi e un modello in memoria alla volta
-        let light = Prefs.light, lightText = Prefs.lightText
+        let light = Prefs.oneModelAtATime
         let swOnBase = quality.swOnBase
         phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
         let cancel = Cancel()
@@ -686,7 +686,7 @@ final class SeparationJob: ObservableObject {
                     done(w)
                     lap("Strumenti (BS-RoFormer SW)")
 
-                    // Studio: i Demucs sulla stessa base (il basso specializzato, e quello di Veloce per tutti gli strumenti).
+                    // Studio: i Demucs sulla stessa base (il basso specializzato, e quello di Rapida per tutti gli strumenti).
                     // Un di più: se un modello non si carica o il calcolo non riesce, restano le tracce di SW
                     // Di ogni Demucs si tiene solo quello che entra nelle medie (memoria)
                     var demucs: [String: [String: [[Float]]]] = [:]
@@ -801,7 +801,6 @@ final class SeparationJob: ObservableObject {
                 let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url, base: base)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
-                    + (lightText.map { " · modalità \($0)" } ?? "")
                 lap("Salvataggio")
                 let analysis = Analysis.analyze(out, sources: sources)
                 lap("Tempo e tonalità")

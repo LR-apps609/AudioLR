@@ -85,7 +85,6 @@ enum Prefs {
     }
 
     static let appearanceKey = "appearance"
-    static let voiceOverlapKey = "voiceOverlap"
 
     /// Aspetto: automatico (come il Mac), chiaro o scuro.
     static func applyAppearance(_ value: String? = nil) {
@@ -96,9 +95,6 @@ enum Prefs {
         }
     }
 
-    /// Velocità della separazione: «equilibrio» (di serie) o «rapida» (pezzi meno sovrapposti, circa un quarto più veloce).
-    static let speedKey = "speedMode"
-    static var fast: Bool { UserDefaults.standard.string(forKey: speedKey) == "rapida" }
     /// Neural Engine e grafica al lavoro insieme sui pezzi della canzone (di serie sì).
     /// Un Mac con poca memoria (8 GB o meno): i modelli si liberano appena hanno finito il loro passaggio,
     /// altrimenti macOS usa il disco come memoria e tutto rallenta molto.
@@ -112,27 +108,14 @@ enum Prefs {
     static let dualKey = "dualEngine"
     static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
 
-    /// Carico sul computer: «auto» (di serie), «light» o «full». Leggero = meno passaggi, meno memoria, pezzi meno
-    /// sovrapposti: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine.
-    static let loadKey = "computerLoad"
-    static var loadMode: String { UserDefaults.standard.string(forKey: loadKey) ?? "auto" }
-    static func isLight(mode: String, hasNeuralEngine: Bool) -> Bool { mode == "light" || (mode == "auto" && !hasNeuralEngine) }
-    static var light: Bool { isLight(mode: loadMode, hasNeuralEngine: SeparationJob.hasNeuralEngine) }
-    /// Per «Dettagli» e «Segnala»: perché la modalità è leggera (nil se è completa).
-    static var lightText: String? {
-        guard light else { return nil }
-        return loadMode == "light" ? "leggera (scelta nelle Impostazioni)" : "leggera (automatica: Mac senza Neural Engine)"
-    }
+    /// Un modello in memoria alla volta (si libera appena finito): sui Mac con poca memoria e su quelli senza
+    /// Neural Engine. Cambia solo la memoria usata, non il risultato.
+    static var oneModelAtATime: Bool { lowMemory || !SeparationJob.hasNeuralEngine }
 
-    /// Sovrapposizione dei pezzi per il modello voce e per quello degli strumenti (in leggero come «Rapida»).
-    static var voiceOverlapValue: Double { fast || light ? 1.5 : Double(voiceOverlap) }
-    static var instrumentOverlap: Double { fast || light ? 1.5 : 2 }
-
-    /// Quante volte ogni punto della canzone passa nel modello voce: 2 equilibrio, 4 più preciso e più lento.
-    static var voiceOverlap: Int {
-        let v = UserDefaults.standard.integer(forKey: voiceOverlapKey)
-        return v == 0 ? 2 : v
-    }
+    /// Quante volte ogni punto della canzone passa nei RoFormer (voce e strumenti): 2 su tutti i Mac,
+    /// come nel banco di prova sulle 50 canzoni. Fisso: Studio è la stessa ovunque.
+    static let voiceOverlapValue = 2.0
+    static let instrumentOverlap = 2.0
 
     /// Massima qualità: chitarra e pianoforte in tracce proprie (altrimenti restano in «Altri strumenti»).
     static let splitKey = "splitGuitarPiano"

@@ -141,16 +141,13 @@ final class VoiceTests: XCTestCase {
     }
 
     func testStemsShownForQuality() {
-        // La ricetta completa (sul Mac Intel di GitHub l'automatico sarebbe leggero)
-        UserDefaults.standard.set("full", forKey: Prefs.loadKey)
-        defer { UserDefaults.standard.removeObject(forKey: Prefs.loadKey) }
         XCTAssertEqual(Theme.stems(for: .fast, split: true), ["vocals", "drums", "bass", "other"])
         XCTAssertEqual(Theme.stems(for: .best, split: true).count, 6)
         XCTAssertEqual(Theme.stems(for: .best, split: false).count, 4)
         XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"], "Massima: un solo modello, SW")
         XCTAssertTrue(Quality.best.everyModel.contains("HTDemucsFT-0"))
-        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "VoceRoFormer9", "StrumentiSW2", "HTDemucsFT-1", "HTDemucs"],
-                       "Studio: voce da Revive, Kim e SW; strumenti da SW e Demucs; basso anche da Demucs FT")
+        XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "StrumentiSW2"],
+                       "Studio: voce da Revive e SW; strumenti da SW sulla base e sulla canzone")
         XCTAssertNil(Quality.best.bassModel, "Massima resta con SW da solo")
         XCTAssertNil(Quality.best.secondVoice)
         XCTAssertFalse(Quality.best.swOnMix)

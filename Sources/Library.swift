@@ -137,7 +137,7 @@ struct GuideView: View {
     var openFAQ: () -> Void = {}
     private let tips: [(String, String, String)] = [
         ("square.and.arrow.down", "Trascina una o più canzoni", "Anche un album intero: IsoLR le separa una dopo l'altra."),
-        ("sparkles", "Veloce, Massima o Studio", "Massima separa anche chitarra e piano; Studio ha la voce più pulita; Veloce è la più rapida."),
+        ("sparkles", "Rapida, Massima o Studio", "Rapida per provare un'idea; Massima separa anche chitarra e piano; Studio è la più pulita."),
         ("slider.horizontal.3", "Il mixer", "Muto (M), solo (S) e volume per ogni traccia; Karaoke e Solo voce in un clic."),
         ("square.and.arrow.up", "Esporta il mix", "Salva quello che senti, accanto alle tracce."),
         ("metronome", "Warp e Rimonta", "Metti a tempo la canzone, oppure taglia, sposta e ripeti le sue parti: nasce una versione nuova."),
