@@ -95,6 +95,15 @@
     },
     async readModel(name, part) { return new Uint8Array(await invoke("read_model", { name, part })); },
 
+    // ── Calcolo nativo dei RoFormer (ONNX Runtime con DirectML o processore, fuori dalla finestra) ──
+    async nativeLoad(name, cpuOnly) { return invoke("native_load", { name, cpuOnly }); },
+    async nativeRun(name, frames, feats, x) {
+      const out = await invoke("native_run", new Uint8Array(x.buffer, x.byteOffset, x.byteLength), { headers: { name, frames: String(frames), feats: String(feats) } });
+      return new Float32Array(out instanceof ArrayBuffer ? out : new Uint8Array(out).buffer);
+    },
+    nativeRelease(name) { if (DESKTOP) invoke("native_release", { name }).catch(() => {}); },
+    async nativeBackend(name) { return DESKTOP ? invoke("native_backend", { name }) : null; },
+
     // ── Aggiornamenti ──
     async checkUpdate() { return DESKTOP ? invoke("check_update") : null; },
     async installUpdate(url, onProgress) {

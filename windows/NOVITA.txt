@@ -1,3 +1,8 @@
+Novità di IsoLR per Windows 0.9.0 «Motore nativo»:
+• Massima e Studio funzionano davvero: i modelli grandi ora calcolano fuori dalla finestra, con ONNX Runtime e DirectML (la scheda grafica, qualsiasi marca: NVIDIA, AMD, Intel), e il processore come riserva. Prima, nella finestra, il calcolo sul processore era limitato a 4 GB di memoria (un pezzo della voce di Studio ne chiede circa 8) e la scheda grafica sbagliava un passaggio del modello voce
+• La finestra resta sempre libera mentre separa: «Annulla» risponde subito
+• Corretto: dopo l'installazione non restano più i collegamenti e la voce della vecchia «AudioLR»: l'app si chiama IsoLR
+
 Novità di IsoLR per Windows 0.8.1:
 • Corretto: Studio poteva restare fermo su «Preparo il modello degli strumenti». Adesso Massima e Studio aprono un modello alla volta e lo chiudono appena finito, così la scheda grafica non si riempie
 • La schermata di lavoro è come quella del Mac: la forma d'onda della canzone che si colora man mano, le tracce che nascono ognuna con la sua barra, la percentuale, il tempo che manca e le fasi (Lettura, Modello, Separazione, Salvataggio). Barre e riflessi si muovono sempre, anche mentre un modello si apre

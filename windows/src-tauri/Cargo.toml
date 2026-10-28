@@ -1,6 +1,6 @@
 [package]
 name = "isolr"
-version = "0.8.1"
+version = "0.9.0"
 description = "IsoLR: separa voce e strumenti, tutto sul computer"
 edition = "2021"
 
@@ -16,6 +16,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 trash = "5"
 urlencoding = "2"
+# ONNX Runtime vero per Massima e Studio (onnxruntime.dll caricata all'avvio del primo modello)
+ort = { version = "=2.0.0-rc.9", default-features = false, features = ["load-dynamic", "directml"] }
+ort-sys = { version = "=2.0.0-rc.9", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Power", "Win32_Foundation"] }

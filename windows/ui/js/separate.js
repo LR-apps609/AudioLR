@@ -115,7 +115,8 @@
           const m = e.data;
           // Separazione leggera: il lavoratore chiede un modello quando serve, e dice quando l'ha chiuso
           if (m.type === "need") { this.provide(m.name); return; }
-          if (m.type === "released") { this.loaded.delete(m.name); return; }
+          if (m.type === "released") { this.loaded.delete(m.name); Bridge.nativeRelease(m.name); return; }
+          if (m.type === "infer") { this.infer(m); return; }
           if (m.type === "progress") { if (m.progress != null) this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
           w.removeEventListener("message", on);
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
@@ -126,10 +127,30 @@
       });
     }
 
-    /** Separazione leggera: il modello chiesto dal lavoratore (già scaricato), senza aspettare risposta. */
+    /** Apre un RoFormer fuori dalla finestra (ONNX Runtime nativo): dice dove calcola, o null se non si può. */
+    async openNative(name, cfg) {
+      if (!Bridge.desktop || !/roformer/i.test(cfg.kind || "")) return null;
+      try { return await Bridge.nativeLoad(name, this.onCpu); } catch (e) { Job.log(`Calcolo nativo non disponibile (${e.message || e}): resto nella finestra`); return null; }
+    }
+
+    /** Un pezzo chiesto dal lavoratore: lo calcola il modello aperto fuori dalla finestra. */
+    async infer(m) {
+      try {
+        const mask = await Bridge.nativeRun(m.name, m.frames, m.feats, m.x);
+        const backend = await Bridge.nativeBackend(m.name);
+        if (this.worker) this.worker.postMessage({ type: "inferred", id: m.id, name: m.name, mask, backend }, [mask.buffer]);
+      } catch (e) {
+        if (this.worker) this.worker.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
+      }
+    }
+
+    /** Il modello chiesto dal lavoratore (già scaricato), senza aspettare risposta. */
     async provide(name) {
       try {
-        const bytes = await Bridge.readModel(name, "onnx"), cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
+        const cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
+        const backend = await this.openNative(name, cfg);
+        if (backend) { this.worker.postMessage({ type: "provide", name, cfg, native: true, backend }); this.loaded.add(name); return; }
+        const bytes = await Bridge.readModel(name, "onnx");
         this.worker.postMessage({ type: "provide", name, bytes: bytes.buffer, cfg }, [bytes.buffer]);
         this.loaded.add(name);
       } catch (e) {
@@ -144,8 +165,13 @@
       this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
       await Bridge.prepareModel(name, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
       this.step = `Preparo ${label}…`; this.progress = 0; this.emit();
-      const bytes = await Bridge.readModel(name, "onnx"), cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
-      await this.call({ type: "load", name, bytes: bytes.buffer, cfg, forceWasm: this.onCpu }, [bytes.buffer]);
+      const cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
+      const backend = await this.openNative(name, cfg);
+      if (backend) await this.call({ type: "load", name, cfg, native: true, backend });
+      else {
+        const bytes = await Bridge.readModel(name, "onnx");
+        await this.call({ type: "load", name, bytes: bytes.buffer, cfg, forceWasm: this.onCpu }, [bytes.buffer]);
+      }
       this.loaded.add(name);
     }
 
@@ -157,6 +183,8 @@
         if (this.onCpu || String(e.message || e) === "annullato") throw e;
         Job.log("La scheda grafica non riesce (" + String(e.message || e) + "): si riprova con il processore");
         if (this.worker) this.worker.terminate();
+        // Anche i modelli aperti fuori dalla finestra si chiudono: si riaprono sul processore
+        for (const n of this.loaded) Bridge.nativeRelease(n);
         this.worker = null; this.loaded = new Set(); this.cpu = true;
         this.step = "La scheda grafica non riesce: riprovo con il processore…"; this.progress = 0; this.emit();
         return work();

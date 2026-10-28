@@ -4,6 +4,8 @@
 // La canzone non lascia mai il computer: l'unico indirizzo raggiungibile è la pagina dei rilasci su GitHub.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod nativo;
+
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::io::{Read, Write};
@@ -325,6 +327,61 @@ async fn read_model(app: AppHandle, name: String, part: String) -> Result<tauri:
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Il percorso di un modello scaricato (solo quelli conosciuti).
+fn model_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    if !MODELS.contains(&name) {
+        return Err("modello sconosciuto".into());
+    }
+    Ok(models_dir(app)?.join(format!("{name}.onnx")))
+}
+
+fn native_init(app: &AppHandle) -> Result<(), String> {
+    let dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    nativo::init(&dir.join("onnxruntime.dll"))
+}
+
+/// Apre un modello fuori dalla finestra (scheda grafica con DirectML, o processore). Dice dove calcola.
+#[tauri::command]
+async fn native_load(app: AppHandle, name: String, cpu_only: bool) -> Result<String, String> {
+    native_init(&app)?;
+    let path = model_path(&app, &name)?;
+    tauri::async_runtime::spawn_blocking(move || nativo::load(&name, &path, cpu_only).map(|b| b.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Un pezzo nel modello: il contenuto (f32) arriva così com'è, nome e misure nelle intestazioni.
+/// Torna la maschera come byte; l'intestazione della risposta non c'è, quindi il motore usato si chiede a parte.
+#[tauri::command]
+async fn native_run(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let header = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).map(|s| s.to_string());
+    let name = header("name").ok_or("nome mancante")?;
+    let frames: usize = header("frames").and_then(|v| v.parse().ok()).ok_or("misure mancanti")?;
+    let feats: usize = header("feats").and_then(|v| v.parse().ok()).ok_or("misure mancanti")?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("contenuto mancante".into()) };
+    if bytes.len() != frames * feats * 4 {
+        return Err("misure sbagliate".into());
+    }
+    let x: Vec<f32> = bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+    let path = model_path(&app, &name)?;
+    let (out, _) = tauri::async_runtime::spawn_blocking(move || nativo::run(&name, &path, x, frames, feats))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Chiude un modello aperto fuori dalla finestra.
+#[tauri::command]
+fn native_release(name: String) {
+    nativo::release(&name);
+}
+
+/// Dove sta calcolando un modello aperto (dopo un ripiego può essere cambiato).
+#[tauri::command]
+fn native_backend(name: String) -> Option<String> {
+    nativo::backend(&name).map(|b| b.to_string())
+}
+
 /// Quali modelli sono già sul disco.
 #[tauri::command]
 fn models_ready(app: AppHandle) -> Result<Vec<String>, String> {
@@ -402,7 +459,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
-            prepare_model, read_model, models_ready, check_update, install_update
+            prepare_model, read_model, models_ready, check_update, install_update,
+            native_load, native_run, native_release, native_backend
         ])
         .run(tauri::generate_context!())
         .expect("IsoLR non è riuscita ad avviarsi");

@@ -63,9 +63,21 @@ async function runDemucs(input, from, span, step, name) {
   return out;
 }
 
+// I RoFormer nell'app calcolano fuori dalla finestra (main.rs, nativo.rs): ogni pezzo si chiede alla finestra
+let inferId = 0;
+const inferring = {};                              // id → { resolve, reject }
+function inferNative(name, x, frames, feats) {
+  const id = ++inferId, copy = x.slice();
+  return new Promise((resolve, reject) => {
+    inferring[id] = { resolve, reject };
+    post("infer", { id, name, frames, feats, x: copy }, [copy.buffer]);
+  });
+}
+
 function netFor(name) {
-  const { session: s, cfg } = nets[name];
+  const { session: s, cfg, native } = nets[name];
   const T = cfg.frames, FS = cfg.freq_indices.length;
+  if (native) return (x) => inferNative(name, x, T, FS * 2);
   return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
 }
 
@@ -82,7 +94,7 @@ async function ensure(name) {
 function releaseNet(name) {
   if (!light || !nets[name]) return;
   lastBackend = nets[name].backend;
-  try { nets[name].session.release(); } catch (e) { /* già chiuso */ }
+  if (!nets[name].native) try { nets[name].session.release(); } catch (e) { /* già chiuso */ }
   delete nets[name];
   post("released", { name });
 }
@@ -167,12 +179,18 @@ async function extraSplit(kind, audio) {
 self.onmessage = async (e) => {
   const m = e.data;
   if (m.forceWasm !== undefined) cpuOnly = m.forceWasm;
+  if (m.type === "inferred" || m.type === "infer-error") {
+    const w = inferring[m.id];
+    delete inferring[m.id];
+    if (w) { if (m.type === "inferred") { if (m.backend && nets[m.name]) nets[m.name].backend = m.backend; w.resolve(m.mask); } else w.reject(new Error(m.message)); }
+    return;
+  }
   try {
     if (m.type === "provide") {
-      // Un modello chiesto dalla separazione leggera
+      // Un modello chiesto dalla separazione: già aperto fuori dalla finestra (native), o da aprire qui
       try {
-        const { s, ep } = await session(new Uint8Array(m.bytes), cpuOnly);
-        nets[m.name] = { session: s, cfg: m.cfg, backend: ep };
+        if (m.native) nets[m.name] = { native: true, cfg: m.cfg, backend: m.backend };
+        else { const { s, ep } = await session(new Uint8Array(m.bytes), cpuOnly); nets[m.name] = { session: s, cfg: m.cfg, backend: ep }; }
         if (waiting[m.name]) waiting[m.name].resolve();
       } catch (err) { if (waiting[m.name]) waiting[m.name].reject(err); }
       delete waiting[m.name];
@@ -185,8 +203,8 @@ self.onmessage = async (e) => {
     }
     if (m.type === "load") {
       if (!nets[m.name]) {
-        const { s, ep } = await session(new Uint8Array(m.bytes), m.forceWasm);
-        nets[m.name] = { session: s, cfg: m.cfg, backend: ep };
+        if (m.native) nets[m.name] = { native: true, cfg: m.cfg, backend: m.backend };
+        else { const { s, ep } = await session(new Uint8Array(m.bytes), m.forceWasm); nets[m.name] = { session: s, cfg: m.cfg, backend: ep }; }
       }
       post("loaded", { name: m.name, backend: nets[m.name].backend });
     } else if (m.type === "cancel") {

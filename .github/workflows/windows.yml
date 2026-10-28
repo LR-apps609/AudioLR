@@ -74,6 +74,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: Tools/win-dist.sh
+      - name: ONNX Runtime con DirectML (calcolo nativo di Massima e Studio)
+        shell: bash
+        run: |
+          mkdir -p windows/src-tauri/libs nuget
+          curl -sSLf -o nuget/ort.zip https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1
+          curl -sSLf -o nuget/dml.zip https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.2
+          (cd nuget && unzip -q -o ort.zip -d ort && unzip -q -o dml.zip -d dml)
+          cp nuget/ort/runtimes/win-x64/native/onnxruntime.dll windows/src-tauri/libs/
+          cp nuget/dml/bin/x64-win/DirectML.dll windows/src-tauri/libs/
+          ls -la windows/src-tauri/libs
+      - name: Prova del calcolo nativo (modello voce di Studio, sul processore di GitHub)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p prova-nativo
+          for n in VoceRevive.onnx VoceRevive.json; do
+            id=$(gh api repos/${{ github.repository }}/releases/tags/modelli-windows --jq ".assets[] | select(.name==\"$n\") | .id")
+            gh api -H "Accept: application/octet-stream" repos/${{ github.repository }}/releases/assets/$id > prova-nativo/$n
+          done
+          cp windows/src-tauri/libs/DirectML.dll windows/src-tauri/target/release/examples/ 2>/dev/null || true
+          cd windows/src-tauri
+          cargo build --release --example prova_nativo 2> ../../prova.err || { tail -n 25 ../../prova.err | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+          cp libs/DirectML.dll libs/onnxruntime.dll target/release/examples/
+          FS=$(python -c "import json;c=json.load(open('../../prova-nativo/VoceRevive.json'));print(len(c['freq_indices'])*2, c['frames'])")
+          set -- $FS
+          target/release/examples/prova_nativo.exe "$PWD/target/release/examples/onnxruntime.dll" ../../prova-nativo/VoceRevive.onnx $2 $1
       - name: Versione
         id: v
         shell: bash
