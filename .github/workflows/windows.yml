@@ -84,6 +84,15 @@ jobs:
           cp nuget/ort/runtimes/win-x64/native/onnxruntime.dll windows/src-tauri/libs/
           cp nuget/dml/bin/x64-win/DirectML.dll windows/src-tauri/libs/
           ls -la windows/src-tauri/libs
+      - name: Versione
+        id: v
+        shell: bash
+        run: echo "version=$(python -c "import json;print(json.load(open('windows/src-tauri/tauri.conf.json'))['version'])")" >> "$GITHUB_OUTPUT"
+      - name: Icone
+        working-directory: windows
+        run: |
+          npm install --silent
+          npx tauri icon ../Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png
       - name: Prova del calcolo nativo (modello voce di Studio, sul processore di GitHub)
         shell: bash
         env:
@@ -101,15 +110,6 @@ jobs:
           FS=$(python -c "import json;c=json.load(open('../../prova-nativo/VoceRevive.json'));print(len(c['freq_indices'])*2, c['frames'])")
           set -- $FS
           target/release/examples/prova_nativo.exe "$PWD/target/release/examples/onnxruntime.dll" ../../prova-nativo/VoceRevive.onnx $2 $1
-      - name: Versione
-        id: v
-        shell: bash
-        run: echo "version=$(python -c "import json;print(json.load(open('windows/src-tauri/tauri.conf.json'))['version'])")" >> "$GITHUB_OUTPUT"
-      - name: Icone
-        working-directory: windows
-        run: |
-          npm install --silent
-          npx tauri icon ../Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png
       - name: Compilazione (Rust + installer NSIS)
         working-directory: windows
         shell: bash
