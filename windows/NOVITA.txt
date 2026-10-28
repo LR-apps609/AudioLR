@@ -1,5 +1,5 @@
 Novità di IsoLR per Windows 0.8.0 «Leggera»:
-• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli invece di quattro), sovrappone meno i pezzi e apre un modello alla volta: un filo meno pulita, molto più rapida e leggera
+• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli invece di quattro), sovrappone meno i pezzi e apre un modello alla volta: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida e leggera
 • In automatico è leggera sui computer senza una scheda grafica adatta, con «Usa solo il processore», dopo il ripiego sul processore o con poca memoria; le schede della qualità lo dicono con l'etichetta «leggera»
 
 Novità di IsoLR per Windows 0.7.0 «Warp e Rimonta»:

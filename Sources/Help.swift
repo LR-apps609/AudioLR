@@ -85,7 +85,7 @@ enum FAQ {
         Entry(topic: "Velocità e motore", question: "Perché ci mette tanto?",
               answer: "La separazione è un calcolo pesante che avviene tutto sul tuo Mac. Sui Mac con chip Apple usa il Neural Engine ed è molto più rapida che sui Mac Intel. Veloce è circa 4 volte più rapida di Massima. In «Dettagli» (⌘I) vedi quanto tempo ha richiesto ogni fase."),
         Entry(topic: "Velocità e motore", question: "Il mio Mac è lento: posso alleggerire la separazione?",
-              answer: "Sì: Impostazioni › Motore › «Carico sul computer» › Leggero. Meno passaggi (Studio usa due modelli per la voce invece di tre e niente Demucs), pezzi meno sovrapposti e un modello in memoria alla volta: un filo meno pulita, ma molto più rapida e leggera. Sui Mac Intel è già così in automatico."),
+              answer: "Sì: Impostazioni › Motore › «Carico sul computer» › Leggero. Meno passaggi (Studio usa due modelli per la voce invece di tre e niente Demucs), pezzi meno sovrapposti e un modello in memoria alla volta: quasi la stessa qualità (misurata su 50 canzoni), ma molto più rapida e leggera. Sui Mac Intel è già così in automatico."),
         Entry(topic: "Velocità e motore", question: "Cos'è «Prova il motore»?",
               answer: "Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone e usa il più preciso. In Impostazioni › Motore puoi rifare la prova."),
         Entry(topic: "Velocità e motore", question: "Posso usare il Mac mentre separa?",

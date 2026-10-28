@@ -1,5 +1,5 @@
 Novità della 0.34.0 «Leggera»:
-• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli per la voce invece di tre, niente Demucs), sovrappone meno i pezzi e tiene in memoria un modello alla volta: un filo meno pulita, molto più rapida e leggera
+• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli per la voce invece di tre, niente Demucs), sovrappone meno i pezzi e tiene in memoria un modello alla volta: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida e leggera
 • Sui Mac Intel (senza Neural Engine) è leggera in automatico; le schede della qualità lo dicono con l'etichetta «leggera», e i Dettagli della separazione con «modalità leggera»
 
 Novità della 0.33.0 «Warp e Rimonta»:

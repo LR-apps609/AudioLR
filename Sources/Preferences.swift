@@ -113,7 +113,7 @@ enum Prefs {
     static var dualEngine: Bool { UserDefaults.standard.object(forKey: dualKey) as? Bool ?? true }
 
     /// Carico sul computer: «auto» (di serie), «light» o «full». Leggero = meno passaggi, meno memoria, pezzi meno
-    /// sovrapposti: un filo meno pulita, molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine.
+    /// sovrapposti: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine.
     static let loadKey = "computerLoad"
     static var loadMode: String { UserDefaults.standard.string(forKey: loadKey) ?? "auto" }
     static func isLight(mode: String, hasNeuralEngine: Bool) -> Bool { mode == "light" || (mode == "auto" && !hasNeuralEngine) }

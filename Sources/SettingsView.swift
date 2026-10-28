@@ -135,7 +135,7 @@ struct EngineSettings: View {
                     Text("Completo").tag("full")
                 }
             } footer: {
-                Text("Leggero: meno passaggi e meno memoria; un filo meno pulita, molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine (Mac Intel).")
+                Text("Leggero: meno passaggi e meno memoria; quasi la stessa qualità (misurata su 50 canzoni), molto più rapida sui computer lenti. In automatico è leggero sui Mac senza Neural Engine (Mac Intel).")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
