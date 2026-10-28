@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-//  AudioLR nel browser: la stessa separazione di «Veloce» nell'app
+//  AudioLR nel browser: la stessa separazione di «Rapida» nell'app
 //  (HTDemucs). La rete gira con ONNX Runtime Web; spettrogramma,
 //  normalizzazione e ricucitura dei pezzi sono qui, copia esatta di
 //  Sources/Spectrogram.swift e Sources/Separator.swift dell'app.

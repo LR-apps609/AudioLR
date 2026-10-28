@@ -30,14 +30,14 @@
         ${toggle("showLibrary", true, "Mostra la libreria a sinistra")}
         ${toggle("soundWhenDone", true, "Suono quando ha finito")}
         ${toggle("sleepAfterBatch", false, "Poi metti in stop il computer", "Dopo un album (più canzoni in coda), un minuto dopo l'ultima")}`,
-      tracce: `${pick("quality", "best", "Qualità predefinita", [["fast", "Veloce"], ["best", "Massima"], ["studio", "Studio"]])}
+      tracce: `${pick("quality", "best", "Qualità predefinita", [["fast", "Rapida"], ["best", "Massima"], ["studio", "Studio"]])}
         ${pick("outputFormat", "wav24", "Formato delle tracce", Object.entries(Encode.FORMATS).map(([k, f]) => [k, f.title]))}
         ${toggle("makeInstrumental", true, "Crea anche la base senza voce (karaoke)")}
         ${toggle("splitGuitarPiano", true, "Chitarra e pianoforte in tracce proprie (Massima e Studio)")}
         <label class="setting"><span>Sposta le registrazioni di <b id="ofs">${Prefs.get("recordOffsetMs", 0)}</b> ms<small>IsoLR toglie da solo il ritardo di microfono e altoparlanti. Se le registrazioni suonano un filo in anticipo, alza il numero; se in ritardo, abbassalo.</small></span>
           <input type="range" min="-300" max="300" step="5" value="${Prefs.get("recordOffsetMs", 0)}" data-pref-range="recordOffsetMs"></label>`,
-      motore: `${pick("computerLoad", "auto", "Carico sul computer", [["auto", "Automatico"], ["light", "Leggero"], ["full", "Completo"]], "Leggero: meno passaggi e meno memoria; quasi la stessa qualità (misurata su 50 canzoni), molto più rapida sui computer lenti. In automatico è leggero senza una scheda grafica adatta, con il solo processore o con poca memoria.")}
-        ${toggle("forceCpu", false, "Usa solo il processore", "Se la scheda grafica dà problemi. Più lento.")}
+      motore: `${toggle("forceCpu", false, "Usa solo il processore", "Se la scheda grafica dà problemi. Più lento, stesso risultato.")}
+        <div class="setting"><span>Il risultato è lo stesso su tutti i computer: cambia solo il tempo. Sui computer con poca memoria o senza una scheda grafica adatta IsoLR apre un modello alla volta da sola.</span></div>
         <div class="setting"><span>Modelli scaricati<small id="models">…</small></span></div>`,
       aggiornamenti: `<div class="setting"><span>Versione</span><b>${esc(version)}</b></div>
         <div class="setting"><span>IsoLR controlla da sola gli aggiornamenti ogni 3 ore. Quando ce n'è uno, in alto compare «Aggiornamento disponibile»: un clic e si installa.</span></div>
@@ -45,10 +45,9 @@
       informazioni: `<div style="display:flex;gap:12px;align-items:center"><img src="img/logo.png" width="48" height="48" style="border-radius:11px" alt="">
           <div><b style="font-size:18px">IsoLR</b><div class="muted">Versione ${esc(version)} · famiglia LR · Separa voce e strumenti, tutto sul tuo computer.</div></div></div>
         <table class="plain"><tr><th>Modello</th><th>Per</th><th>Licenza</th></tr>
-          <tr><td>HTDemucs (Meta)</td><td>Veloce, Studio</td><td>MIT</td></tr>
+          <tr><td>HTDemucs (Meta)</td><td>Rapida</td><td>MIT</td></tr>
           <tr><td>BS-RoFormer SW</td><td>Massima, Studio</td><td>MIT (codice)</td></tr>
           <tr><td>BS-RoFormer Revive (unwa)</td><td>Studio, voce</td><td>—</td></tr>
-          <tr><td>Mel-Band RoFormer (Kim)</td><td>Studio, voce</td><td>MIT (codice)</td></tr>
           <tr><td>Mel-Band RoFormer karaoke (aufr33, viperx)</td><td>Voce e cori</td><td>MIT (codice)</td></tr>
           <tr><td>BS-RoFormer Chorus Male-Female (Sucial)</td><td>Voce maschile e femminile</td><td>MIT (codice)</td></tr>
           <tr><td>MDX23C DrumSep (aufr33, jarredou)</td><td>Batteria divisa</td><td>—</td></tr>
@@ -72,7 +71,7 @@
       sheet.addEventListener("change", (e) => {
         const el = e.target;
         if (el.dataset.pref) { Prefs.set(el.dataset.pref, el.checked); if (el.dataset.pref === "showLibrary") { IsoApp.ui.showLibrary = el.checked; IsoApp.render(); } }
-        if (el.dataset.prefSelect) { Prefs.set(el.dataset.prefSelect, el.value); if (el.dataset.prefSelect === "appearance") applyAppearance(); if (el.dataset.prefSelect === "quality") { IsoApp.ui.quality = el.value; IsoApp.render(); } if (el.dataset.prefSelect === "computerLoad") IsoApp.render(); }
+        if (el.dataset.prefSelect) { Prefs.set(el.dataset.prefSelect, el.value); if (el.dataset.prefSelect === "appearance") applyAppearance(); if (el.dataset.prefSelect === "quality") { IsoApp.ui.quality = el.value; IsoApp.render(); } }
       });
       sheet.addEventListener("input", (e) => { const el = e.target; if (el.dataset.prefRange) { Prefs.set(el.dataset.prefRange, +el.value); $("#ofs", sheet).textContent = el.value; } });
       show(current);
@@ -108,7 +107,7 @@
     open(`<h2>Come si usa IsoLR</h2>
       <ol style="margin:0;padding-left:20px;display:grid;gap:8px">
         <li><b>Trascina una canzone</b> nella finestra (o «Scegli un file»). Più canzoni insieme vanno in coda: un album intero, anche di notte.</li>
-        <li><b>Scegli la qualità</b>: Veloce per provare, Massima per quasi tutto, Studio quando conta il massimo. Poi <b>Separa</b>.</li>
+        <li><b>Scegli la qualità</b>: Rapida per provare, Massima per quasi tutto, Studio quando conta il massimo. Poi <b>Separa</b>.</li>
         <li><b>Ascolta e mescola</b>: volume, muto (altoparlante) e solo (cuffie) per traccia; Tutto, Karaoke, Solo voce; «Senza…» toglie uno strumento.</li>
         <li><b>Esercitati</b>: velocità e tono, ripetizione di un passaggio (A e B, o un clic su una parte della canzone), rampa, metronomo, conteggio, accordi, registrati sopra la base e confronta.</li>
         <li><b>Warp</b>: correggi i segnaposto sulle battute (metronomo e parti diventano più precisi) e crea una versione a tempo fisso, per esempio a 120 BPM. <b>Rimonta</b>: taglia la canzone sulle battute, sposta, duplica o togli le parti e crea la versione nuova.</li>
@@ -118,7 +117,7 @@
         <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
         <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
         <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr></table>
-      <p class="muted">Computer lento? In Impostazioni › Motore › «Carico sul computer» scegli Leggero: meno passaggi e meno memoria, quasi la stessa qualità (misurata su 50 canzoni) ma molto più rapida. Senza una scheda grafica adatta è già così in automatico.</p>
+      <p class="muted">Rapida, Massima e Studio danno lo stesso risultato su tutti i computer: su quelli più lenti ci mettono solo di più. Se hai fretta, Massima è circa 2–3 volte più rapida di Studio.</p>
       <p class="muted">La prima volta Massima e Studio scaricano i loro modelli (una volta sola); poi IsoLR funziona anche senza internet. Le canzoni non lasciano mai il computer.</p>
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
   }
@@ -138,7 +137,6 @@
       win,
       `Processori: ${navigator.hardwareConcurrency || "?"} · memoria: ${navigator.deviceMemory ? "almeno " + navigator.deviceMemory + " GB" : "?"}`,
       `Scheda grafica: ${gpu}`,
-      `Modalità: ${job.lightText || "completa"}`,
       `Qualità: ${(Separation.QUALITY[Prefs.get("quality", "best")] || {}).title || "?"} · solo processore: ${Prefs.get("forceCpu", false) || job.cpu ? "sì" : "no"}`,
     ];
     if (job.current && job.current.meta) lines.push(`Ultima canzone: ${job.current.meta.engine || job.current.meta.backend || "?"} · ${IsoApp.fmt(job.current.meta.duration || 0)}`);

@@ -7,9 +7,9 @@
   "use strict";
   const RATE = 44100;
 
-  // I modelli e i tempi di ogni qualità (completa o leggera) sono in core/load.js
+  // I modelli e i tempi di ogni qualità sono in core/load.js
   const QUALITY = {
-    fast: { title: "Veloce", icon: "bolt", line: "4 tracce · per provare un'idea", keys: ["vocals", "drums", "bass", "other"] },
+    fast: { title: "Rapida", icon: "bolt", line: "4 tracce · per provare un'idea", keys: ["vocals", "drums", "bass", "other"] },
     best: { title: "Massima", icon: "sparkle", line: "6 tracce · pulita e veloce", keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
     studio: { title: "Studio", icon: "star", line: "6 tracce · la più pulita", keys: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
   };
@@ -19,15 +19,14 @@
     drums: { source: "drums", parts: ["kick", "snare", "toms", "hh", "ride", "crash"], model: "BatteriaDrumSep", title: "Dividi la batteria", detail: "Cassa, rullante, tom, charleston, ride e crash in corsie proprie", icon: "grid", size: "circa 200 MB" },
   };
 
-  /** Il carico sul computer (core/load.js): leggero sui computer lenti o se scelto nelle Impostazioni. */
+  /** Il computer (core/load.js): sui computer deboli i modelli si aprono uno alla volta. */
   function loadInfo(fellBack = false) {
-    return { mode: Prefs.get("computerLoad", "auto"), webgpu: "gpu" in navigator, forceCpu: Prefs.get("forceCpu", false),
-      fellBack, memoryGB: navigator.deviceMemory };
+    return { webgpu: "gpu" in navigator, forceCpu: Prefs.get("forceCpu", false), fellBack, memoryGB: navigator.deviceMemory };
   }
 
-  // «circa 3 minuti» per una canzone di 4 minuti, come le schede della qualità sul Mac (in leggero, meno passaggi)
-  function estimate(q, seconds = 240, light = IsoLR.Load.isLight(loadInfo())) {
-    const s = (IsoLR.Load.perMinute(q, light) * seconds) / 60;
+  // «circa 3 minuti» per una canzone di 4 minuti, come le schede della qualità sul Mac
+  function estimate(q, seconds = 240) {
+    const s = (IsoLR.Load.perMinute(q) * seconds) / 60;
     if (s < 50) return "circa 30 secondi";
     const m = Math.max(1, Math.round(s / 60));
     return `circa ${m} ${m === 1 ? "minuto" : "minuti"}`;
@@ -135,8 +134,8 @@
       }
     }
 
-    get light() { return IsoLR.Load.isLight(loadInfo(this.cpu)); }
-    get lightText() { return IsoLR.Load.text(loadInfo(this.cpu)); }
+    /** Un modello alla volta in memoria (computer deboli): stesso risultato, meno memoria. */
+    get light() { return IsoLR.Load.oneAtATime(loadInfo(this.cpu)); }
 
     /** Scarica (la prima volta), verifica e carica nel lavoratore un modello. */
     async model(name, label) {
@@ -180,7 +179,7 @@
         const res = await this.withFallback(async () => {
           // In leggero (computer lenti) meno modelli, e il lavoratore li apre uno alla volta quando servono
           light = this.light;
-          for (const m of IsoLR.Load.models(quality, light)) {
+          for (const m of IsoLR.Load.models(quality)) {
             const label = m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti";
             if (!light) { await this.model(m, label); continue; }
             this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
@@ -203,7 +202,7 @@
         const analysis = await analyze(tracks);
         this.step = "Salvo le tracce"; this.emit();
         const took = (performance.now() - t0) / 1000;
-        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name, mode: light ? this.lightText : null });
+        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name });
         this.phase = "done"; this.batch.songs++;
         this.emit();
       } catch (e) {

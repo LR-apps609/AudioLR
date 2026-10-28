@@ -1,9 +1,9 @@
 // IsoLR per Windows: il lavoro pesante, fuori dalla finestra (che resta fluida). Le stesse ricette del Mac
-// (Sources/Engine.swift, SeparationJob.swift): Veloce = HTDemucs; Massima = BS-RoFormer SW; Studio = voce
-// media di Revive, Kim e SW, strumenti media di SW sulla base, HTDemucs sulla base e SW sulla canzone.
+// (Sources/Engine.swift, SeparationJob.swift): Rapida = HTDemucs; Massima = BS-RoFormer SW; Studio = voce
+// media di Revive e SW, strumenti media di SW sulla base e SW sulla canzone (core/load.js).
 // Più le divisioni in più: voce e cori, voce maschile e femminile, batteria nei suoi pezzi.
-// In modalità leggera (core/load.js): Studio con due modelli, pezzi meno sovrapposti, e ogni modello
-// chiesto alla finestra quando serve e chiuso appena ha finito (uno alla volta in memoria).
+// Sui computer deboli ogni modello si chiede alla finestra quando serve e si chiude appena ha finito
+// (uno alla volta in memoria): cambia solo la memoria, non il risultato.
 /* global ort, AudioLREngine, AudioLRRoFormer, AudioLRMDX23C */
 importScripts("../vendor/ort.webgpu.min.js", "../app/engine-core.js", "../app/roformer-core.js");
 try { importScripts("../core/mdx23c-core.js"); } catch (e) { /* DrumSep arriva con i modelli nuovi */ }
@@ -69,7 +69,7 @@ function netFor(name) {
   return async (x) => (await s.run({ x: new ort.Tensor("float32", x, [1, T, FS * 2]) })).mask.data;
 }
 
-// Modalità leggera: i modelli si chiedono alla finestra quando servono e si chiudono appena finito
+// Sui computer deboli: i modelli si chiedono alla finestra quando servono e si chiudono appena finito
 let light = false, lastBackend = null;
 const waiting = {};                                // nome → { resolve, reject }
 async function ensure(name) {
@@ -90,7 +90,7 @@ async function runRoformer(name, input, from, span, step) {
   if (!m) throw new Error("modello " + name + " non caricato");
   lastBackend = m.backend;
   const out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
-    overlap: self.IsoLR.Load.overlap(light),
+    overlap: self.IsoLR.Load.OVERLAP,
     onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
   const res = {};
   m.cfg.sources.forEach((k, i) => { res[String(k).toLowerCase()] = out[i]; });
@@ -98,13 +98,6 @@ async function runRoformer(name, input, from, span, step) {
 }
 
 const zeros = (n) => [new Float32Array(n), new Float32Array(n)];
-function mean(list, n) {
-  const out = zeros(n);
-  for (const t of list) for (let c = 0; c < 2; c++) { const a = out[c], b = t[c]; for (let k = 0; k < n; k++) a[k] += b[k]; }
-  const w = 1 / list.length;
-  for (let c = 0; c < 2; c++) { const a = out[c]; for (let k = 0; k < n; k++) a[k] *= w; }
-  return out;
-}
 function minus(a, b, n) {
   const out = zeros(n);
   for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) out[c][k] = a[c][k] - b[c][k];
@@ -127,41 +120,16 @@ async function separate(quality, mix, split) {
     const s = await runRoformer("StrumentiSW", mix, 0, 1, "Strumenti");
     releaseNet("StrumentiSW");
     tracks = { vocals: s.vocals, drums: s.drums, bass: s.bass, guitar: s.guitar, piano: s.piano, other: s.other };
-  } else if (light) {
-    // Studio leggera (come sul Mac): voce da Revive e SW sulla canzone; strumenti da SW (ricetta A anche sulla base)
-    const L = self.IsoLR.Load, both = L.LIGHT_STUDIO === "a", P = both ? 1 / 3 : 1 / 2;
+  } else {
+    // Studio (come sul Mac): voce da Revive e SW sulla canzone; strumenti dalla media di SW sulla canzone e sulla base
+    const L = self.IsoLR.Load, P = 1 / 3;
     const revive = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 2")).vocals;
     releaseNet("VoceRevive");
     const onMix = await runRoformer("StrumentiSW", mix, P, P, "Voce 2 di 2 e strumenti");
     const voice = L.voice(revive, onMix, n);
-    const onBase = both ? await runRoformer("StrumentiSW", minus(mix, voice, n), 2 * P, P, "Strumenti sulla base") : null;
+    const onBase = await runRoformer("StrumentiSW", minus(mix, voice, n), 2 * P, P, "Strumenti sulla base");
     releaseNet("StrumentiSW");
     tracks = { vocals: voice, ...L.instruments(onMix, onBase, n) };
-  } else {
-    // Studio: 7 passaggi, la barra divisa in parti uguali
-    const P = 1 / 7;
-    let voice = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 3")).vocals;
-    {
-      const kim = (await runRoformer("VoceRoFormer9", mix, P, P, "Voce 2 di 3")).vocals;
-      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) voice[c][k] += kim[c][k];
-    }
-    const onMix = await runRoformer("StrumentiSW", mix, 2 * P, P, "Voce 3 di 3");
-    for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) voice[c][k] = (voice[c][k] + onMix.vocals[c][k]) / 3;
-    const base = minus(mix, voice, n);
-    const onBase = await runRoformer("StrumentiSW", base, 3 * P, P, "Strumenti 1 di 2");
-    const ht = await runDemucs(base, 4 * P, 2 * P, "Strumenti 2 di 3");
-    const ft = nets["HTDemucsFT-1"] ? (await runDemucs(base, 6 * P, P, "Strumenti 3 di 3", "HTDemucsFT-1")).bass : null;
-    const restOf = (s) => plus([s.guitar, s.piano, s.other], n);
-    const rest = mean([restOf(onBase), ht.other, restOf(onMix)], n);
-    const guitar = mean([onBase.guitar, onMix.guitar], n), piano = mean([onBase.piano, onMix.piano], n);
-    tracks = {
-      vocals: voice,
-      drums: mean([onBase.drums, ht.drums, onMix.drums], n),
-      bass: mean(ft ? [onBase.bass, ft, ht.bass, onMix.bass] : [onBase.bass, ht.bass, onMix.bass], n),
-      guitar, piano,
-      // «Altri strumenti» è quello che resta, così chitarra + piano + altro = la media dei tre «resto»
-      other: minus(rest, plus([guitar, piano], n), n),
-    };
   }
   if (!split && tracks.guitar) {
     tracks.other = plus([tracks.other, tracks.guitar, tracks.piano], n);

@@ -1,6 +1,7 @@
-Novità di IsoLR per Windows 0.8.0 «Leggera»:
-• Nuova impostazione «Carico sul computer» (Impostazioni › Motore): Automatico, Leggero o Completo. In leggero IsoLR fa meno passaggi (Studio: due modelli invece di quattro), sovrappone meno i pezzi e apre un modello alla volta: quasi la stessa qualità (misurata su 50 canzoni), molto più rapida e leggera
-• In automatico è leggera sui computer senza una scheda grafica adatta, con «Usa solo il processore», dopo il ripiego sul processore o con poca memoria; le schede della qualità lo dicono con l'etichetta «leggera»
+Novità di IsoLR per Windows 0.8.0 «Studio più rapida»:
+• Studio è più rapida e pulita: tre passaggi invece di sette (voce da Revive e SW, strumenti da SW sulla canzone e sulla base). Sulle 50 canzoni intere di prova è uguale o migliore di prima in ogni traccia (voce 12,21 dB contro 12,11, basso 11,29 contro 10,93) e ci mette molto meno, soprattutto sui computer senza una scheda grafica adatta
+• Tre qualità, uguali su tutti i computer: Rapida (prima si chiamava «Veloce»), Massima e Studio. Cambia solo il tempo, non il risultato
+• Sui computer con poca memoria o senza una scheda grafica adatta IsoLR apre un modello alla volta da sola. Studio scarica due modelli invece di quattro
 
 Novità di IsoLR per Windows 0.7.0 «Warp e Rimonta»:
 • Warp (nella barra del mixer): la forma d'onda con un segnaposto sul primo battito di ogni battuta. Se IsoLR ha sbagliato, li trascini al posto giusto, ne aggiungi uno con un doppio clic o lo togli con Canc; ascolti con il metronomo per controllare. «Salva la griglia»: metronomo, parti della canzone e passaggio A–B usano i segnaposto corretti

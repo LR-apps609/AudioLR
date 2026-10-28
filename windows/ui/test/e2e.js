@@ -1,4 +1,4 @@
-// Prova completa dell'interfaccia Windows nel Chromium del server: una canzone vera separata in Veloce
+// Prova completa dell'interfaccia Windows nel Chromium del server: una canzone vera separata in Rapida
 // (HTDemucs nel processore), tracce salvate, tempo e tonalità, mixer, download in WAV e FLAC.
 // Uso: node windows/ui/test/e2e.js <cartella dist> <canzone.wav> <cartella schermate>
 const { chromium } = require(process.env.PW || "playwright");
@@ -32,7 +32,7 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   await page.evaluate(() => IsoApp.job.start("fast"));
   await page.waitForFunction(() => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, null, { timeout: 15 * 60 * 1000, polling: 1000 });
   const r = await page.evaluate(() => ({ phase: IsoApp.job.phase, error: IsoApp.job.error, meta: IsoApp.job.current && IsoApp.job.current.meta }));
-  check(r.phase === "done", `separazione Veloce (${Math.round((Date.now() - t0) / 1000)} s) ${r.error || ""}`);
+  check(r.phase === "done", `separazione Rapida (${Math.round((Date.now() - t0) / 1000)} s) ${r.error || ""}`);
   if (r.meta) {
     const keys = r.meta.stems.map((s) => s.key).join(",");
     check(keys === "vocals,drums,bass,other,instrumental", "tracce: " + keys);
