@@ -30,10 +30,12 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   }, b64);
   // «Annulla» a metà separazione: entro un secondo la canzone torna pronta, senza errori
   await page.evaluate(() => { IsoApp.job.start("fast"); });
-  await page.waitForFunction(() => IsoApp.job.stage === "separating" && IsoApp.job.progress > 0.05, null, { timeout: 5 * 60 * 1000, polling: 200 });
+  // Attese con page.evaluate a giro (waitForFunction nella pagina dell'app è bloccato dalla sua CSP)
+  const until = async (fn, ms, every) => { const end = Date.now() + ms; while (Date.now() < end) { if (await page.evaluate(fn)) return true; await page.waitForTimeout(every); } return false; };
+  await until(() => IsoApp.job.stage === "separating" && IsoApp.job.progress > 0.05, 5 * 60 * 1000, 200);
   const c0 = Date.now();
   await page.click('[data-act="cancel"]');
-  await page.waitForFunction(() => IsoApp.job.phase === "pending", null, { timeout: 5000, polling: 50 }).catch(() => {});
+  await until(() => IsoApp.job.phase === "pending", 5000, 50);
   const cancelled = await page.evaluate(() => ({ phase: IsoApp.job.phase, error: IsoApp.job.error }));
   check(cancelled.phase === "pending" && !cancelled.error, `Annulla risponde in ${Date.now() - c0} ms (fase ${cancelled.phase})`);
   const t0 = Date.now();
