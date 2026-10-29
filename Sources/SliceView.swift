@@ -132,7 +132,7 @@ struct SliceView: View {
     private var wave: some View {
         GeometryReader { geo in
             TimelineView(.animation(minimumInterval: 1 / 30, paused: lit.isEmpty)) { tl in
-                Canvas { ctx, sz in draw(&ctx, sz, now: tl.date) }
+                SketchView { sz in sketch(sz, now: tl.date) }
             }
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.well))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -169,12 +169,13 @@ struct SliceView: View {
         return best
     }
 
-    private func draw(_ ctx: inout GraphicsContext, _ sz: CGSize, now: Date) {
+    private func sketch(_ sz: CGSize, now: Date) -> Sketch {
+        var k = Sketch()
         let w = sz.width, h = sz.height, color = Theme.color(key)
         for (i, s) in slices.enumerated() {
             let x0 = x(Double(s.start) / rate, w), x1 = x(Double(s.end) / rate, w)
             guard x1 >= 0, x0 <= w else { continue }
-            ctx.fill(Path(CGRect(x: x0, y: 0, width: x1 - x0, height: h)), with: .color(color.opacity(i == selected ? 0.22 : i % 2 == 1 ? 0.07 : 0.03)))
+            k.fill(Path(CGRect(x: x0, y: 0, width: x1 - x0, height: h)), color.opacity(i == selected ? 0.22 : i % 2 == 1 ? 0.07 : 0.03))
         }
         // Forma d'onda
         if !peaks.isEmpty, duration > 0 {
@@ -183,9 +184,10 @@ struct SliceView: View {
             while px < w {
                 let a = Int((time(px, w) * per).rounded(.down)), b = max(a + 1, Int((time(px + 2, w) * per).rounded(.down)))
                 var m: Float = 0
-                for i in max(0, a)..<min(peaks.count, b) { m = max(m, peaks[i]) }
+                let lo = max(0, a), hi = min(peaks.count, b)
+                if lo < hi { for i in lo..<hi { m = max(m, peaks[i]) } }
                 let bh = max(1, CGFloat(m) * (h - 24))
-                ctx.fill(Path(CGRect(x: px, y: h / 2 - bh / 2, width: 1.5, height: bh)), with: .color(color))
+                k.fill(Path(CGRect(x: px, y: h / 2 - bh / 2, width: 1.5, height: bh)), color)
                 px += 2
             }
         }
@@ -194,9 +196,10 @@ struct SliceView: View {
             let xx = x(Double(s.start) / rate, w)
             guard xx >= -2, xx <= w + 2 else { continue }
             let on = (lit[i] ?? .distantPast) > now
-            ctx.fill(Path(CGRect(x: xx - (on ? 3 : 1), y: 0, width: on ? 6 : 2, height: h)), with: .color(i == selected ? Theme.ink : Theme.brass))
-            ctx.draw(Text("\(i + 1)").font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.brass), at: CGPoint(x: xx + 4, y: 9), anchor: .leading)
+            k.fill(Path(CGRect(x: xx - (on ? 3 : 1), y: 0, width: on ? 6 : 2, height: h)), i == selected ? Theme.ink : Theme.brass)
+            k.text("\(i + 1)", at: CGPoint(x: xx + 4, y: 9), size: 10, color: Theme.brass, leading: true)
         }
+        return k
     }
 
     private var pads: some View {
@@ -216,7 +219,7 @@ struct SliceView: View {
         return Button { play(i) } label: {
             VStack(spacing: 2) {
                 Text(ok ? "\(i + 1)" : "").font(.system(size: 14, weight: .bold))
-                Text(ok ? String(Self.keys[k]).uppercased() : "").font(.system(size: 10)).foregroundStyle(on ? .white.opacity(0.85) : .secondary)
+                Text(ok ? String(Self.keys[k]).uppercased() : "").font(.system(size: 10)).foregroundStyle(on ? AnyShapeStyle(Color.white.opacity(0.85)) : AnyShapeStyle(.secondary))
             }
             .frame(maxWidth: .infinity, minHeight: 50)
             .foregroundStyle(on ? .white : Theme.ink)

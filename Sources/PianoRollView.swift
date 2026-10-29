@@ -191,7 +191,7 @@ struct PianoRollView: View {
         GeometryReader { geo in
             let size = geo.size
             TimelineView(.animation(paused: !mixer.isPlaying)) { _ in
-                Canvas { ctx, sz in draw(&ctx, sz) }
+                SketchView { sz in sketch(sz) }
             }
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.well))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -199,7 +199,7 @@ struct PianoRollView: View {
             .gesture(dragGesture(size))
             .simultaneousGesture(SpatialTapGesture(count: 2).onEnded { v in addNote(at: v.location, size: size) })
             .simultaneousGesture(SpatialTapGesture(count: 1).onEnded { v in tap(at: v.location, size: size) })
-            .gesture(MagnifyGesture().onEnded { v in zoom(1 / max(0.2, v.magnification)) })
+            .gesture(MagnifyGesture().onEnded { v in zoom(1 / max(0.2, Double(v.magnification))) })
             .onKeyPress(.delete) { deleteSelection(); return .handled }
             .onKeyPress(.deleteForward) { deleteSelection(); return .handled }
             .onKeyPress(.upArrow) { transposeSelection(NSEvent.modifierFlags.contains(.shift) ? 12 : 1); return .handled }
@@ -217,24 +217,25 @@ struct PianoRollView: View {
     private func y(_ p: Int, _ h: CGFloat) -> CGFloat { CGFloat(high - p) * rowHeight(h) }
     private func p(_ y: CGFloat, _ h: CGFloat) -> Int { high - Int(floor(y / rowHeight(h))) }
 
-    private func draw(_ ctx: inout GraphicsContext, _ sz: CGSize) {
+    private func sketch(_ sz: CGSize) -> Sketch {
+        var k = Sketch()
         let w = sz.width, h = sz.height, rh = rowHeight(h)
         let black: Set<Int> = [1, 3, 6, 8, 10]
         for q in low...high {
             let yy = y(q, h)
-            if black.contains(q % 12) { ctx.fill(Path(CGRect(x: keyWidth, y: yy, width: w - keyWidth, height: rh)), with: .color(Theme.stroke)) }
-            if q % 12 == 0 { ctx.fill(Path(CGRect(x: keyWidth, y: yy + rh - 1, width: w - keyWidth, height: 1)), with: .color(Theme.stroke)) }
+            if black.contains(q % 12) { k.fill(Path(CGRect(x: keyWidth, y: yy, width: w - keyWidth, height: rh)), Theme.stroke) }
+            if q % 12 == 0 { k.fill(Path(CGRect(x: keyWidth, y: yy + rh - 1, width: w - keyWidth, height: 1)), Theme.stroke) }
         }
         // Griglia: sedicesimi tenui quando c'è spazio, battiti, battute più forti
         if span / Double(max(1, w - keyWidth)) * 6 < 0.12 {
             for g in grid where g >= t0 && g <= t0 + span {
-                ctx.fill(Path(CGRect(x: x(g, w), y: 0, width: 0.5, height: h)), with: .color(Theme.stroke))
+                k.fill(Path(CGRect(x: x(g, w), y: 0, width: 0.5, height: h)), Theme.stroke)
             }
         }
         if let s = job.analysis?.structure {
             for (i, b) in s.beats.enumerated() where b >= t0 && b <= t0 + span {
                 let bar = (i - s.firstDownbeat) % max(1, s.beatsPerBar) == 0
-                ctx.fill(Path(CGRect(x: x(b, w), y: 0, width: 1, height: h)), with: .color(bar ? Theme.ink.opacity(0.35) : Theme.stroke))
+                k.fill(Path(CGRect(x: x(b, w), y: 0, width: 1, height: h)), bar ? Theme.ink.opacity(0.35) : Theme.stroke)
             }
         }
         // Le note
@@ -243,27 +244,27 @@ struct PianoRollView: View {
             let x0 = max(keyWidth, x(n.start, w)), x1 = x(n.end, w)
             let r = CGRect(x: x0, y: y(n.pitch, h) + 1, width: max(2, x1 - x0), height: max(2, rh - 2))
             let path = Path(roundedRect: r, cornerRadius: min(3, rh / 2))
-            ctx.fill(path, with: .color(color.opacity(0.45 + 0.55 * Double(n.velocity) / 127)))
-            if selection.contains(n.id) { ctx.stroke(path, with: .color(Theme.ink), lineWidth: 2) }
+            k.fill(path, color.opacity(0.45 + 0.55 * Double(n.velocity) / 127))
+            if selection.contains(n.id) { k.stroke(path, Theme.ink, StrokeStyle(lineWidth: 2)) }
         }
         if let d = drag, d.kind == .rect {
             let r = CGRect(x: min(d.start.x, d.current.x), y: min(d.start.y, d.current.y), width: abs(d.current.x - d.start.x), height: abs(d.current.y - d.start.y))
-            ctx.stroke(Path(r), with: .color(Theme.brass), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            k.stroke(Path(r), Theme.brass, StrokeStyle(lineWidth: 1, dash: [4, 3]))
         }
         // Tastiera
-        ctx.fill(Path(CGRect(x: 0, y: 0, width: keyWidth, height: h)), with: .color(Theme.card))
+        k.fill(Path(CGRect(x: 0, y: 0, width: keyWidth, height: h)), Theme.card)
         for q in low...high {
             let yy = y(q, h), isBlack = black.contains(q % 12)
-            ctx.fill(Path(CGRect(x: 0, y: yy, width: isBlack ? keyWidth * 0.62 : keyWidth, height: rh)), with: .color(isBlack ? Theme.ink.opacity(0.8) : Theme.card))
-            ctx.fill(Path(CGRect(x: 0, y: yy + rh - 0.5, width: keyWidth, height: 0.5)), with: .color(Theme.stroke))
+            k.fill(Path(CGRect(x: 0, y: yy, width: isBlack ? keyWidth * 0.62 : keyWidth, height: rh)), isBlack ? Theme.ink.opacity(0.8) : Theme.card)
+            k.fill(Path(CGRect(x: 0, y: yy + rh - 0.5, width: keyWidth, height: 0.5)), Theme.stroke)
             if q % 12 == 0 && rh >= 7 {
-                ctx.draw(Text("Do\(q / 12 - 1)").font(.system(size: min(10, rh), weight: .semibold)).foregroundColor(.secondary),
-                         at: CGPoint(x: keyWidth * 0.8, y: yy + rh / 2))
+                k.text("Do\(q / 12 - 1)", at: CGPoint(x: keyWidth * 0.8, y: yy + rh / 2), size: min(10, rh), color: .secondary)
             }
         }
-        ctx.fill(Path(CGRect(x: keyWidth - 1, y: 0, width: 1, height: h)), with: .color(Theme.stroke))
+        k.fill(Path(CGRect(x: keyWidth - 1, y: 0, width: 1, height: h)), Theme.stroke)
         let pos = mixer.position
-        if pos >= t0 && pos <= t0 + span { ctx.fill(Path(CGRect(x: x(pos, w) - 1, y: 0, width: 2, height: h)), with: .color(Theme.brass)) }
+        if pos >= t0 && pos <= t0 + span { k.fill(Path(CGRect(x: x(pos, w) - 1, y: 0, width: 2, height: h)), Theme.brass) }
+        return k
     }
 
     // MARK: Gesti
@@ -377,6 +378,8 @@ struct PianoRollView: View {
     // MARK: Ascolto
 
     private func appear() {
+        // Le schermate di prova: niente suono né orologio
+        guard preloaded == nil else { return }
         mixer.pause()
         saved = mixer.state
         sound = NoteSynth.Sound(rawValue: soundRaw) ?? (stem.key == "bass" ? .bass : .piano)
@@ -388,6 +391,7 @@ struct PianoRollView: View {
     }
 
     private func disappear() {
+        guard preloaded == nil else { return }
         timer?.invalidate()
         mixer.pause()
         synth.stop()
