@@ -267,6 +267,7 @@
         const took = (performance.now() - t0) / 1000;
         this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name });
         this.phase = "done"; this.batch.songs++;
+        this.finishedAt = Date.now();             // per la festa di fine separazione (non riaprendo dalla libreria)
         this.emit();
       } catch (e) {
         if (this.cancelled) {
@@ -340,7 +341,7 @@
       return res.notes;
     }
 
-    async open(entry) { if (this.busy) return; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
+    async open(entry) { if (this.busy) return; this.finishedAt = null; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
   }
   Job.lines = [];
 

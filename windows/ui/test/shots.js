@@ -63,6 +63,9 @@ async function fakeSong(page) {
         j.peaks = p; j.stageStarted = Date.now() - 95000; j.step = "Voce 2 di 2 e strumenti"; j.progress = 0.46; j.emit();
       });
       await shot("0-lavoro");
+      // Il modello che si scarica: le bobine
+      await page.evaluate(() => { const j = IsoApp.job; j.peaks = null; IsoApp.render(); j.setStage("model"); j.step = "Scarico il modello della voce (solo la prima volta)… 38%"; j.progress = 0.38; j.emit(); });
+      await shot("0b-modello");
       await page.evaluate(() => { const j = IsoApp.job; j.phase = "idle"; j.peaks = null; j.stage = null; j.progress = 0; j.emit(); IsoApp.render(); });
       // Una canzone trascinata: pronta, con le schede della qualità
       await page.evaluate(() => IsoApp.job.add([new File([new Uint8Array(1000)], "Canzone di prova.mp3")]));
@@ -71,6 +74,10 @@ async function fakeSong(page) {
       await page.evaluate(async () => { const e = IsoApp.ui.library[0]; await IsoApp.job.open(e); });
       await page.waitForTimeout(1500);
       await shot("3-risultati");
+      // La festa di fine separazione (ferma a metà) e il logo sul battito
+      await page.evaluate(() => { IsoApp.ui.frozenParty = 0.42; IsoApp.ui.frozenPulse = 0.8; IsoApp.job.finishedAt = Date.now(); IsoApp.render(); });
+      await shot("3b-fine");
+      await page.evaluate(() => { document.querySelectorAll(".party").forEach((e) => e.remove()); IsoApp.ui.frozenParty = null; IsoApp.ui.frozenPulse = null; IsoApp.job.finishedAt = null; });
       await page.click('[data-act="practice"]');
       await shot("4-esercitati");
       await page.click('[data-act="practice"]');

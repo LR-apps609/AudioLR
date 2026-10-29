@@ -304,3 +304,45 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 .pad.lit { background: var(--c); color: #fff; box-shadow: 0 0 16px color-mix(in srgb, var(--c) 70%, transparent); transform: scale(.97); }
 .pad.lit small { color: rgba(255,255,255,.85); }
 @media (max-width: 1100px) { .pads { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* ── Le animazioni dello «Studio di notte» (come Sources/Animations.swift) ── */
+/* Il logo a tempo: --pulse (0…1) lo mette il battito della canzone */
+.logo-wrap { position: relative; display: inline-grid; flex: none; --pulse: 0; }
+.logo-wrap .logo { transform: scale(calc(1 + .09 * var(--pulse))); filter: drop-shadow(0 0 calc(10px * var(--pulse)) rgba(214,170,98,.6)); }
+.logo-wrap .halo { position: absolute; inset: 0; border-radius: 11px; border: 2px solid var(--brass); pointer-events: none;
+  opacity: calc(.75 * var(--pulse)); transform: scale(calc(1.6 - .6 * var(--pulse))); }
+/* Le bobine mentre il modello si scarica o si prepara */
+.work2 .reels { display: grid; justify-items: center; gap: 10px; }
+.work2 .reels[hidden] { display: none; }
+.reels .deck { fill: var(--well); stroke: var(--stroke); }
+.reels .reel circle { fill: none; stroke: var(--brass); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(214,170,98,.5)); }
+.reels .reel .hub { fill: var(--brass); }
+.reels .reel path { stroke: var(--brass); stroke-width: 3; stroke-linecap: round; fill: none; }
+.reels .reel { animation: spin 2.4s linear infinite; }
+.reels .tape { stroke: var(--c-vocals); stroke-width: 3; stroke-dasharray: 8 8; animation: tape 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes tape { to { stroke-dashoffset: -64; } }
+.reels .rbar { width: 220px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink, #fff) 10%, transparent); overflow: hidden; position: relative; }
+.reels .rbar i { position: absolute; inset: 0 auto 0 0; background: var(--brass); box-shadow: 0 0 8px var(--brass); border-radius: 3px; }
+.reels.ind .rbar i { width: 30%; animation: sweep 1.8s ease-in-out infinite alternate; }
+@keyframes sweep { from { left: 0; } to { left: 70%; } }
+.reels .rlabel { font: 11.5px var(--font-mono, ui-monospace, Consolas, monospace); color: var(--muted); }
+/* La festa di fine separazione: 2,5 s, una volta sola */
+.main { position: relative; }
+.party { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 20; overflow: hidden; --at: 0s;
+  animation: partybg 2.5s ease-out var(--at) both; }
+.party > * { grid-area: 1 / 1; animation-delay: var(--at) !important; }
+.party.frozen, .party.frozen > * { animation-play-state: paused !important; }
+@keyframes partybg { 0%, 85% { background: color-mix(in srgb, var(--bg) 78%, transparent); } 100% { background: transparent; } }
+.party .bit { width: 9px; height: 9px; border-radius: 2px; background: var(--c); animation: bit 2.5s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes bit { 0% { transform: translate(0,0) rotate(var(--r)) scale(.5); opacity: 1; } 80% { opacity: .15; } 90%, 100% { transform: translate(var(--x), calc(var(--y) + 40px)) rotate(calc(var(--r) + 360deg)) scale(1); opacity: 0; } }
+.party .ring { width: 110px; height: 110px; border-radius: 50%; border: 2px solid var(--brass); animation: ring 2.5s ease-out both; }
+@keyframes ring { 0%, 10% { transform: scale(.6); opacity: 0; } 15% { opacity: 1; } 80%, 100% { transform: scale(1.6); opacity: 0; } }
+.party .tick { animation: tick 2.5s ease-out both; filter: drop-shadow(0 0 16px rgba(214,170,98,.6)); }
+.party .tick circle { fill: var(--brass); }
+.party .tick path { fill: none; stroke: var(--bg); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; animation: draw 2.5s ease-out both; animation-delay: var(--at); }
+@keyframes tick { 0% { transform: scale(.7); } 8%, 85% { transform: scale(1); opacity: 1; } 100% { opacity: 0; } }
+@keyframes draw { 0% { stroke-dashoffset: 48; } 35%, 100% { stroke-dashoffset: 0; } }
+.party b { transform: translateY(78px); font-size: 17px; text-shadow: 0 1px 12px var(--bg); animation: rise 2.5s ease-out both; }
+@keyframes rise { 0%, 35% { transform: translateY(92px); opacity: 0; } 55%, 85% { transform: translateY(78px); opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .reels .reel, .reels .tape, .reels.ind .rbar i { animation: none; } .party .ring { display: none; } }

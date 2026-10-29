@@ -219,7 +219,7 @@ struct CelebrationView: View {
                     .opacity(min(1, max(0, (p - 0.35) / 0.2)) * fadeOut(p))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background.opacity(0.55 * fadeOut(p)))
+            .background(Theme.background.opacity(0.78 * fadeOut(p)))
         }
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)

@@ -24,7 +24,7 @@
   function header() {
     const u = ui.update;
     $("#header").innerHTML = `
-      <img class="logo" src="img/logo.png" alt="">
+      <span class="logo-wrap"><i class="halo"></i><img class="logo" src="img/logo.png" alt=""></span>
       <div class="brand"><b>IsoLR</b><span>Separa voce e strumenti di qualsiasi canzone</span></div>
       <div class="grow"></div>
       ${u ? `<button class="btn round update" data-act="update">${Icon("up")}${ui.updating != null ? `Aggiorno… ${Math.round(ui.updating * 100)}%` : `Aggiornamento disponibile · ${esc(u.version)}`}</button>` : ""}
@@ -60,8 +60,45 @@
   function panel() {
     const p = $("#panel");
     if (job.phase === "working") return work(p);
-    if (job.phase === "done" && job.current) return results(p);
+    if (job.phase === "done" && job.current) { results(p); return party(); }
     return start(p);
+  }
+
+  // ── Le animazioni dello «Studio di notte» (come Sources/Animations.swift; regole in core/anim.js) ──
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+
+  // Il logo a tempo: mentre la canzone suona pulsa sui suoi battiti veri (o sul BPM), con un alone d'oro
+  (function beat() {
+    const wrap = document.querySelector(".logo-wrap");
+    if (wrap) {
+      const a = job.current && job.current.meta && job.current.meta.analysis;
+      let p = 0;
+      if (ui.frozenPulse != null) p = ui.frozenPulse;
+      else if (player.playing && !still.matches && job.phase === "done") p = IsoLR.Anim.pulse(player.position, (a && a.structure && a.structure.beats) || [], a && a.bpm);
+      wrap.style.setProperty("--pulse", p.toFixed(3));
+    }
+    requestAnimationFrame(beat);
+  })();
+
+  // La festa di fine separazione: una volta sola per canzone, solo quando la separazione è appena finita
+  let partyFor = null;
+  function party() {
+    const f = job.finishedAt;
+    if (!f || f === partyFor) return;
+    const left = IsoLR.Anim.DURATION * 1000 - (Date.now() - f);
+    if (left <= 0 && ui.frozenParty == null) return;
+    partyFor = f;
+    const n = job.current.meta.stems.filter((s) => s.key !== "instrumental").length;
+    const cols = ["vocals", "drums", "bass", "guitar", "piano", "other"];
+    const bits = still.matches ? "" : IsoLR.Anim.confetti().map((c) => `<i class="bit" style="--c:var(--c-${cols[c.color]});--x:${(Math.cos(c.angle) * c.distance).toFixed(0)}px;--y:${(Math.sin(c.angle) * c.distance).toFixed(0)}px;--r:${c.spin}deg"></i>`).join("");
+    const el = document.createElement("div");
+    el.className = "party";
+    el.setAttribute("role", "status");
+    el.innerHTML = `${bits}<span class="ring"></span><svg class="tick" width="84" height="84" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="38"></circle><path d="M26 43l11 11 21-23"></path></svg><b>${n} tracce pronte</b>`;
+    $(".main").appendChild(el);
+    // Per le schermate di prova: ferma a un punto preciso
+    if (ui.frozenParty != null) { el.style.setProperty("--at", `${-ui.frozenParty * IsoLR.Anim.DURATION}s`); el.classList.add("frozen"); return; }
+    setTimeout(() => el.remove(), left);
   }
 
   function waveBars() {
@@ -156,6 +193,12 @@
         <div class="whead"><h2 class="wtitle"></h2><span class="rec"><i></i>REC</span></div>
         <div class="song">${`<div class="wave busy">${waveBars()}</div>`}<canvas hidden></canvas></div>
         <div class="born" style="grid-template-columns:repeat(${workKeys().length}, minmax(0, 1fr))">${workKeys().map((k, i) => `<div class="brow" style="--c:var(--c-${k})">${eq(k, i)}<b><span class="stem-ic">${Icon(ICON[k] || "note")}</span>${Separation.NAMES[k]}</b><div class="bar busy"><i></i></div></div>`).join("")}</div>
+<div class="reels" hidden><svg width="220" height="96" viewBox="0 0 220 96" aria-hidden="true">
+          <rect x="1" y="1" width="218" height="94" rx="12" class="deck"></rect>
+          <g class="reel" style="transform-origin:62px 44px"><circle cx="62" cy="44" r="26"></circle><circle cx="62" cy="44" r="7" class="hub"></circle><path d="M62 35v-15M54 48l-13 7M70 48l13 7"></path></g>
+          <g class="reel" style="transform-origin:158px 44px"><circle cx="158" cy="44" r="26"></circle><circle cx="158" cy="44" r="7" class="hub"></circle><path d="M158 35v-15M150 48l-13 7M166 48l13 7"></path></g>
+          <path class="tape" d="M62 71H158"></path></svg>
+          <div class="rbar"><i></i></div><span class="rlabel"></span></div>
         <div class="wfoot"><span class="pct"></span><div class="wtext"><b class="step"></b><span class="detail muted"></span></div>
           <span class="chip qchip"></span><button class="btn" data-act="cancel">Annulla</button></div>
         <div class="stages"></div>
@@ -170,6 +213,16 @@
     w.querySelectorAll(".born .bar i").forEach((i) => { i.style.width = `${Math.round(separated() * 100)}%`; });
     // Finché la separazione non parte, sulle barre scorre un riflesso: si vede che IsoLR sta lavorando
     w.querySelector(".born").classList.toggle("waiting", job.stage !== "separating" && job.stage !== "saving");
+    // Mentre un modello si scarica o si prepara: le bobine di un registratore che girano
+    const preparing = job.stage === "model" || /^(Scarico|Preparo|Apro)/.test(job.step || "");
+    const reels = w.querySelector(".reels");
+    reels.hidden = !preparing;
+    if (preparing) {
+      const known = /%/.test(job.step || "") && job.progress > 0;
+      reels.classList.toggle("ind", !known);
+      reels.querySelector(".rbar i").style.width = known ? `${Math.round(job.progress * 100)}%` : "";
+      reels.querySelector(".rlabel").textContent = known ? `Scarico il modello · ${Math.round(job.progress * 100)}%` : "Preparo il modello";
+    }
     w.querySelector(".stages").innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
     if (job.peaks) {
       // La forma d'onda vera al posto delle barre che aspettano
