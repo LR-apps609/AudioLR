@@ -25,7 +25,7 @@ final class AnimationTests: XCTestCase {
         XCTAssertNil(Celebration.progress(elapsed: -1))
         let c = Celebration.confetti()
         XCTAssertEqual(c.count, 24)
-        XCTAssertEqual(Set(c.map(\.color)), Set(0..<6), "tutti i colori delle tracce")
+        XCTAssertEqual(Set(c.map { $0.color }), Set(0..<6), "tutti i colori delle tracce")
         XCTAssertEqual(Celebration.easeOut(1), 1, accuracy: 1e-9)
     }
 }
