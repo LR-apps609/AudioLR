@@ -141,8 +141,9 @@ final class SeparationJob: ObservableObject {
         let title = self.title, bpm = analysis?.bpm ?? 120, a = analysis
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let audio = try AudioIO.read(stem.url)
-                let notes = try MidiTranscriber.bundled().transcribe(audio).map {
+                // Le note corrette a mano nel piano roll, se ci sono; altrimenti Basic Pitch
+                let found = try NoteStore.edited(folder: dir, key: stem.key) ?? MidiTranscriber.bundled().transcribe(try AudioIO.read(stem.url))
+                let notes = found.map {
                     Note(start: $0.start, end: $0.end, pitch: max(0, min(127, $0.pitch + shift)), velocity: $0.velocity)
                 }
                 let name = "\(title) – \(stem.name)\(Downloads.suffix(shift))"
@@ -172,6 +173,18 @@ final class SeparationJob: ObservableObject {
             }
         }
     }
+
+    /// Le note di una traccia per il piano roll: quelle salvate con la canzone (rilevate ed eventualmente
+    /// modificate) o, la prima volta, Basic Pitch; le rilevate si salvano subito, così non si rifanno.
+    nonisolated static func notes(for stem: Stem, folder: URL) async throws -> (detected: [Note], edited: [Note]?) {
+        if let saved = NoteStore.load(folder: folder, key: stem.key) { return saved }
+        let detected = try MidiTranscriber.bundled().transcribe(try AudioIO.read(stem.url))
+        try? NoteStore.save(folder: folder, key: stem.key, detected: detected, edited: nil)
+        return (detected, nil)
+    }
+
+    /// Le note modificate cambiano i file: quelli già creati per questa traccia si rifanno al prossimo clic.
+    func forgetMidi(_ key: String) { midiFiles = midiFiles.filter { !$0.key.hasPrefix(key) } }
 
     private func midiDone(_ key: String, _ url: URL, folder dir: URL, files: [URL]) {
         midiWorking = nil
