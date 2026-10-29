@@ -15,6 +15,14 @@ struct GlowWaveform: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // Sui Mac virtuali (Drawing.flat) niente Canvas: la stessa onda disegnata con forme semplici
+        if Drawing.flat {
+            WaveformView(peaks: peaks, color: Theme.brass, dim: Theme.ink.opacity(0.14), progress: progress,
+                         playhead: progress > 0 && progress < 1 ? progress : nil, barWidth: 2.5, spacing: 1.5)
+        } else { live }
+    }
+
+    private var live: some View {
         TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { tl in
             let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
@@ -58,6 +66,22 @@ struct Equalizer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if Drawing.flat { flat } else { live }
+    }
+
+    /// Fermo, con forme semplici (Mac virtuali senza Canvas).
+    private var flat: some View {
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(0..<bars, id: \.self) { k in
+                RoundedRectangle(cornerRadius: 2).fill(LinearGradient(colors: [color, color.opacity(0.35)], startPoint: .top, endPoint: .bottom))
+                    .frame(width: 6, height: CGFloat(18 + ((k * 23 + seed * 11) % 34)))
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .accessibilityHidden(true)
+    }
+
+    private var live: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { tl in
             let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in

@@ -152,6 +152,15 @@ final class ScreenshotTests: XCTestCase {
     }
 
     /// Una canzone trascinata in attesa di «Separa».
+    func testShotWorking() throws {
+        let job = SeparationJob.shared
+        defer { job.reset() }
+        let peaks = (0..<480).map { i in Float(0.25 + 0.7 * abs(sin(Double(i) / 14) * cos(Double(i) / 38))) }
+        job.showcaseWorking(title: "Eminem – Till I Collapse", peaks: peaks, quality: .studio, progress: 0.46)
+        try shot(ContentView().environmentObject(job), "0-lavoro", width: 1280, height: 820)
+        try shot(ContentView().environmentObject(job), "0-lavoro-stretta", width: 1180, height: 760)
+    }
+
     func testShotPending() throws {
         let job = SeparationJob.shared
         let (dir, stems) = try fakeStems()

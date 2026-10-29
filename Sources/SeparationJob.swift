@@ -1189,6 +1189,14 @@ final class SeparationJob: ObservableObject {
         phase = .done
     }
 
+    /// Per le schermate di prova: una separazione a metà strada (niente calcolo vero).
+    func showcaseWorking(title: String, peaks: [Float], quality: Quality, progress: Double) {
+        self.title = title
+        self.quality = quality
+        self.mixPeaks = peaks
+        phase = .separating(progress)
+    }
+
     /// Annullare ferma anche la coda.
     private func stopped(_ token: Cancel, clearing: Bool) {
         // Dopo «Annulla» la finestra è già stata liberata da cancel()
