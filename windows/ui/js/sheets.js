@@ -26,7 +26,7 @@
   async function settings() {
     const version = await Bridge.version();
     const tabs = {
-      generale: `${pick("appearance", "auto", "Aspetto", [["auto", "Automatico (come Windows)"], ["light", "Chiaro"], ["dark", "Scuro"]])}
+      generale: `${pick("appearance", "dark", "Aspetto", [["auto", "Automatico (come Windows)"], ["light", "Chiaro"], ["dark", "Scuro"]])}
         ${toggle("showLibrary", true, "Mostra la libreria a sinistra")}
         ${toggle("soundWhenDone", true, "Suono quando ha finito")}
         ${toggle("sleepAfterBatch", false, "Poi metti in stop il computer", "Dopo un album (più canzoni in coda), un minuto dopo l'ultima")}`,
@@ -78,7 +78,7 @@
     });
   }
   function applyAppearance() {
-    const a = Prefs.get("appearance", "auto");
+    const a = Prefs.get("appearance", "dark");
     if (a === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = a;
   }
 

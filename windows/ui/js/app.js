@@ -120,17 +120,27 @@
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w) return;
     canvas.width = w * dpr; canvas.height = h * dpr; ctx.scale(dpr, dpr);
+    // Studio di notte: la parte già separata in oro (sfumato), il resto in penombra, e la testina che brilla
     const css = getComputedStyle(document.documentElement);
-    const on = css.getPropertyValue("--brass").trim(), off = css.getPropertyValue("--stroke2").trim();
+    const brass = css.getPropertyValue("--brass").trim(), off = css.getPropertyValue("--stroke2").trim();
+    const gold = ctx.createLinearGradient(0, 0, 0, h); gold.addColorStop(0, "#F2C478"); gold.addColorStop(1, "#C98A3A");
     const bars = Math.floor(w / 4), done = separated();
     let top = 0; for (const v of peaks) top = Math.max(top, v);
     for (let i = 0; i < bars; i++) {
       const v = peaks[Math.floor((i * peaks.length) / bars)] / (top || 1);
       const bh = Math.max(1.5, Math.sqrt(v) * h * 0.92);
-      ctx.fillStyle = i / bars < done ? on : off;
+      ctx.fillStyle = i / bars < done ? gold : off;
       ctx.beginPath(); ctx.roundRect(i * 4, (h - bh) / 2, 2.5, bh, 1.25); ctx.fill();
     }
+    if (done > 0 && done < 1) {
+      const x = Math.round(done * bars) * 4;
+      ctx.save(); ctx.shadowColor = brass; ctx.shadowBlur = 14; ctx.fillStyle = brass; ctx.fillRect(x - 1, 0, 2, h); ctx.restore();
+    }
   }
+
+  /** Un equalizzatore che salta a tempo (barre animate in CSS, ognuna con il suo ritmo). */
+  const eq = (k, i) => `<div class="eq" style="--c:var(--c-${k})">${Array.from({ length: 7 }, (_, j) =>
+    `<i style="height:${30 + ((j * 23 + i * 11) % 40)}px;animation-duration:${(0.45 + ((j + i) % 5) * 0.12).toFixed(2)}s;animation-delay:${(-j * 0.11).toFixed(2)}s"></i>`).join("")}</div>`;
 
   function work(p) {
     // Mentre un modello si apre non c'è una percentuale vera: tre puntini invece di uno «0%» fermo
@@ -141,9 +151,9 @@
     let w = p.querySelector(".work2");
     if (!w) {
       p.innerHTML = `<div class="work2">
-        <h2 class="wtitle"></h2>
+        <div class="whead"><h2 class="wtitle"></h2><span class="rec"><i></i>REC</span></div>
         <div class="song">${`<div class="wave busy">${waveBars()}</div>`}<canvas hidden></canvas></div>
-        <div class="born">${workKeys().map((k) => `<div class="brow"><span class="stem-ic" style="--c:var(--c-${k})">${Icon(ICON[k] || "note")}</span><b>${Separation.NAMES[k]}</b><div class="bar busy" style="--c:var(--c-${k})"><i></i></div></div>`).join("")}</div>
+        <div class="born" style="grid-template-columns:repeat(${workKeys().length}, minmax(0, 1fr))">${workKeys().map((k, i) => `<div class="brow" style="--c:var(--c-${k})">${eq(k, i)}<b><span class="stem-ic">${Icon(ICON[k] || "note")}</span>${Separation.NAMES[k]}</b><div class="bar busy"><i></i></div></div>`).join("")}</div>
         <div class="wfoot"><span class="pct"></span><div class="wtext"><b class="step"></b><span class="detail muted"></span></div>
           <span class="chip qchip"></span><button class="btn" data-act="cancel">Annulla</button></div>
         <div class="stages"></div>
@@ -231,7 +241,7 @@
     const share = s.share != null ? `${Math.round(s.share * 100)}% della canzone` : (isBase ? Encode.FORMATS[Prefs.get("outputFormat", "wav24")].title.split(" ")[0] : "");
     return `<div class="row ${muted ? "muted" : ""}" style="--c:var(--c-${k})">
       <input type="checkbox" ${on ? "checked" : ""} data-sel="${k}" title="Tra le tracce da scaricare">
-      <span class="stem-ic">${Icon(ICON[k] || "note")}</span>
+      <span class="stem-ic" data-lvl="${k}">${Icon(ICON[k] || "note")}<i class="lvl"></i></span>
       <div class="name"><b>${esc(s.name)}</b><span>${share}</span></div>
       ${isBase ? `<span></span><span></span>` : `<div class="ms">
         <button class="btn mute ${player.muted.has(k) ? "on" : ""}" data-mute="${k}" title="Silenzia ${esc(s.name)}">${Icon(player.muted.has(k) ? "speakerOff" : "speaker")}</button>
@@ -346,6 +356,19 @@
       if (box.dataset.last !== html) { box.innerHTML = html; box.dataset.last = html; }
     }
     const meter = $("#meter"); if (meter && window.Recorder) meter.style.width = Math.round(Math.min(1, window.Recorder.level) * 100) + "%";
+    // Il livello di ogni traccia in questo istante (dalla sua forma d'onda): si muove mentre suona
+    if (job.current && player.duration) {
+      for (const el of document.querySelectorAll("[data-lvl]")) {
+        const s = job.current.meta.stems.find((x) => x.key === el.dataset.lvl);
+        let lv = 0;
+        if (player.playing && s && s.peaks && s.peaks.length && player.effectiveGain(s.key) > 0) {
+          const p = s.peaks[Math.min(s.peaks.length - 1, Math.floor((t / player.duration) * s.peaks.length))];
+          let top = 0; for (const v of s.peaks) top = Math.max(top, v);
+          lv = Math.sqrt(p / (top || 1));
+        }
+        el.style.setProperty("--lv", lv.toFixed(2));
+      }
+    }
   }
 
   function render() { header(); library(); panel(); }

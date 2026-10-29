@@ -52,8 +52,18 @@ async function fakeSong(page) {
       page.on("console", (m) => { if (m.type() === "error") errors.push(`[${scheme}${tag}] console: ${m.text()}`); });
       await page.goto(base);
       await page.waitForTimeout(800);
+      // Di serie IsoLR è scura: per le schermate «chiaro/scuro» l'aspetto segue quello simulato
+      await page.evaluate(() => { Prefs.set("appearance", "auto"); Sheets.applyAppearance(); });
       const shot = async (name) => { await page.waitForTimeout(400); await page.screenshot({ path: path.join(out, `win-${name}${tag}-${scheme === "light" ? "chiaro" : "scuro"}.png`) }); };
       await shot("1-inizio");
+      // Il lavoro in corso (Studio di notte): onda d'oro con testina, equalizzatori, REC, percentuale
+      await page.evaluate(() => {
+        const j = IsoApp.job; j.phase = "working"; j.quality = "studio"; j.title = "Eminem – Till I Collapse"; j.setStage("separating");
+        const p = new Float32Array(240); for (let i = 0; i < 240; i++) p[i] = 0.25 + 0.7 * Math.abs(Math.sin(i / 7) * Math.cos(i / 19));
+        j.peaks = p; j.stageStarted = Date.now() - 95000; j.step = "Voce 2 di 2 e strumenti"; j.progress = 0.46; j.emit();
+      });
+      await shot("0-lavoro");
+      await page.evaluate(() => { const j = IsoApp.job; j.phase = "idle"; j.peaks = null; j.stage = null; j.progress = 0; j.emit(); IsoApp.render(); });
       // Una canzone trascinata: pronta, con le schede della qualità
       await page.evaluate(() => IsoApp.job.add([new File([new Uint8Array(1000)], "Canzone di prova.mp3")]));
       await shot("2-pronta");
