@@ -383,19 +383,19 @@ async fn native_downgrade(app: AppHandle, name: String) -> Result<(usize, String
 
 /// Chiude un modello aperto fuori dalla finestra.
 #[tauri::command]
-fn native_release(name: String) {
+async fn native_release(name: String) {
     nativo::release(&name);
 }
 
 /// Perché la scheda grafica non ha aperto un modello (se è successo).
 #[tauri::command]
-fn native_gpu_error() -> Option<String> {
+async fn native_gpu_error() -> Option<String> {
     nativo::gpu_error()
 }
 
 /// Dove sta calcolando un modello aperto (dopo un ripiego può essere cambiato).
 #[tauri::command]
-fn native_backend(name: String) -> Option<String> {
+async fn native_backend(name: String) -> Option<String> {
     nativo::backend(&name).map(|b| b.to_string())
 }
 

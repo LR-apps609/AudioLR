@@ -123,6 +123,8 @@
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
         };
         w.addEventListener("message", on);
+        // «Annulla» chiude il lavoratore: questa attesa finisce subito con «annullato»
+        this.abort = (err) => { w.removeEventListener("message", on); reject(err); };
         w.onerror = (e) => { w.removeEventListener("message", on); this.worker = null; reject(new Error("il lavoro si è interrotto (" + (e.message || "memoria insufficiente?") + ")")); };
         w.postMessage(msg, transfer);
       });
@@ -142,24 +144,26 @@
 
     /** Un modello ha sbagliato sulla scheda grafica: si riapre al gradino dopo, e lo si ricorda per le volte dopo. */
     async downgrade(m) {
+      const w = this.worker;              // la risposta va a questo lavoratore, non a uno nato dopo un «Annulla»
       try {
         const [level, backend] = await Bridge.nativeDowngrade(m.name);
         Prefs.set(`nativeLevel.${m.name}`, level);
         Job.log(`${m.name}: risultato sbagliato, riprovo su «${backend}»`);
-        if (this.worker) this.worker.postMessage({ type: "inferred", id: m.id, name: m.name, mask: backend });
+        if (w && w === this.worker) w.postMessage({ type: "inferred", id: m.id, name: m.name, mask: backend });
       } catch (e) {
-        if (this.worker) this.worker.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
+        if (w && w === this.worker) w.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
       }
     }
 
     /** Un pezzo chiesto dal lavoratore: lo calcola il modello aperto fuori dalla finestra. */
     async infer(m) {
+      const w = this.worker;
       try {
         const mask = await Bridge.nativeRun(m.name, m.frames, m.feats, m.x);
         const backend = await Bridge.nativeBackend(m.name);
-        if (this.worker) this.worker.postMessage({ type: "inferred", id: m.id, name: m.name, mask, backend }, [mask.buffer]);
+        if (w && w === this.worker) w.postMessage({ type: "inferred", id: m.id, name: m.name, mask, backend }, [mask.buffer]);
       } catch (e) {
-        if (this.worker) this.worker.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
+        if (w && w === this.worker) w.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
       }
     }
 
@@ -218,10 +222,12 @@
       const file = this.pending;
       this.pending = null;
       this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
-      this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading");
+      this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
+      const stop = () => { if (this.cancelled) throw new Error("annullato"); };
       this.emit();
       try {
         const song = await decode(file);
+        stop();
         // La forma d'onda della canzone, che si colora man mano che viene separata
         this.peaks = measure([song.left, song.right], 240).peaks; this.emit();
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
@@ -238,6 +244,7 @@
             this.setStage("model");
             this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
             await Bridge.prepareModel(m, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
+            stop();
           }
           this.setStage("separating");
           this.step = "Separazione"; this.progress = 0; this.emit();
@@ -262,6 +269,12 @@
         this.phase = "done"; this.batch.songs++;
         this.emit();
       } catch (e) {
+        if (this.cancelled) {
+          // Annullata: la canzone torna pronta da separare, nessun errore
+          this.pending = file; this.phase = "pending"; this.error = null; this.emit();
+          this.finishBatch(true);
+          return;
+        }
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
         this.emit();
       }
@@ -270,9 +283,10 @@
       this.finishBatch();
     }
 
-    finishBatch() {
+    finishBatch(quiet = false) {
       const b = this.batch; this.batch = null;
       Bridge.keepAwake(false); Bridge.progress(null);
+      if (quiet) return;
       if (!b) return;
       const mins = Math.round((Date.now() - b.start) / 60000);
       const time = mins < 1 ? "meno di un minuto" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
@@ -284,7 +298,17 @@
       if (Prefs.get("soundWhenDone", true)) chime();
     }
 
-    cancel() { if (this.worker) this.worker.postMessage({ type: "cancel" }); this.queue = []; }
+    /** Annulla subito: il lavoratore si chiude (anche a metà di un pezzo), i modelli si liberano, la canzone
+     *  torna «pronta». Prima si aspettava la fine del pezzo in corso: sul processore anche più di un minuto. */
+    cancel() {
+      this.queue = [];
+      this.cancelled = true;
+      if (this.worker) { this.worker.terminate(); this.worker = null; }
+      for (const n of this.loaded) Bridge.nativeRelease(n);
+      this.loaded = new Set();
+      if (this.abort) { this.abort(new Error("annullato")); this.abort = null; }
+      this.step = "Annullo…"; this.emit();
+    }
 
     /** Voce e cori, voce maschile e femminile, batteria nei suoi pezzi: accanto alle altre tracce. */
     async split(kind) {

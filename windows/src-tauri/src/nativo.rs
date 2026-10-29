@@ -8,11 +8,12 @@ use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Un modello aperto, e dove calcola.
 pub struct Net {
-    session: Session,
+    // Ogni modello ha il suo lucchetto: chiuderlo o chiedere dove calcola non aspetta un pezzo in corso
+    session: Arc<Mutex<Session>>,
     pub backend: &'static str,
     level: usize,
 }
@@ -88,7 +89,7 @@ pub fn load(name: &str, path: &Path, from: usize) -> Result<&'static str, String
         }
     };
     let backend = LEVELS[level];
-    nets().lock().unwrap().insert(name.to_string(), Net { session, backend, level });
+    nets().lock().unwrap().insert(name.to_string(), Net { session: Arc::new(Mutex::new(session)), backend, level });
     Ok(backend)
 }
 
@@ -133,14 +134,19 @@ pub fn run(name: &str, path: &Path, x: Vec<f32>, frames: usize, feats: usize) ->
 }
 
 fn run_once(name: &str, x: &[f32], frames: usize, feats: usize) -> Result<(Vec<u8>, &'static str), String> {
-    let mut map = nets().lock().unwrap();
-    let net = map.get_mut(name).ok_or("modello non aperto")?;
+    // Si prende il modello e si lascia subito l'elenco: un «Annulla» lo può chiudere mentre questo pezzo finisce
+    let (session, backend) = {
+        let map = nets().lock().unwrap();
+        let net = map.get(name).ok_or("modello non aperto")?;
+        (net.session.clone(), net.backend)
+    };
+    let mut session = session.lock().unwrap();
     let input = Tensor::from_array(([1usize, frames, feats], x.to_vec().into_boxed_slice())).map_err(|e| e.to_string())?;
-    let outputs = net.session.run(ort::inputs!["x" => input].map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let outputs = session.run(ort::inputs!["x" => input].map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     let (_, data) = outputs[0].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?;
     let mut bytes = Vec::with_capacity(data.len() * 4);
     for v in data {
         bytes.extend_from_slice(&v.to_le_bytes());
     }
-    Ok((bytes, net.backend))
+    Ok((bytes, backend))
 }

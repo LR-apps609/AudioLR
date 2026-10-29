@@ -1,6 +1,7 @@
 Novità di IsoLR per Windows 0.9.1:
 • Corretto: se un modello dà un risultato sbagliato sulla scheda grafica, IsoLR riprova solo quel modello, prima sulla scheda grafica in modo più prudente e solo alla fine sul processore. Prima ricominciava tutta la separazione sul processore: Studio passava da una decina di minuti a più di due ore
 • IsoLR si ricorda come è andata per ogni modello: le volte dopo parte subito dal modo che funziona su questo computer
+• Corretto: «Annulla» si ferma subito, anche a metà di un pezzo della canzone, e la canzone torna pronta da separare. Prima aspettava la fine del pezzo in corso: sul processore anche più di un minuto, senza nessun segno
 
 Novità di IsoLR per Windows 0.9.0 «Motore nativo»:
 • Massima e Studio funzionano davvero: i modelli grandi ora calcolano fuori dalla finestra, con ONNX Runtime e DirectML (la scheda grafica, qualsiasi marca: NVIDIA, AMD, Intel), e il processore come riserva. Prima, nella finestra, il calcolo sul processore era limitato a 4 GB di memoria (un pezzo della voce di Studio ne chiede circa 8) e la scheda grafica sbagliava un passaggio del modello voce

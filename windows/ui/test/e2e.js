@@ -28,6 +28,14 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     IsoApp.ui.quality = "fast";
     IsoApp.job.add([new File([bytes], "Canzone di prova.wav")]);
   }, b64);
+  // «Annulla» a metà separazione: entro un secondo la canzone torna pronta, senza errori
+  await page.evaluate(() => { IsoApp.job.start("fast"); });
+  await page.waitForFunction(() => IsoApp.job.stage === "separating" && IsoApp.job.progress > 0.05, null, { timeout: 5 * 60 * 1000, polling: 200 });
+  const c0 = Date.now();
+  await page.click('[data-act="cancel"]');
+  await page.waitForFunction(() => IsoApp.job.phase === "pending", null, { timeout: 5000, polling: 50 }).catch(() => {});
+  const cancelled = await page.evaluate(() => ({ phase: IsoApp.job.phase, error: IsoApp.job.error }));
+  check(cancelled.phase === "pending" && !cancelled.error, `Annulla risponde in ${Date.now() - c0} ms (fase ${cancelled.phase})`);
   const t0 = Date.now();
   await page.evaluate(() => IsoApp.job.start("fast"));
   await page.waitForFunction(() => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, null, { timeout: 15 * 60 * 1000, polling: 1000 });
