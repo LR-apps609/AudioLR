@@ -328,6 +328,7 @@
       sheet.api = {
         get editor() { return ed; }, get listen() { return listen; },
         setListen: (l) => { listen = l; applyListen(); info(); }, saveFile,
+        edit: (fn) => { fn(ed); changed(); },
         select: (ids) => { sel = new Set(ids); info(); draw(); },
       };
       applyListen();
