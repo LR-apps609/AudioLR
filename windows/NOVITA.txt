@@ -1,3 +1,6 @@
+Novità di IsoLR per Windows 0.11.0:
+• Più vita nello Studio di notte, come sul Mac: mentre la canzone suona il logo in alto pulsa sui suoi battiti veri, con un alone d'oro. Quando un modello si scarica o si prepara girano le bobine di un registratore, così si vede sempre che IsoLR sta lavorando. A fine separazione una spunta d'oro e una pioggia di coriandoli nei colori delle tracce, poi il mixer. Con «Riduci movimento» attivo, le animazioni restano ferme
+
 Novità di IsoLR per Windows 0.10.0 «Studio di notte»:
 • Nuovo aspetto, come sul Mac: IsoLR è scura di serie, con oro per i comandi e un colore al neon per ogni strumento (il chiaro resta in Impostazioni › Aspetto). Mentre separa, l'onda della canzone si colora d'oro con una testina luminosa, ogni traccia ha il suo equalizzatore e la luce REC lampeggia. Nel mixer ogni traccia mostra il suo livello mentre suona
 • Note dentro l'app (Ctrl+Alt+N, «Vai più a fondo» › «Note…»): le note di una traccia sopra una tastiera, sulla griglia delle battute. Si ascoltano (Piano, Synth, Basso), da sole, con la traccia o insieme, e seguono velocità, tono e A–B. Si correggono (sposta, allunga, aggiungi, togli, Ctrl+Z) e le correzioni finiscono nei file MIDI, nello spartito e nella tab. «File MIDI per il tuo programma» lo salva e lo mostra in Esplora file, da dove lo trascini in Ableton o FL Studio
