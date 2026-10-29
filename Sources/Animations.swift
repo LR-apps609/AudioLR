@@ -59,20 +59,27 @@ struct BeatLogo: View {
             LogoMark(size: size, animated: busy)
         } else {
             TimelineView(.animation(minimumInterval: 1 / 30, paused: frozen != nil)) { _ in
-                let p = frozen ?? BeatPulse.pulse(at: mixer.position, beats: mixer.structure?.beats ?? [], bpm: bpm)
-                ZStack {
-                    RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                        .strokeBorder(Theme.brass.opacity(0.75 * p), lineWidth: 2)
-                        .frame(width: size, height: size)
-                        .scaleEffect(1 + 0.6 * (1 - p))
-                        .opacity(p > 0.02 ? 1 : 0)
-                    LogoMark(size: size, animated: true)
-                        .scaleEffect(1 + 0.09 * p)
-                        .shadow(color: Theme.brass.opacity(0.55 * p), radius: 10 * p)
-                }
-                .frame(width: size, height: size)
+                let p: Double = frozen ?? BeatPulse.pulse(at: mixer.position, beats: mixer.structure?.beats ?? [], bpm: bpm)
+                pulsing(p)
             }
         }
+    }
+}
+
+extension BeatLogo {
+    fileprivate func pulsing(_ p: Double) -> some View {
+        let halo = CGFloat(1.6 - 0.6 * p), grow = CGFloat(1 + 0.09 * p), glow = CGFloat(10 * p)
+        return ZStack {
+            RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+                .strokeBorder(Theme.brass.opacity(0.75 * p), lineWidth: 2)
+                .frame(width: size, height: size)
+                .scaleEffect(halo)
+                .opacity(p > 0.02 ? 1 : 0)
+            LogoMark(size: size, animated: true)
+                .scaleEffect(grow)
+                .shadow(color: Theme.brass.opacity(0.55 * p), radius: glow)
+        }
+        .frame(width: size, height: size)
     }
 }
 
@@ -102,11 +109,13 @@ struct TapeReels: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.ink.opacity(0.10))
                     if let p = progress {
-                        Capsule().fill(Theme.brass).frame(width: g.size.width * max(0.02, min(1, p))).goldGlow(radius: 6)
+                        let w: CGFloat = g.size.width * CGFloat(max(0.02, min(1, p)))
+                        Capsule().fill(Theme.brass).frame(width: w).goldGlow(radius: 6)
                     } else {
                         // Indeterminata: un tratto d'oro che va e viene
-                        let x = reduceMotion || Drawing.flat ? 0.3 : (sin(t * 1.6) + 1) / 2 * 0.7
-                        Capsule().fill(Theme.brass).frame(width: g.size.width * 0.3).offset(x: g.size.width * x).goldGlow(radius: 6)
+                        let k: Double = reduceMotion || Drawing.flat ? 0.3 : (sin(t * 1.6) + 1) / 2 * 0.7
+                        let w: CGFloat = g.size.width * 0.3, x: CGFloat = g.size.width * CGFloat(k)
+                        Capsule().fill(Theme.brass).frame(width: w).offset(x: x).goldGlow(radius: 6)
                     }
                 }
             }
@@ -163,8 +172,9 @@ struct TapeReels: View {
                     for s in 0..<3 {
                         var spoke = Path()
                         let a = Double(s) * 2 * .pi / 3
-                        spoke.move(to: CGPoint(x: cos(a) * 9, y: sin(a) * 9))
-                        spoke.addLine(to: CGPoint(x: cos(a) * (r - 5), y: sin(a) * (r - 5)))
+                        let ca = CGFloat(cos(a)), sa = CGFloat(sin(a))
+                        spoke.move(to: CGPoint(x: ca * 9, y: sa * 9))
+                        spoke.addLine(to: CGPoint(x: ca * (r - 5), y: sa * (r - 5)))
                         reel.stroke(spoke, with: .color(Theme.brass), style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     }
                 }
@@ -197,6 +207,31 @@ enum Celebration {
     static func easeOut(_ x: Double) -> Double { 1 - pow(1 - min(max(x, 0), 1), 3) }
 }
 
+/// Sopra il riquadro principale: la festa quando una separazione è appena finita (non riaprendo dalla libreria).
+struct CelebrationOverlay: ViewModifier {
+    @ObservedObject var job: SeparationJob
+    @State private var celebrating = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay { overlay }
+            .onChange(of: job.finishedAt) { _, new in
+                guard new != nil else { celebrating = false; return }
+                celebrating = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Celebration.duration) { celebrating = false }
+            }
+    }
+
+    @ViewBuilder private var overlay: some View {
+        if job.phase == .done, let started = job.finishedAt, celebrating || job.celebrationFrozen != nil {
+            let tracks = job.stems.filter { $0.key != "instrumental" }.count
+            CelebrationView(tracks: tracks, started: started, frozen: job.celebrationFrozen)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .transition(.opacity)
+        }
+    }
+}
+
 /// Spunta d'oro che si disegna, anello che si allarga, coriandoli nei colori delle tracce, «N tracce pronte».
 struct CelebrationView: View {
     let tracks: Int
@@ -208,22 +243,29 @@ struct CelebrationView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 60, paused: frozen != nil)) { tl in
             let p = frozen ?? Celebration.progress(elapsed: tl.date.timeIntervalSince(started)) ?? 1
-            ZStack {
-                if !reduceMotion { confetti(p) }
-                ring(p)
-                check(p)
-                Text("\(tracks) tracce pronte")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.ink)
-                    .offset(y: 78 + 14 * (1 - Celebration.easeOut((p - 0.35) / 0.25)))
-                    .opacity(min(1, max(0, (p - 0.35) / 0.2)) * fadeOut(p))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background.opacity(0.78 * fadeOut(p)))
+            scene(p)
         }
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Separazione finita: \(tracks) tracce pronte")
+    }
+
+    private func scene(_ p: Double) -> some View {
+        let rise: CGFloat = 78 + 14 * CGFloat(1 - Celebration.easeOut((p - 0.35) / 0.25))
+        let shown: Double = min(1, max(0, (p - 0.35) / 0.2)) * fadeOut(p)
+        let dim: Double = 0.78 * fadeOut(p)
+        return ZStack {
+            if !reduceMotion { confetti(p) }
+            ring(p)
+            check(p)
+            Text("\(tracks) tracce pronte")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.ink)
+                .offset(y: rise)
+                .opacity(shown)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background.opacity(dim))
     }
 
     private func fadeOut(_ p: Double) -> Double { p < 0.85 ? 1 : max(0, (1 - p) / 0.15) }
@@ -231,35 +273,46 @@ struct CelebrationView: View {
     private func confetti(_ p: Double) -> some View {
         let colors: [Color] = ["vocals", "drums", "bass", "guitar", "piano", "other"].map(Theme.color)
         let e = Celebration.easeOut(p / 0.8)
+        let fade: Double = 1 - min(1, p / 0.9)
+        let pieces = Celebration.confetti()
         return ZStack {
-            ForEach(Array(Celebration.confetti().enumerated()), id: \.offset) { _, c in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(colors[c.color])
-                    .frame(width: 9, height: 9)
-                    .rotationEffect(.degrees(c.spin + 360 * p))
-                    .offset(x: cos(c.angle) * c.distance * e, y: sin(c.angle) * c.distance * e + 40 * p * p)
-                    .opacity(1 - min(1, p / 0.9))
+            ForEach(pieces.indices, id: \.self) { i in
+                piece(pieces[i], color: colors[pieces[i].color], p: p, e: e).opacity(fade)
             }
         }
     }
 
+    private func piece(_ c: (angle: Double, distance: Double, color: Int, spin: Double), color: Color, p: Double, e: Double) -> some View {
+        let dx = CGFloat(cos(c.angle) * c.distance * e)
+        let dy = CGFloat(sin(c.angle) * c.distance * e + 40 * p * p)
+        let turn: Double = c.spin + 360 * p
+        return RoundedRectangle(cornerRadius: 2)
+            .fill(color)
+            .frame(width: 9, height: 9)
+            .rotationEffect(.degrees(turn))
+            .offset(x: dx, y: dy)
+    }
+
     private func ring(_ p: Double) -> some View {
-        let x = min(1, max(0, (p - 0.1) / 0.7))
+        let x: Double = min(1, max(0, (p - 0.1) / 0.7))
+        let scale = CGFloat(0.6 + Celebration.easeOut(x))
+        let alpha: Double = x > 0 ? 1 - x : 0
         return Circle().strokeBorder(Theme.brass, lineWidth: 2)
             .frame(width: 110, height: 110)
-            .scaleEffect(0.6 + 1.0 * Celebration.easeOut(x))
-            .opacity(x > 0 ? (1 - x) : 0)
+            .scaleEffect(scale)
+            .opacity(alpha)
     }
 
     private func check(_ p: Double) -> some View {
-        let draw = Celebration.easeOut(min(1, p / 0.35))
+        let draw = CGFloat(Celebration.easeOut(min(1, p / 0.35)))
+        let grow = CGFloat(0.7 + 0.3 * Celebration.easeOut(min(1, p / 0.2)))
         return ZStack {
             Circle().fill(Theme.brass).frame(width: 84, height: 84).goldGlow(radius: 16)
             CheckShape().trim(from: 0, to: draw)
                 .stroke(Theme.background, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
                 .frame(width: 84, height: 84)
         }
-        .scaleEffect(0.7 + 0.3 * Celebration.easeOut(min(1, p / 0.2)))
+        .scaleEffect(grow)
         .opacity(fadeOut(p))
     }
 }

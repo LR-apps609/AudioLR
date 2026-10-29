@@ -38,8 +38,6 @@ struct ContentView: View {
     @StateObject private var mixer = MixPlayer()
     @ObservedObject private var recorder = TakeRecorder.shared
     /// Le registrazioni della canzone aperta (la più recente per prima).
-    /// La festa di fine separazione è in corso (dura Celebration.duration).
-    @State private var celebrating = false
     @State private var takes: [URL] = []
     /// Il confronto della registrazione con una traccia («Voce», «Basso»…).
     @State private var comparison: (name: String, result: CompareResult)?
@@ -171,19 +169,7 @@ struct ContentView: View {
                     .strokeBorder(Theme.brass, lineWidth: dropping ? 2.5 : 0)
             )
             // Separazione appena finita: spunta, anello e coriandoli sopra il mixer, poi spariscono
-            .overlay {
-                if job.phase == .done, let started = job.finishedAt, celebrating || job.celebrationFrozen != nil {
-                    CelebrationView(tracks: job.stems.filter { $0.key != "instrumental" }.count, started: started,
-                                    frozen: job.celebrationFrozen)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .transition(.opacity)
-                }
-            }
-            .onChange(of: job.finishedAt) { _, new in
-                guard new != nil else { celebrating = false; return }
-                celebrating = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + Celebration.duration) { celebrating = false }
-            }
+            .modifier(CelebrationOverlay(job: job))
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: job.phase)
             footer
         }
