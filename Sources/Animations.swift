@@ -190,12 +190,14 @@ enum Celebration {
 
     /// I coriandoli: direzione, distanza e colore (indice nei colori delle tracce), sempre uguali.
     static func confetti(count: Int = 24) -> [(angle: Double, distance: Double, color: Int, spin: Double)] {
-        (0..<count).map { i in
-            (angle: Double(i) / Double(count) * 2 * .pi + Double(i % 3) * 0.13,
-             distance: 110 + Double(i % 3) * 32,
-             color: i % 6,
-             spin: Double((i * 37) % 360))
+        var out: [(angle: Double, distance: Double, color: Int, spin: Double)] = []
+        for i in 0..<count {
+            let row = Double(i % 3)
+            let angle: Double = Double(i) / Double(count) * 2 * Double.pi + row * 0.13
+            let distance: Double = 110 + row * 32
+            out.append((angle: angle, distance: distance, color: i % 6, spin: Double((i * 37) % 360)))
         }
+        return out
     }
 
     /// Avanzamento (0…1) a `elapsed` secondi; nil quando è finita.
