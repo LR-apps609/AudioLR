@@ -1,3 +1,8 @@
+Novità della 0.35.0 «Studio di notte»:
+• Nuovo aspetto: IsoLR è scura di serie, come una sala di registrazione con le luci basse, con oro per i comandi e un colore al neon per ogni strumento (il chiaro resta in Impostazioni › Aspetto). Mentre separa, l'onda della canzone si colora d'oro con una testina luminosa, ogni traccia ha il suo equalizzatore che salta a tempo e la luce REC lampeggia. Nel mixer ogni traccia mostra il suo livello mentre suona
+• Note dentro l'app (⌥⌘N, «Vai più a fondo» › «Note»): le note di una traccia sopra una tastiera, sulla griglia delle battute. Si ascoltano con un suono del Mac (Piano, Synth, Basso), da sole, con la traccia o insieme, e seguono velocità, tono e A–B. Si correggono (sposta, allunga, aggiungi, togli, ⌘Z) e le correzioni finiscono nei file MIDI, nello spartito e nella tab. «Trascina in Logic o Ableton» porta il MIDI direttamente nel programma
+• Slice to MIDI (⌥⌘S): la batteria, o un'altra traccia, tagliata sui suoi colpi. Le fette si suonano con 16 pad o con i tasti 1–4, Q–R, A–F, Z–V; i tagli si spostano, si dividono e si uniscono. «Esporta fette e MIDI» crea le fette in WAV, un MIDI nel ritmo della canzone (fetta 1 = nota 36, come un Drum Rack) e un LEGGIMI per Ableton e Logic
+
 Novità della 0.34.1:
 • Mentre separa, le barre delle tracce hanno un riflesso che scorre finché il lavoro vero non parte (modello, lettura), e prima di leggere la canzone l'onda si muove: si vede sempre che IsoLR sta lavorando
 

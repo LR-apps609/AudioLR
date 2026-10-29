@@ -1,3 +1,8 @@
+Novità di IsoLR per Windows 0.10.0 «Studio di notte»:
+• Nuovo aspetto, come sul Mac: IsoLR è scura di serie, con oro per i comandi e un colore al neon per ogni strumento (il chiaro resta in Impostazioni › Aspetto). Mentre separa, l'onda della canzone si colora d'oro con una testina luminosa, ogni traccia ha il suo equalizzatore e la luce REC lampeggia. Nel mixer ogni traccia mostra il suo livello mentre suona
+• Note dentro l'app (Ctrl+Alt+N, «Vai più a fondo» › «Note…»): le note di una traccia sopra una tastiera, sulla griglia delle battute. Si ascoltano (Piano, Synth, Basso), da sole, con la traccia o insieme, e seguono velocità, tono e A–B. Si correggono (sposta, allunga, aggiungi, togli, Ctrl+Z) e le correzioni finiscono nei file MIDI, nello spartito e nella tab. «File MIDI per il tuo programma» lo salva e lo mostra in Esplora file, da dove lo trascini in Ableton o FL Studio
+• Slice to MIDI (Ctrl+Alt+S): la batteria, o un'altra traccia, tagliata sui suoi colpi. Le fette si suonano con 16 pad o con i tasti 1–4, Q–R, A–F, Z–V; i tagli si spostano, si dividono e si uniscono. «Esporta fette e MIDI» crea le fette in WAV, un MIDI nel ritmo della canzone (fetta 1 = nota 36, come un Drum Rack) e un LEGGIMI
+
 Novità di IsoLR per Windows 0.9.1:
 • Corretto: se un modello dà un risultato sbagliato sulla scheda grafica, IsoLR riprova solo quel modello, prima sulla scheda grafica in modo più prudente e solo alla fine sul processore. Prima ricominciava tutta la separazione sul processore: Studio passava da una decina di minuti a più di due ore
 • IsoLR si ricorda come è andata per ogni modello: le volte dopo parte subito dal modo che funziona su questo computer
