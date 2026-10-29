@@ -2,9 +2,10 @@ import SwiftUI
 import AppKit
 
 // ════════════════════════════════════════════════════════════════════
-//  Colori di IsoLR: uno studio di registrazione. Di giorno carta crema,
-//  di notte inchiostro-prugna come l'icona; ottone per i comandi e un
-//  colore per ogni strumento (gli stessi delle barre dell'icona).
+//  Colori di IsoLR: «Studio di notte». Di serie scuro, come una sala di
+//  registrazione con le luci basse: fondo inchiostro-prugna con un alone
+//  viola caldo, oro per i comandi e un colore al neon per ogni strumento.
+//  Di giorno (Impostazioni › Aspetto) carta calda con gli stessi accenti.
 // ════════════════════════════════════════════════════════════════════
 
 extension Color {
@@ -27,13 +28,16 @@ extension Color {
 }
 
 enum Theme {
-    static let background = Color(light: 0xF4EFE6, dark: 0x17141E)
-    static let backgroundDeep = Color(light: 0xE9E1D3, dark: 0x0F0D14)
-    static let card = Color(light: 0xFFFCF6, dark: 0x221E2B)
-    static let well = Color(light: 0xF1EBE0, dark: 0x1A1721)        // fondo delle onde
+    static let background = Color(light: 0xF5EFE6, dark: 0x120F1A)
+    static let backgroundDeep = Color(light: 0xEAE1D3, dark: 0x0B0A10)
+    /// L'alone in alto nella finestra (viola caldo di notte, ambra leggero di giorno).
+    static let halo = Color(light: 0xE8C99A, dark: 0x2A2140)
+    static let card = Color(light: 0xFFFCF7, dark: 0x1A1524)
+    static let cardDeep = Color(light: 0xF8F2E9, dark: 0x141019)
+    static let well = Color(light: 0xF1EADF, dark: 0x0E0B14)        // fondo delle onde
     static let ink = Color(light: 0x2B2433, dark: 0xEDE6F2)
-    static let brass = Color(light: 0xA97E3F, dark: 0xD6AA62)
-    static let stroke = Color(light: 0x2B2433, dark: 0xEDE6F2, lightOpacity: 0.10, darkOpacity: 0.10)
+    static let brass = Color(light: 0x9A6F2E, dark: 0xD6AA62)
+    static let stroke = Color(light: 0x2B2433, dark: 0xFFFFFF, lightOpacity: 0.10, darkOpacity: 0.08)
     static let shadow = Color(light: 0x2B2433, dark: 0x000000)
     static let green = Color(light: 0x4E9A6A, dark: 0x7CC796)
 
@@ -49,15 +53,15 @@ enum Theme {
         q.instrumentModel != nil && split ? ["vocals", "drums", "bass", "guitar", "piano", "other"] : stemOrder
     }
 
-    /// Un colore per strumento: più carico di giorno, più luminoso di notte.
+    /// Un colore per strumento: al neon di notte, più carico di giorno (si legge sulla carta).
     static func color(_ stem: String) -> Color {
         switch stem {
-        case "vocals": return Color(light: 0xCF6F57, dark: 0xE5917A)        // corallo
-        case "drums": return Color(light: 0xC48E2C, dark: 0xE6B45C)         // ambra
-        case "bass": return Color(light: 0x8C6AAF, dark: 0xB497D0)          // lilla
-        case "guitar": return Color(light: 0x6E9A52, dark: 0x93C174)        // oliva
-        case "piano": return Color(light: 0x6F78A3, dark: 0xA0A8CC)         // ardesia
-        case "other": return Color(light: 0x3C978C, dark: 0x76C3B9)         // verde acqua
+        case "vocals": return Color(light: 0xD4553D, dark: 0xFF7A66)        // corallo
+        case "drums": return Color(light: 0xB97F12, dark: 0xFFC24B)         // ambra
+        case "bass": return Color(light: 0x7F55CC, dark: 0xB48CFF)          // viola
+        case "guitar": return Color(light: 0x4A9438, dark: 0x8EE07A)        // verde
+        case "piano": return Color(light: 0x4567C8, dark: 0x7FA8FF)         // blu
+        case "other": return Color(light: 0x16917F, dark: 0x43E0C2)         // verde acqua
         // Voce solista e cori: sfumature del corallo della voce
         case "lead": return Color(light: 0xC85A44, dark: 0xEC8A70)
         case "backing": return Color(light: 0xD88F7C, dark: 0xF0B3A2)
@@ -70,7 +74,7 @@ enum Theme {
         case "hh": return Color(light: 0xB9A35A, dark: 0xDCCB86)
         case "ride": return Color(light: 0x9C8A4A, dark: 0xC9B677)
         case "crash": return Color(light: 0xD08A3A, dark: 0xF0AE66)
-        case "instrumental": return Color(light: 0x5B7FAA, dark: 0x82A5CF)  // azzurro
+        case "instrumental": return Color(light: 0x2F7FC0, dark: 0x6CC3FF)  // azzurro
         case "mix": return Color(light: 0x8A8194, dark: 0x8D859A)           // la canzone intera
         default: return accent
         }
@@ -83,8 +87,14 @@ struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         let high = contrast == .increased
         content
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Theme.card)
-                .shadow(color: Theme.shadow.opacity(high ? 0 : 0.10), radius: 14, y: 6))
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(LinearGradient(colors: [Theme.card, Theme.cardDeep], startPoint: .top, endPoint: .bottom))
+                .shadow(color: Theme.shadow.opacity(high ? 0 : 0.28), radius: 24, y: 12))
+            // Il filo di luce sul bordo alto, come i pannelli di un mixer
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.06), .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
+            }
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(high ? Theme.ink.opacity(0.55) : Theme.stroke, lineWidth: high ? 1.5 : 1))
     }

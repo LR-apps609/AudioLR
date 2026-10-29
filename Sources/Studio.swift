@@ -92,13 +92,18 @@ struct LogoMark: View {
     }
 }
 
-/// Sfondo della finestra: carta crema di giorno, studio buio di notte, con un alone caldo in alto.
+/// Sfondo della finestra: lo studio di notte, buio con un alone viola caldo in alto a destra (di giorno carta
+/// calda con un alone ambra), e un filo d'oro appena percettibile.
 struct StudioBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Theme.background, Theme.backgroundDeep], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Theme.brass.opacity(0.14), .clear], center: UnitPoint(x: 0.5, y: 0.0),
-                           startRadius: 10, endRadius: 520)
+        GeometryReader { g in
+            ZStack {
+                LinearGradient(colors: [Theme.background, Theme.backgroundDeep], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Theme.halo, Theme.halo.opacity(0)], center: UnitPoint(x: 0.7, y: -0.1),
+                               startRadius: 0, endRadius: max(g.size.width, 600) * 0.75)
+                RadialGradient(colors: [Theme.brass.opacity(0.08), .clear], center: UnitPoint(x: 0.15, y: 0),
+                               startRadius: 0, endRadius: 420)
+            }
         }
         .ignoresSafeArea()
     }

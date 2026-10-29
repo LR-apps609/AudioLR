@@ -341,7 +341,9 @@ struct ContentView: View {
             .frame(width: 170, alignment: .leading)
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Theme.brass.opacity(0.12) : Theme.well.opacity(0.7)))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Theme.brass : Theme.stroke, lineWidth: on ? 2 : 1))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Theme.brass : Theme.stroke, lineWidth: on ? 1.5 : 1))
+            // La scelta brilla, come un tasto acceso su un mixer
+            .goldGlow(on, radius: 12)
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
@@ -394,47 +396,39 @@ struct ContentView: View {
 
     private var working: some View {
         VStack(alignment: .leading, spacing: 18) {
-            songTitle
-            // La canzone: si colora man mano che viene separata. Prima di leggerla, barre che si muovono
+            HStack(alignment: .center, spacing: 12) {
+                songTitle
+                Spacer(minLength: 8)
+                RecLight()
+            }
+            // La canzone: la parte già separata in oro, con la testina luminosa. Prima di leggerla, barre che si muovono
             Group {
                 if job.mixPeaks.isEmpty {
-                    IdleBars(count: 34, height: 64).frame(maxWidth: .infinity)
+                    IdleBars(count: 34, height: 76).frame(maxWidth: .infinity)
                 } else {
-                    WaveformView(peaks: job.mixPeaks, color: Theme.brass, dim: Theme.ink.opacity(0.18),
-                                 progress: separatingProgress, barWidth: 2.5, spacing: 1.5)
+                    GlowWaveform(peaks: job.mixPeaks, progress: separatingProgress ?? 0)
                 }
             }
-                .frame(height: 64)
+                .frame(height: 76)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.well))
-            // Le quattro tracce che stanno nascendo
-            VStack(spacing: 8) {
-                ForEach(Theme.stems(for: job.quality), id: \.self) { key in
-                    let info = Stem.info(key)
-                    HStack(spacing: 10) {
-                        StemBadge(key: key, symbol: info.symbol, size: 24)
-                        Text(info.name).font(.system(size: 12, weight: .semibold)).frame(width: 110, alignment: .leading)
-                        GeometryReader { g in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(Theme.ink.opacity(0.08))
-                                // Finché la separazione non parte (modello, lettura, prova del motore) scorre un riflesso
-                                if (separatingProgress ?? 0) == 0 { Shimmer(color: Theme.color(key)).clipShape(Capsule()) }
-                                Capsule().fill(Theme.color(key).gradient)
-                                    .frame(width: max(0, g.size.width * (separatingProgress ?? 0)))
-                            }
-                        }
-                        .frame(height: 6)
-                    }
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.stroke))
+            // Le tracce che stanno nascendo: un equalizzatore per ognuna, nel suo colore
+            let keys = Theme.stems(for: job.quality)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: keys.count), spacing: 10) {
+                ForEach(Array(keys.enumerated()), id: \.element) { i, key in
+                    StemForming(key: key, progress: separatingProgress ?? 0, index: i)
                 }
             }
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline) {
-                Text(percentText).font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                Text(percentText).font(.system(size: 34, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Theme.brass).goldGlow(radius: 12)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(stepText).font(.system(size: 13, weight: .semibold))
                     // Si aggiorna ogni secondo: il passo in corso e da quanto, così non sembra mai fermo
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text(detailText).font(.system(size: 11.5)).foregroundStyle(.secondary).monospacedDigit()
+                        Text(detailText).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -1456,6 +1450,14 @@ struct MixerRow: View {
                 .tint(Theme.color(stem.key))
                 .help("Volume")
                 .accessibilityLabel("Volume \(stem.name)")
+            // Il livello della traccia in questo istante (dalla sua forma d'onda): si muove mentre suona
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !mixer.isPlaying)) { _ in
+                let p = mixer.duration > 0 ? mixer.position / mixer.duration : 0
+                let i = min(stem.peaks.count - 1, max(0, Int(p * Double(stem.peaks.count))))
+                let level = mixer.isPlaying && audible && !stem.peaks.isEmpty ? Double(stem.peaks[i]).squareRoot() : 0
+                LevelMeter(level: level, color: Theme.color(stem.key))
+            }
+            .frame(width: 6, height: 30)
             TimelineView(.animation(minimumInterval: 1 / 30, paused: !mixer.isPlaying)) { _ in
                 GeometryReader { g in
                     let p = mixer.duration > 0 ? mixer.position / mixer.duration : 0

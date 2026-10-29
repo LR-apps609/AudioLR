@@ -195,7 +195,7 @@ struct UpdateSettings: View {
 
 /// Aspetto e libreria.
 struct GeneralSettings: View {
-    @AppStorage(Prefs.appearanceKey) private var appearance = "auto"
+    @AppStorage(Prefs.appearanceKey) private var appearance = "dark"
     @AppStorage("showLibrary") private var showLibrary = true
 
     var body: some View {

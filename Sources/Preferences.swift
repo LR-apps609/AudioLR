@@ -88,7 +88,8 @@ enum Prefs {
 
     /// Aspetto: automatico (come il Mac), chiaro o scuro.
     static func applyAppearance(_ value: String? = nil) {
-        switch value ?? UserDefaults.standard.string(forKey: appearanceKey) ?? "auto" {
+        // Di serie scuro: lo «studio di notte» è l'aspetto di IsoLR
+        switch value ?? UserDefaults.standard.string(forKey: appearanceKey) ?? "dark" {
         case "light": NSApp.appearance = NSAppearance(named: .aqua)
         case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
         default: NSApp.appearance = nil
