@@ -178,6 +178,24 @@ final class ScreenshotTests: XCTestCase {
         try shot(ContentView().environmentObject(job), "0-lavoro-stretta", width: 1180, height: 760)
     }
 
+    /// Le tre animazioni: le bobine mentre il modello si scarica, la festa di fine separazione, il logo a tempo.
+    func testShotAnimations() throws {
+        let job = SeparationJob.shared
+        job.showcasePreparing(title: "Eminem – Till I Collapse", quality: .studio, progress: 0.38)
+        try shot(ContentView().environmentObject(job), "19-modello", width: 1280, height: 820)
+        job.reset()
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.reset() }
+        job.showcase(title: "Canzone di prova", stems: stems, folder: dir, quality: .studio, duration: 214,
+                     analysis: SongAnalysis(bpm: 96, keyRoot: 5, minor: true, keyConfidence: 0.8, structure: Self.parts),
+                     elapsed: 300, engine: "Neural Engine e grafica", timings: [])
+        job.showcaseCelebration(at: 0.42)
+        try shot(ContentView().environmentObject(job), "20-fine", width: 1280, height: 820)
+        try shot(HStack(spacing: 40) {
+            ForEach([0.0, 0.4, 0.9], id: \.self) { p in BeatLogo(size: 64, busy: false, mixer: MixPlayer(), bpm: 96, frozen: p) }
+        }.padding(40).background(Theme.background), "21-logo-a-tempo", width: 420, height: 200)
+    }
+
     func testShotPending() throws {
         let job = SeparationJob.shared
         let (dir, stems) = try fakeStems()

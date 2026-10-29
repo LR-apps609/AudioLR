@@ -38,6 +38,8 @@ struct ContentView: View {
     @StateObject private var mixer = MixPlayer()
     @ObservedObject private var recorder = TakeRecorder.shared
     /// Le registrazioni della canzone aperta (la più recente per prima).
+    /// La festa di fine separazione è in corso (dura Celebration.duration).
+    @State private var celebrating = false
     @State private var takes: [URL] = []
     /// Il confronto della registrazione con una traccia («Voce», «Basso»…).
     @State private var comparison: (name: String, result: CompareResult)?
@@ -168,6 +170,20 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(Theme.brass, lineWidth: dropping ? 2.5 : 0)
             )
+            // Separazione appena finita: spunta, anello e coriandoli sopra il mixer, poi spariscono
+            .overlay {
+                if job.phase == .done, let started = job.finishedAt, celebrating || job.celebrationFrozen != nil {
+                    CelebrationView(tracks: job.stems.filter { $0.key != "instrumental" }.count, started: started,
+                                    frozen: job.celebrationFrozen)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: job.finishedAt) { _, new in
+                guard new != nil else { celebrating = false; return }
+                celebrating = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Celebration.duration) { celebrating = false }
+            }
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: job.phase)
             footer
         }
@@ -178,7 +194,8 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            LogoMark(size: 38, animated: job.isBusy)
+            // Mentre la canzone suona il logo pulsa sui suoi battiti
+            BeatLogo(size: 38, busy: job.isBusy, mixer: mixer, bpm: job.analysis?.bpm)
             VStack(alignment: .leading, spacing: 1) {
                 // Il nome non si accorcia mai: è il primo a cui si dà spazio
                 Text("IsoLR").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
@@ -424,6 +441,13 @@ struct ContentView: View {
                     StemForming(key: key, progress: separatingProgress ?? 0, index: i)
                 }
             }
+            // Mentre un modello si scarica o si prepara: le bobine di un registratore che girano
+            if let reels = preparingModel {
+                TapeReels(progress: reels.progress, label: reels.label)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 6)
+                    .transition(.opacity)
+            }
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline) {
                 Text(percentText).font(.system(size: 34, weight: .medium, design: .monospaced))
@@ -450,6 +474,22 @@ struct ContentView: View {
             steps
         }
         .padding(24)
+    }
+
+    /// Un modello si sta scaricando, installando o preparando (per le bobine): quanto manca, se si sa, e cosa dire.
+    private var preparingModel: (progress: Double?, label: String)? {
+        switch job.phase {
+        case .downloading(let p):
+            return (job.installing ? nil : p, job.installing ? "Installo il modello" : "Scarico il modello · \(Int(p * 100))%")
+        case .tuning:
+            return (nil, "Preparo il modello")
+        case .reading, .separating:
+            // «Apro il modello…» e «Preparo…» arrivano come passo in corso
+            guard let d = job.stepDetail, d.hasPrefix("Apro") || d.hasPrefix("Preparo") || d.hasPrefix("Prova del motore") else { return nil }
+            return (nil, "Preparo il modello")
+        default:
+            return nil
+        }
     }
 
     /// Le fasi del lavoro, con la spunta su quelle finite.

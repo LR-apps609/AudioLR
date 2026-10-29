@@ -117,6 +117,10 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var installing = false
     /// Il passo preciso in corso («Apro il modello sul Neural Engine…») e da quando: la finestra lo mostra col tempo.
     @Published private(set) var stepDetail: String?
+    /// Quando è finita l'ultima separazione vera (per la festa di fine lavoro; nil riaprendo dalla libreria).
+    @Published private(set) var finishedAt: Date?
+    /// Per le schermate di prova: la festa ferma a questo punto (0…1).
+    @Published private(set) var celebrationFrozen: Double?
     @Published private(set) var stepStarted = Date()
     /// Quanto ci ha messo l'ultima separazione, in secondi.
     @Published private(set) var elapsed: Double?
@@ -341,6 +345,7 @@ final class SeparationJob: ObservableObject {
 
     func start(_ url: URL, quality: Quality = .current) {
         guard !isBusy else { queue.append(url); queuedQuality[url] = quality; return }
+        finishedAt = nil
         cancelSplit()
         splitErrors = [:]
         queuedQuality[url] = nil
@@ -992,6 +997,7 @@ final class SeparationJob: ObservableObject {
     /// Riapre una separazione già fatta: le tracce si riascoltano senza rifare il lavoro.
     func open(_ item: HistoryItem) {
         guard !isBusy else { return }
+        finishedAt = nil
         let found = History.stems(in: item.folderURL, title: item.title)
         guard !found.isEmpty else {
             History.remove(item)
@@ -1143,6 +1149,8 @@ final class SeparationJob: ObservableObject {
 
     func reset() {
         guard !isBusy else { return }
+        finishedAt = nil
+        celebrationFrozen = nil
         cancelSplit()
         phase = .idle
         song = nil
@@ -1202,6 +1210,20 @@ final class SeparationJob: ObservableObject {
         phase = .done
     }
 
+    /// Per le schermate di prova: la festa di fine separazione ferma a `at` (0…1).
+    func showcaseCelebration(at: Double) {
+        finishedAt = Date()
+        celebrationFrozen = at
+    }
+
+    /// Per le schermate di prova: il modello che si scarica (le bobine).
+    func showcasePreparing(title: String, quality: Quality, progress: Double) {
+        self.title = title
+        self.quality = quality
+        self.mixPeaks = []
+        phase = .downloading(progress)
+    }
+
     /// Per le schermate di prova: una separazione a metà strada (niente calcolo vero).
     func showcaseWorking(title: String, peaks: [Float], quality: Quality, progress: Double) {
         self.title = title
@@ -1241,6 +1263,7 @@ final class SeparationJob: ObservableObject {
         folder = dir
         self.stems = stems
         phase = .done
+        finishedAt = Date()
         remaining = nil
         if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
         if Prefs.revealWhenDone { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
