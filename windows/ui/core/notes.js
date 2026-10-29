@@ -43,8 +43,9 @@
       this.notes = copy(edited || detected || []).map((n, i) => ({ ...n, id: i + 1 }));
       this.next = this.notes.length + 1;
       this.history = [];
+      this.base = !!edited;                          // riaperte già modificate
     }
-    get edited() { return this.history.length > 0; }
+    get edited() { return this.base || this.history.length > 0; }
     save() { this.history.push(copy(this.notes)); if (this.history.length > 200) this.history.shift(); }
     find(id) { return this.notes.find((n) => n.id === id); }
 
@@ -93,7 +94,8 @@
     }
 
     undo() { if (this.history.length) this.notes = this.history.pop(); }
-    reset() { this.save(); this.notes = copy(this.detected).map((n) => ({ ...n, id: this.next++ })); }
+    /** Di nuovo le note rilevate: non sono più «modificate» (Annulla resta possibile). */
+    reset() { this.save(); this.notes = copy(this.detected).map((n) => ({ ...n, id: this.next++ })); this.base = false; this.history = []; }
 
     /** Le note in ordine, senza i numeri (per il file MIDI e lo spartito). */
     list() { return this.notes.map(({ start, end, pitch, velocity }) => ({ start, end, pitch, velocity })).sort((a, b) => a.start - b.start || a.pitch - b.pitch); }

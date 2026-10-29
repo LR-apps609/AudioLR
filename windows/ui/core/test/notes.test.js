@@ -45,6 +45,8 @@ test("modifiche: sposta (agganciato), allunga, aggiungi, togli, annulla, riprist
   near(e.find(a).start, 0, 1e-9, "mai prima dell'inizio");
   e.reset();
   assert.deepStrictEqual(e.list().map((n) => n.pitch), [60, 64], "ripristina le note rilevate");
+  assert.strictEqual(e.edited, false, "dopo Ripristina non sono più modificate");
+  assert.strictEqual(new N.Editor([], [{ start: 0, end: 1, pitch: 60, velocity: 90 }]).edited, true, "riaperte modificate");
   assert.deepStrictEqual(N.range([{ pitch: 60 }]), [48, 72], "almeno due ottave");
 });
 

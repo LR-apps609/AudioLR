@@ -7,6 +7,8 @@
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const fmt = (t) => { t = Math.max(0, t || 0); const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, "0")}`; };
+  /** Le tracce con note (la batteria no: non ha altezze). */
+  const melodic = (meta) => meta.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].includes(s.key));
   const ICON = { vocals: "mic", lead: "mic", backing: "people", male: "user", female: "user", drums: "drum", kick: "drum", snare: "drum", toms: "drum", hh: "sparkle", ride: "drum", crash: "sparkle", bass: "bass", guitar: "guitar", piano: "piano", other: "other", instrumental: "headphones" };
   const KEY_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"], IT_NAMES = ["Do", "Do♯", "Re", "Mi♭", "Mi", "Fa", "Fa♯", "Sol", "La♭", "La", "Si♭", "Si"];
 
@@ -215,8 +217,13 @@
             <button class="btn" data-act="warp" title="Warp: correggi i segnaposto sulle battute e metti la canzone a tempo fisso">${Icon("warp")}Warp</button>
             <button class="btn" data-act="arrange" title="Rimonta: taglia sulle battute, sposta, duplica o togli le parti">${Icon("scissors")}Rimonta</button>
           </div>
-          <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "Note, spartito e tab"}</option>
-            ${m.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].includes(s.key)).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
+          <div class="pair">
+            <select class="pop" data-input="notes" title="Le note di una traccia: vedile, ascoltale e correggile (Ctrl+Alt+N)"><option value="">Note…</option>
+              ${melodic(m).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
+            <button class="btn" data-act="slice" title="Slice to MIDI: la batteria (o un'altra traccia) tagliata sui colpi, da suonare con i pad e portare in Ableton o Logic (Ctrl+Alt+S)">${Icon("grid")}Slice</button>
+          </div>
+          <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "File: MIDI, spartito e tab"}</option>
+            ${melodic(m).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
           <button class="btn" data-act="details">Dettagli della separazione</button>
           <button class="btn" data-act="reveal">Apri la cartella delle tracce</button>
         </div>
@@ -462,6 +469,7 @@
       case "pitch-up": transposeBy(1); return;
       case "transpose": return window.Sheets.transpose(job.current, player, transposeBy);
       case "warp": return window.Editors.warp(job.current, player);
+      case "slice": return window.Slicer.open(job.current, player);
       case "arrange": return window.Editors.arrange(job.current, player);
       case "dl-transposed": ui.downloadTransposed = !ui.downloadTransposed; return panel();
       case "mark-a": player.markA(); return transport();
@@ -504,6 +512,7 @@
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
     if (d.input === "take") { await player.loadTake(el.value); return transport(); }
     if (d.input === "midi" && el.value) return window.Sheets.notes(job.current, el.value, (k) => { ui.midi = k; panel(); }, shift());
+    if (d.input === "notes" && el.value) { const k = el.value; el.value = ""; return window.PianoRoll.open(job.current, player, k); }
     if (d.input === "compare" && el.value) {
       ui.comparing = true; transport();
       try { await window.Sheets.compare(job.current, player.take, el.value); } catch (e) { toast(e.message || String(e)); }
@@ -522,6 +531,8 @@
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
     // Come sul Mac (⌥⌘G e ⌥⌘X): Warp e Rimonta
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "n" && job.current) { e.preventDefault(); const s = melodic(job.current.meta)[0]; if (s) window.PianoRoll.open(job.current, player, s.key); }
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "s" && job.current) { e.preventDefault(); window.Slicer.open(job.current, player); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "g" && job.current) { e.preventDefault(); $('[data-act="warp"]') && $('[data-act="warp"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "x" && job.current) { e.preventDefault(); $('[data-act="arrange"]') && $('[data-act="arrange"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
