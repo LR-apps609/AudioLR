@@ -114,9 +114,11 @@
         <li><b>Scarica</b> quello che ti serve dal riquadro a destra: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ.</li>
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
-        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
+        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+N · Ctrl+Alt+S</td><td>Note (piano roll) · Slice to MIDI</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
         <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
-        <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr></table>
+        <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr>
+        <tr><td>Note</td><td>Trascina una nota per spostarla, il bordo per allungarla · doppio clic aggiunge · Canc toglie · Ctrl+Z annulla · Alt senza aggancio · ↑ ↓ di un semitono (Maiusc: un'ottava)</td></tr>
+        <tr><td>Slice</td><td>Tasti 1–4, Q–R, A–F, Z–V suonano i pad · trascina un segnaposto · doppio clic divide · ← → fetta prima e dopo</td></tr></table>
       <p class="muted">Rapida, Massima e Studio danno lo stesso risultato su tutti i computer: su quelli più lenti ci mettono solo di più. Se hai fretta, Massima è circa 2–3 volte più rapida di Studio.</p>
       <p class="muted">La prima volta Massima e Studio scaricano i loro modelli (una volta sola); poi IsoLR funziona anche senza internet. Le canzoni non lasciano mai il computer.</p>
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
@@ -223,8 +225,10 @@
       const { Midi, Sheet } = IsoLR;
       const stem = cur.meta.stems.find((s) => s.key === key);
       const ch = Encode.readWav(await Bridge.readFile(cur.folder + "/" + stem.file));
-      // Basic Pitch nel lavoratore; con il Transpose le note si spostano di tanti semitoni
-      const list = (await IsoApp.job.transcribe(ch)).map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + shift)) }));
+      // Le note corrette a mano nel piano roll, se ci sono; altrimenti Basic Pitch nel lavoratore.
+      // Con il Transpose le note si spostano di tanti semitoni
+      const mine = window.PianoRoll ? await window.PianoRoll.edited(cur, key) : null;
+      const list = (mine || await IsoApp.job.transcribe(ch)).map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + shift)) }));
       const a = cur.meta.analysis || {}, bpm = a.bpm || 120, name = `${cur.meta.title} – ${stem.name}${Transpose.suffix(shift)}`;
       const files = [];
       const mid = `${cur.folder}/${name}.mid`;

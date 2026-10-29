@@ -93,6 +93,23 @@ async function fakeSong(page) {
       await page.evaluate(() => { const a = document.querySelector(".sheet").api; const b = IsoLR.Arrange; a.set(b.split(b.move(a.blocks, 2, 0), 1, 0.5, [0, 1, 2, 3, 4, 5, 6, 7])); });
       await shot("10-rimonta");
       await page.keyboard.press("Escape");
+      // Piano roll: note finte di una melodia di basso (Basic Pitch non c'è nelle prove), una scelta
+      await page.evaluate(async () => {
+        const cur = IsoApp.job.current, notes = [];
+        const line = [45, 45, 52, 50, 45, 43, 48, 47, 45, 52, 55, 53, 52, 50, 48, 47];
+        line.forEach((p, i) => notes.push({ start: 0.12 + i * 0.5, end: 0.12 + i * 0.5 + (i % 4 === 3 ? 0.45 : 0.24), pitch: p, velocity: 60 + (i * 23) % 60 }));
+        await Bridge.writeText(`${cur.folder}/isolr-note-bass.json`, JSON.stringify({ version: 1, detected: notes, edited: null }));
+        window.PianoRoll.open(cur, IsoApp.player, "bass");
+      });
+      await page.waitForTimeout(900);
+      await page.evaluate(() => { const a = document.querySelector(".sheet").api; a.select([a.editor.notes[2].id, a.editor.notes[3].id]); });
+      await shot("11-note");
+      await page.keyboard.press("Escape");
+      await page.evaluate(() => window.Slicer.open(IsoApp.job.current, IsoApp.player, "drums"));
+      await page.waitForTimeout(1200);
+      await page.evaluate(() => document.querySelector(".sheet").api.play(2));
+      await shot("12-slice");
+      await page.keyboard.press("Escape");
       await page.click('[data-act="report"]');
       await page.fill("#r-sum", "Studio si ferma a metà");
       await shot("8-segnala");

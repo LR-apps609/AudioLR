@@ -146,7 +146,7 @@ struct GuideView: View {
     private let keys: [(String, String)] = [
         ("⌘O", "Apri una canzone"), ("Spazio", "Suona o ferma il mix"), ("⌘N", "Nuova separazione"),
         ("⌘K", "Karaoke"), ("⌘J", "Solo voce"), ("⌘0", "Tutte le tracce"), ("⌘E", "Esporta il mix"),
-        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌥⌘G", "Warp"), ("⌥⌘X", "Rimonta"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌘Y", "Cronologia"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
+        ("⌘I", "Dettagli"), ("⇧⌘D", "Dividi la batteria"), ("⇧⌘V", "Separa voce e cori"), ("⌥⌘P", "Sala prove"), ("⌥⌘G", "Warp"), ("⌥⌘X", "Rimonta"), ("⌥⌘N", "Note"), ("⌥⌘S", "Slice to MIDI"), ("⌘[ / ⌘]", "Inizio e fine della ripetizione"), ("⌘L", "Libreria"), ("⌘Y", "Cronologia"), ("⌥⌘1 / 2 / 3", "Massima / Veloce / Studio"),
         ("⇧⌘R", "Mostra le tracce nel Finder"), ("⌘.", "Annulla la separazione"), ("⌘,", "Impostazioni"),
         ("⇧⌘A", "Account"), ("⌘?", "Domande frequenti"), ("⌥⌘B", "Segnala un bug"),
     ]

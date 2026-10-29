@@ -26,6 +26,8 @@ extension Notification.Name {
     /// Menu Mix › Warp (⌥⌘G) e Rimonta (⌥⌘X): gli editor della canzone aperta.
     static let audiolrWarp = Notification.Name("audiolrWarp")
     static let audiolrArrange = Notification.Name("audiolrArrange")
+    static let audiolrNotes = Notification.Name("audiolrNotes")
+    static let audiolrSlice = Notification.Name("audiolrSlice")
     /// Menu Vista › Dettagli della separazione (⌘I).
     static let audiolrDetails = Notification.Name("audiolrDetails")
 }
@@ -61,6 +63,8 @@ struct ContentView: View {
     @State private var showDetails = false
     @State private var showWarp = false
     @State private var showArrange = false
+    @State private var notesStem: Stem?
+    @State private var showSlice = false
     @AppStorage("showPractice") private var showPractice = false
     @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
@@ -513,7 +517,7 @@ struct ContentView: View {
         .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
-        .modifier(EditorSheets(showWarp: $showWarp, showArrange: $showArrange, job: job, mixer: mixer))
+        .modifier(EditorSheets(showWarp: $showWarp, showArrange: $showArrange, notesStem: $notesStem, showSlice: $showSlice, job: job, mixer: mixer))
     }
 
     /// Le divisioni in più: «Separa voce e cori» e «Dividi la batteria», con la barra mentre lavorano.
@@ -1020,12 +1024,23 @@ struct ContentView: View {
                         .help("Rimonta: taglia, sposta, duplica o togli le parti della canzone (⌥⌘X)")
                 }
                 .disabled(job.stems.isEmpty || job.folder == nil)
+                // Le note nell'app (piano roll) e la traccia tagliata sui colpi (Slice to MIDI)
+                HStack(spacing: 6) {
+                    Menu {
+                        ForEach(job.midiStems) { s in Button(s.name) { mixer.pause(); notesStem = s } }
+                    } label: { Label("Note", systemImage: "pianokeys") }
+                    .help("Le note di una traccia: vedile, ascoltale e correggile (⌥⌘N)")
+                    .disabled(job.midiStems.isEmpty)
+                    Button { mixer.pause(); showSlice = true } label: { Label("Slice", systemImage: "square.grid.4x3.fill").frame(maxWidth: .infinity) }
+                        .help("Slice to MIDI: la batteria (o un'altra traccia) tagliata sui colpi, da suonare con i pad e portare in Ableton o Logic (⌥⌘S)")
+                }
+                .disabled(job.stems.isEmpty || job.folder == nil)
                 Menu {
                     ForEach(job.midiStems) { s in
                         Button(job.midiFiles[downloadShift == 0 ? s.key : "\(s.key)\(downloadShift)"] != nil ? "\(s.name) · mostra il file" : s.name) { job.makeMidi(s, shift: downloadShift) }
                     }
                 } label: {
-                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "Note, spartito e tab")
+                    Text(job.midiWorking.map { "Note di \(Stem.info($0).name.lowercased())…" } ?? "File: MIDI, spartito e tab")
                 }
                 .disabled(job.midiWorking != nil || job.midiStems.isEmpty)
                 .help(job.midiError.map { "Non riuscito: \($0)" } ?? "Le note di una traccia: file MIDI (GarageBand, Logic), spartito MusicXML (MuseScore, Guitar Pro) e, per chitarra e basso, la tablatura")
@@ -1598,6 +1613,8 @@ struct PitchLines: View {
 struct EditorSheets: ViewModifier {
     @Binding var showWarp: Bool
     @Binding var showArrange: Bool
+    @Binding var notesStem: Stem?
+    @Binding var showSlice: Bool
     let job: SeparationJob
     let mixer: MixPlayer
 
@@ -1611,5 +1628,13 @@ struct EditorSheets: ViewModifier {
             }
             .sheet(isPresented: $showWarp) { WarpView(mixer: mixer) { showWarp = false }.environmentObject(job) }
             .sheet(isPresented: $showArrange) { ArrangeView(mixer: mixer) { showArrange = false }.environmentObject(job) }
+            .onReceive(NotificationCenter.default.publisher(for: .audiolrNotes)) { _ in
+                if job.phase == .done, let s = job.midiStems.first { mixer.pause(); notesStem = s }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .audiolrSlice)) { _ in
+                if job.phase == .done, !job.stems.isEmpty { mixer.pause(); showSlice = true }
+            }
+            .sheet(item: $notesStem) { s in PianoRollView(mixer: mixer, stem: s) { notesStem = nil }.environmentObject(job) }
+            .sheet(isPresented: $showSlice) { SliceView(mixer: mixer) { showSlice = false }.environmentObject(job) }
     }
 }

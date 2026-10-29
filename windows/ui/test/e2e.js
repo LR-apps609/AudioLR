@@ -126,6 +126,41 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
       return { dur: c.meta.duration, len: v[0].length / 44100, parts: c.meta.analysis.structure.sections.length };
     });
     check(Math.abs(rv.dur - (rm.dur - rm.cut)) < 0.001 && Math.abs(rv.len - rv.dur) < 0.001, `Rimonta: tolto un blocco di ${rm.cut.toFixed(2)} s, da ${rm.dur.toFixed(2)} a ${rv.dur.toFixed(2)} s (${rv.parts} parti)`);
+
+    // Slice to MIDI: la batteria della canzone di prova (un colpo ogni mezzo secondo) in fette, esportate in WAV + MID
+    await page.evaluate(async () => { await IsoApp.openEntry(IsoApp.ui.library.find((e) => !e.meta.derivedFrom)); await window.Slicer.open(IsoApp.job.current, IsoApp.player, "drums"); });
+    const sl = await page.evaluate(async () => {
+      const api = document.querySelector(".sheet").api;
+      await api.ready;
+      const n = api.slices.length;
+      await api.exportAll();
+      const dir = api.lastExport;
+      const has = async (f) => Bridge.exists(`${dir}/${f}`);
+      const files = await Promise.all(["Slice 01.wav", "LEGGIMI.txt"].map(has));
+      const mid = dir ? await Bridge.exists(`${dir}/${dir.split("/").pop()}.mid`) : false;
+      return { n, dir, wav: files[0], readme: files[1], mid, first: api.slices[0] && api.slices[0].start / 44100 };
+    });
+    check(sl.n >= 10 && sl.wav && sl.mid && sl.readme, `Slice: ${sl.n} fette della batteria (la prima a ${sl.first && sl.first.toFixed(2)} s), esportate WAV + MID + LEGGIMI`);
+    await page.screenshot({ path: path.join(out, "win-e2e-slice.png") });
+    await page.keyboard.press("Escape");
+
+    // Piano roll: note finte (Basic Pitch non c'è qui), una spostata e allungata; il file MIDI le usa
+    const pr = await page.evaluate(async () => {
+      const cur = IsoApp.job.current;
+      const notes = [0, 1, 2, 3].map((i) => ({ start: 0.5 + i * 0.5, end: 0.8 + i * 0.5, pitch: 57 + i * 2, velocity: 90 }));
+      await Bridge.writeText(`${cur.folder}/isolr-note-bass.json`, JSON.stringify({ version: 1, detected: notes, edited: null }));
+      window.PianoRoll.open(cur, IsoApp.player, "bass");
+      for (let k = 0; k < 50 && !document.querySelector(".sheet").api.editor; k++) await new Promise((r) => setTimeout(r, 100));
+      const api = document.querySelector(".sheet").api, ed = api.editor;
+      const id = ed.notes[0].id;
+      api.edit((e) => { e.move([id], 0.25, 12, null); e.resize(id, e.find(id).end + 0.5, null); });
+      await new Promise((r) => setTimeout(r, 700));               // il salvataggio arriva dopo 0,4 s
+      const saved = await window.PianoRoll.edited(cur, "bass");
+      return { count: ed.notes.length, saved: saved && saved.find((n) => n.pitch === 69), len: saved && saved.find((n) => n.pitch === 69) };
+    });
+    check(pr.count === 4 && pr.saved && Math.abs(pr.len.end - pr.len.start - 0.8) < 1e-6, `Piano roll: ${pr.count} note, una spostata di un'ottava e allungata, salvata con la canzone`);
+    await page.screenshot({ path: path.join(out, "win-e2e-note.png") });
+    await page.keyboard.press("Escape");
   }
   // Transpose: +2 semitoni sposta davvero il tono, la lunghezza resta e il colpo resta al suo posto
   const tp = await page.evaluate(async () => {

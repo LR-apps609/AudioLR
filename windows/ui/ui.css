@@ -293,3 +293,14 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 .work2 .born.waiting .bar { position: relative; overflow: hidden; }
 .work2 .born.waiting .bar::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c) 45%, transparent), transparent); transform: translateX(-100%); animation: shine 1.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .work2 .born.waiting .bar::after { animation: none; } }
+/* Piano roll e Slice to MIDI */
+.wcanvas.proll { height: 360px; cursor: crosshair; }
+.pads-wrap { display: flex; align-items: center; gap: 8px; }
+.pads { flex: 1; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.pad { height: 52px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--stroke)); background: color-mix(in srgb, var(--c) 12%, var(--card)); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; transition: background .08s, box-shadow .08s, transform .08s; }
+.pad b { font-size: 14px; } .pad small { font-size: 10px; color: var(--muted); }
+.pad:disabled { opacity: .35; cursor: default; }
+.pad.on { border-color: var(--c); }
+.pad.lit { background: var(--c); color: #fff; box-shadow: 0 0 16px color-mix(in srgb, var(--c) 70%, transparent); transform: scale(.97); }
+.pad.lit small { color: rgba(255,255,255,.85); }
+@media (max-width: 1100px) { .pads { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

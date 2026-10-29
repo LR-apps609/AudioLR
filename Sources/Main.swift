@@ -128,6 +128,12 @@ struct AudioLRCommands: Commands {
             Button("Rimonta: taglia e sposta…") { post(.audiolrArrange) }
                 .keyboardShortcut("x", modifiers: [.command, .option])
                 .disabled(job.phase != .done)
+            Button("Note: vedi e correggi…") { post(.audiolrNotes) }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
+            Button("Slice to MIDI…") { post(.audiolrSlice) }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
             Divider()
             Button("Esporta il mix") { post(.audiolrExport) }
                 .keyboardShortcut("e")
