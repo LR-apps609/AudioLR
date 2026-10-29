@@ -171,7 +171,7 @@ struct TapeReels: View {
                     reel.fill(Path(ellipseIn: CGRect(x: -7, y: -7, width: 14, height: 14)), with: .color(Theme.brass))
                     for s in 0..<3 {
                         var spoke = Path()
-                        let a = Double(s) * 2 * .pi / 3
+                        let a: Double = Double(s) * 2 * Double.pi / 3
                         let ca = CGFloat(cos(a)), sa = CGFloat(sin(a))
                         spoke.move(to: CGPoint(x: ca * 9, y: sa * 9))
                         spoke.addLine(to: CGPoint(x: ca * (r - 5), y: sa * (r - 5)))
