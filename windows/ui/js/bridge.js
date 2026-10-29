@@ -96,7 +96,8 @@
     async readModel(name, part) { return new Uint8Array(await invoke("read_model", { name, part })); },
 
     // ── Calcolo nativo dei RoFormer (ONNX Runtime con DirectML o processore, fuori dalla finestra) ──
-    async nativeLoad(name, cpuOnly) { return invoke("native_load", { name, cpuOnly }); },
+    async nativeLoad(name, cpuOnly, level) { return invoke("native_load", { name, cpuOnly, level }); },
+    async nativeDowngrade(name) { return invoke("native_downgrade", { name }); },
     async nativeRun(name, frames, feats, x) {
       const out = await invoke("native_run", new Uint8Array(x.buffer, x.byteOffset, x.byteLength), { headers: { name, frames: String(frames), feats: String(feats) } });
       return new Float32Array(out instanceof ArrayBuffer ? out : new Uint8Array(out).buffer);

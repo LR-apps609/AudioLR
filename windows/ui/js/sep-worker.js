@@ -73,6 +73,11 @@ function inferNative(name, x, frames, feats) {
     post("infer", { id, name, frames, feats, x: copy }, [copy.buffer]);
   });
 }
+/** Una richiesta alla finestra con risposta (per ora: scendere di un gradino). */
+function nativeAsk(msg) {
+  const id = ++inferId;
+  return new Promise((resolve, reject) => { inferring[id] = { resolve, reject }; post(msg.type, { ...msg, id }); });
+}
 
 function netFor(name) {
   const { session: s, cfg, native } = nets[name];
@@ -103,10 +108,22 @@ async function runRoformer(name, input, from, span, step) {
   await ensure(name);
   const m = nets[name];
   if (!m) throw new Error("modello " + name + " non caricato");
-  lastBackend = m.backend;
-  const out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
-    overlap: self.IsoLR.Load.OVERLAP,
-    onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
+  let out;
+  for (;;) {
+    lastBackend = m.backend;
+    try {
+      out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
+        overlap: self.IsoLR.Load.OVERLAP,
+        onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
+      break;
+    } catch (e) {
+      // Risultato sbagliato sulla scheda grafica: si scende di un gradino SOLO per questo modello e si rifà
+      // il suo passaggio (gli altri modelli restano dove sono); sul processore l'errore resta un errore
+      if (!m.native || !/non plausibile/.test(String(e && e.message))) throw e;
+      m.backend = await nativeAsk({ type: "downgrade", name });
+      post("progress", { step: `${step} · riprovo: ${m.backend}` });
+    }
+  }
   const res = {};
   m.cfg.sources.forEach((k, i) => { res[String(k).toLowerCase()] = out[i]; });
   return res;

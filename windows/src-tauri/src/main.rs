@@ -342,10 +342,11 @@ fn native_init(app: &AppHandle) -> Result<(), String> {
 
 /// Apre un modello fuori dalla finestra (scheda grafica con DirectML, o processore). Dice dove calcola.
 #[tauri::command]
-async fn native_load(app: AppHandle, name: String, cpu_only: bool) -> Result<String, String> {
+async fn native_load(app: AppHandle, name: String, cpu_only: bool, level: Option<usize>) -> Result<String, String> {
     native_init(&app)?;
     let path = model_path(&app, &name)?;
-    tauri::async_runtime::spawn_blocking(move || nativo::load(&name, &path, cpu_only).map(|b| b.to_string()))
+    let from = if cpu_only { nativo::CPU } else { level.unwrap_or(0) };
+    tauri::async_runtime::spawn_blocking(move || nativo::load(&name, &path, from).map(|b| b.to_string()))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -368,6 +369,16 @@ async fn native_run(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<
         .await
         .map_err(|e| e.to_string())??;
     Ok(tauri::ipc::Response::new(out))
+}
+
+/// Il modello ha dato un risultato sbagliato sulla scheda grafica: si riapre al gradino dopo (solo lui).
+/// Torna [gradino, dove calcola].
+#[tauri::command]
+async fn native_downgrade(app: AppHandle, name: String) -> Result<(usize, String), String> {
+    let path = model_path(&app, &name)?;
+    tauri::async_runtime::spawn_blocking(move || nativo::downgrade(&name, &path).map(|(l, b)| (l, b.to_string())))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Chiude un modello aperto fuori dalla finestra.
@@ -466,7 +477,7 @@ fn main() {
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, read_model, models_ready, check_update, install_update,
-            native_load, native_run, native_release, native_backend, native_gpu_error
+            native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade
         ])
         .run(tauri::generate_context!())
         .expect("IsoLR non è riuscita ad avviarsi");

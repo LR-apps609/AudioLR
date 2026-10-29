@@ -117,6 +117,7 @@
           if (m.type === "need") { this.provide(m.name); return; }
           if (m.type === "released") { this.loaded.delete(m.name); Bridge.nativeRelease(m.name); return; }
           if (m.type === "infer") { this.infer(m); return; }
+          if (m.type === "downgrade") { this.downgrade(m); return; }
           if (m.type === "progress") { if (m.progress != null) this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
           w.removeEventListener("message", on);
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
@@ -131,11 +132,24 @@
     async openNative(name, cfg) {
       if (!Bridge.desktop || !/roformer/i.test(cfg.kind || "")) return null;
       try {
-        const backend = await Bridge.nativeLoad(name, this.onCpu);
+        // Si parte dal gradino che ha funzionato l'ultima volta per questo modello (0 = scheda grafica al massimo)
+        const backend = await Bridge.nativeLoad(name, this.onCpu, Prefs.get(`nativeLevel.${name}`, 0));
         Job.log(`${name}: ${backend}`);
         if (backend === "Processore" && !this.onCpu) { const why = await Bridge.nativeGpuError(); if (why) Job.log(`DirectML non ha aperto il modello: ${why.slice(0, 300)}`); }
         return backend;
       } catch (e) { Job.log(`Calcolo nativo non disponibile (${e.message || e}): resto nella finestra`); return null; }
+    }
+
+    /** Un modello ha sbagliato sulla scheda grafica: si riapre al gradino dopo, e lo si ricorda per le volte dopo. */
+    async downgrade(m) {
+      try {
+        const [level, backend] = await Bridge.nativeDowngrade(m.name);
+        Prefs.set(`nativeLevel.${m.name}`, level);
+        Job.log(`${m.name}: risultato sbagliato, riprovo su «${backend}»`);
+        if (this.worker) this.worker.postMessage({ type: "inferred", id: m.id, name: m.name, mask: backend });
+      } catch (e) {
+        if (this.worker) this.worker.postMessage({ type: "infer-error", id: m.id, message: String(e.message || e) });
+      }
     }
 
     /** Un pezzo chiesto dal lavoratore: lo calcola il modello aperto fuori dalla finestra. */
@@ -185,7 +199,8 @@
     /** Come sul Mac: se la scheda grafica apre i modelli ma poi non riesce a calcolare, si rifà tutto con il processore. */
     async withFallback(work) {
       try { return await work(); } catch (e) {
-        if (this.onCpu || String(e.message || e) === "annullato") throw e;
+        // Già sul processore, annullato, o il calcolo nativo ha già provato tutti i gradini: rifare tutto non serve
+        if (this.onCpu || /annullato|anche sul processore/.test(String(e.message || e))) throw e;
         Job.log("La scheda grafica non riesce (" + String(e.message || e) + "): si riprova con il processore");
         if (this.worker) this.worker.terminate();
         // Anche i modelli aperti fuori dalla finestra si chiudono: si riaprono sul processore

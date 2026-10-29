@@ -9,12 +9,12 @@ fn main() {
     nativo::init(Path::new(&a[1])).expect("onnxruntime.dll");
     let model = Path::new(&a[2]);
     let (t, f): (usize, usize) = (a[3].parse().unwrap(), a[4].parse().unwrap());
-    match nativo::load("gpu", model, false) {
+    match nativo::load("gpu", model, 0) {
         Ok(b) => println!("::notice::Con la scheda grafica il modello si apre su: {b} {}", nativo::gpu_error().map(|e| format!("(DirectML: {e})")).unwrap_or_default()),
         Err(e) => println!("::warning::Con la scheda grafica non si apre: {e}"),
     }
     nativo::release("gpu");
-    let b = nativo::load("cpu", model, true).expect("aperto sul processore");
+    let b = nativo::load("cpu", model, nativo::CPU).expect("aperto sul processore");
     let t0 = std::time::Instant::now();
     let (out, _) = nativo::run("cpu", model, vec![0.001; t * f], t, f).expect("un pezzo");
     let finite = out.chunks_exact(4).all(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]).is_finite());

@@ -14,6 +14,7 @@ use std::sync::{Mutex, OnceLock};
 pub struct Net {
     session: Session,
     pub backend: &'static str,
+    level: usize,
 }
 
 static NETS: OnceLock<Mutex<HashMap<String, Net>>> = OnceLock::new();
@@ -41,9 +42,25 @@ pub fn init(dll: &Path) -> Result<(), String> {
     .clone()
 }
 
-fn build(path: &Path, gpu: bool) -> ort::Result<Session> {
-    let b = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
-    if gpu {
+/// I gradini, dal più veloce al più sicuro: scheda grafica con tutte le ottimizzazioni, scheda grafica con
+/// le sole ottimizzazioni di base (alcune fusioni di operazioni su DirectML danno numeri sbagliati con
+/// certi modelli), scheda grafica senza ottimizzazioni, processore.
+pub const LEVELS: [&str; 4] = [
+    "Scheda grafica (DirectML)",
+    "Scheda grafica (DirectML, prudente)",
+    "Scheda grafica (DirectML, senza ottimizzazioni)",
+    "Processore",
+];
+pub const CPU: usize = 3;
+
+fn build(path: &Path, level: usize) -> ort::Result<Session> {
+    let opt = match level {
+        1 => GraphOptimizationLevel::Level1,
+        2 => GraphOptimizationLevel::Disable,
+        _ => GraphOptimizationLevel::Level3,
+    };
+    let b = Session::builder()?.with_optimization_level(opt)?;
+    if level < CPU {
         // DirectML vuole il calcolo in sequenza e senza memoria «a schema» (documentazione di ONNX Runtime)
         b.with_memory_pattern(false)?
             .with_parallel_execution(false)?
@@ -54,28 +71,37 @@ fn build(path: &Path, gpu: bool) -> ort::Result<Session> {
     }
 }
 
-/// Apre un modello: prima sulla scheda grafica, se non riesce sul processore. Dice dove.
-pub fn load(name: &str, path: &Path, cpu_only: bool) -> Result<&'static str, String> {
+/// Apre un modello dal gradino `from` in giù (il primo che si apre). Dice dove calcola.
+pub fn load(name: &str, path: &Path, from: usize) -> Result<&'static str, String> {
     if let Some(n) = nets().lock().unwrap().get(name) {
         return Ok(n.backend);
     }
-    let gpu = if cpu_only {
-        None
-    } else {
-        match build(path, true) {
-            Ok(s) => Some(s),
-            Err(e) => {
+    let mut level = from.min(CPU);
+    let session = loop {
+        match build(path, level) {
+            Ok(s) => break s,
+            Err(e) if level < CPU => {
                 *GPU_ERROR.lock().unwrap() = Some(e.to_string());
-                None
+                level = CPU;
             }
+            Err(e) => return Err(format!("non riesco ad aprire il modello: {e}")),
         }
     };
-    let (session, backend) = match gpu {
-        Some(s) => (s, "Scheda grafica (DirectML)"),
-        None => (build(path, false).map_err(|e| format!("non riesco ad aprire il modello: {e}"))?, "Processore"),
-    };
-    nets().lock().unwrap().insert(name.to_string(), Net { session, backend });
+    let backend = LEVELS[level];
+    nets().lock().unwrap().insert(name.to_string(), Net { session, backend, level });
     Ok(backend)
+}
+
+/// Il modello ha dato un risultato sbagliato: si riapre al gradino dopo (solo questo modello).
+/// Torna il gradino nuovo, o un errore se era già sul processore.
+pub fn downgrade(name: &str, path: &Path) -> Result<(usize, &'static str), String> {
+    let level = nets().lock().unwrap().get(name).map(|n| n.level).ok_or("modello non aperto")?;
+    if level >= CPU {
+        return Err("risultato non plausibile anche sul processore".into());
+    }
+    release(name);
+    let backend = load(name, path, level + 1)?;
+    Ok((nets().lock().unwrap().get(name).map(|n| n.level).unwrap_or(CPU), backend))
 }
 
 /// Dove calcola un modello aperto.
@@ -95,12 +121,12 @@ pub fn run(name: &str, path: &Path, x: Vec<f32>, frames: usize, feats: usize) ->
     match first {
         Ok(v) => Ok(v),
         Err(e) => {
-            let on_gpu = nets().lock().unwrap().get(name).map(|n| n.backend != "Processore").unwrap_or(false);
+            let on_gpu = nets().lock().unwrap().get(name).map(|n| n.level < CPU).unwrap_or(false);
             if !on_gpu {
                 return Err(e);
             }
             release(name);
-            load(name, path, true)?;
+            load(name, path, CPU)?;
             run_once(name, &x, frames, feats)
         }
     }
