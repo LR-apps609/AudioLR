@@ -38,7 +38,7 @@
         const d = cur[k] - prev[k];
         if (d > 0) s += d;
       }
-      out[f] = f === 0 ? 0 : s;
+      out[f] = s;                                     // il primo passo conta come un colpo se la traccia parte già suonando
       if (out[f] > top) top = out[f];
       [prev, cur] = [cur, prev];
     }
@@ -67,7 +67,7 @@
       if ((i > 0 && fl[i - 1] > v) || (i + 1 < fl.length && fl[i + 1] >= v)) continue;
       if (i - last < gap) continue;
       // Il flusso cresce quando il colpo entra nella finestra: l'attacco è verso la sua fine
-      out.push(Math.max(0, i * H + N - H));
+      out.push(i === 0 ? 0 : Math.max(0, i * H + N - H));
       last = i;
     }
     return out;

@@ -68,6 +68,7 @@ test("attacchi: i colpi della batteria finta, entro 10 ms", () => {
   assert.strictEqual(on.length, times.length, `trovati ${on.length}`);
   on.forEach((o, i) => near(o / rate, times[i], 0.01, `colpo ${i + 1}`));
   assert.deepStrictEqual(S.onsets([new Float32Array(44100), new Float32Array(44100)], rate), [], "silenzio: nessun colpo");
+  assert.strictEqual(S.onsets(clicks([0, 0.5], rate, 1), rate)[0], 0, "un colpo proprio all'inizio della traccia");
 });
 
 test("fette: dall'attacco al successivo; sposta, unisci, dividi; audio con dissolvenze; MIDI 36, 37…", () => {

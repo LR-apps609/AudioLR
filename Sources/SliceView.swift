@@ -210,6 +210,7 @@ struct SliceView: View {
                     ForEach(0..<16, id: \.self) { k in pad(page * 16 + k, k, now: tl.date) }
                 }
             }
+            .frame(maxWidth: .infinity)
             Button { page += 1 } label: { Image(systemName: "chevron.right") }.disabled((page + 1) * 16 >= slices.count).help("Pad successivi")
         }
     }

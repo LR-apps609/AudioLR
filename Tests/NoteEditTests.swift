@@ -81,6 +81,7 @@ final class NoteEditTests: XCTestCase {
         XCTAssertEqual(on.count, times.count, "trovati \(on.count)")
         for (o, t) in zip(on, times) { XCTAssertEqual(Double(o) / rate, t, accuracy: 0.01) }
         XCTAssertEqual(Slicer.onsets([[Float](repeating: 0, count: 44_100)], rate: rate), [], "silenzio: nessun colpo")
+        XCTAssertEqual(Slicer.onsets(clicks([0, 0.5], rate: rate, length: 1), rate: rate).first, 0, "un colpo proprio all'inizio della traccia")
     }
 
     func testSlicesEditsAudioAndMidi() throws {

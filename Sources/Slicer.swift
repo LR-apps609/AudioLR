@@ -49,7 +49,8 @@ enum Slicer {
                 let d = cur[k] - prev[k]
                 if d > 0 { s += d }
             }
-            out[f] = f == 0 ? 0 : s
+            // Il primo passo conta come un colpo se la traccia parte già suonando
+            out[f] = s
             swap(&prev, &cur)
         }
         if let top = out.max(), top > 0 { vDSP.multiply(1 / top, out, result: &out) }
@@ -78,7 +79,7 @@ enum Slicer {
             if (i > 0 && fl[i - 1] > v) || (i + 1 < fl.count && fl[i + 1] >= v) { continue }
             if i - last < gap { continue }
             // Il flusso cresce quando il colpo entra nella finestra: l'attacco è verso la sua fine
-            out.append(max(0, i * hop + frame - hop))
+            out.append(i == 0 ? 0 : max(0, i * hop + frame - hop))
             last = i
         }
         return out

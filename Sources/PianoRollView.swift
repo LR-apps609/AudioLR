@@ -100,7 +100,8 @@ struct PianoRollView: View {
     }
 
     private let keyWidth: CGFloat = 46
-    private var duration: Double { max(mixer.duration, 1) }
+    /// La canzone (o, nelle schermate senza mixer, fin dopo l'ultima nota).
+    private var duration: Double { max(mixer.duration, (editor?.notes.map(\.end).max() ?? 0) + 1, 1) }
     private var grid: [Double] { NoteGrid.make(structure: job.analysis?.structure, bpm: job.analysis?.bpm ?? 120, duration: duration) }
 
     var body: some View {
