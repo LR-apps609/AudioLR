@@ -149,6 +149,23 @@ final class ScreenshotTests: XCTestCase {
         let mix = EditAudio.mix(stems, state: MixState())
         try shot(WarpView(mixer: mixer, preloaded: mix) {}.environmentObject(job), "15-warp", width: 960, height: 520)
         try shot(ArrangeView(mixer: mixer, preloaded: mix, preselect: 1) {}.environmentObject(job), "16-rimonta", width: 960, height: 520)
+        // Piano roll: una linea di basso finta; Slice: una batteria finta con un colpo ogni mezzo secondo
+        let line = [45, 45, 52, 50, 45, 43, 48, 47, 45, 52, 55, 53]
+        let notes = line.enumerated().map { i, p in
+            Note(start: 0.12 + Double(i) * 0.5, end: 0.12 + Double(i) * 0.5 + (i % 4 == 3 ? 0.45 : 0.24), pitch: p, velocity: 60 + (i * 23) % 60)
+        }
+        try shot(PianoRollView(mixer: mixer, stem: stems[2], preloaded: notes) {}.environmentObject(job), "17-note", width: 1040, height: 640)
+        var drum = [Float](repeating: 0, count: 44_100 * 6)
+        var seed: UInt64 = 3
+        for k in 0..<12 {
+            let s0 = Int(Double(k) * 0.5 * 44_100), strong = k % 2 == 0
+            for i in 0..<4000 where s0 + i < drum.count {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                let r = Float(Double(seed >> 11) / Double(1 << 53)) * 2 - 1
+                drum[s0 + i] = r * Float((strong ? 0.8 : 0.45) * exp(-Double(i) / (strong ? 900 : 400)))
+            }
+        }
+        try shot(SliceView(mixer: mixer, startKey: "drums", preloaded: [drum, drum]) {}.environmentObject(job), "18-slice", width: 1040, height: 660)
     }
 
     /// Una canzone trascinata in attesa di «Separa».
