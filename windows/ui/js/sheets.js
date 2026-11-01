@@ -52,7 +52,9 @@
           <tr><td>BS-RoFormer Chorus Male-Female (Sucial)</td><td>Voce maschile e femminile</td><td>MIT (codice)</td></tr>
           <tr><td>MDX23C DrumSep (aufr33, jarredou)</td><td>Batteria divisa</td><td>—</td></tr>
           <tr><td>Basic Pitch (Spotify)</td><td>Note MIDI</td><td>Apache 2.0</td></tr>
-          <tr><td>Signalsmith Stretch</td><td>Velocità e tono</td><td>MIT</td></tr></table>
+          <tr><td>Signalsmith Stretch</td><td>Velocità e tono</td><td>MIT</td></tr>
+          <tr><td>Whisper small (OpenAI)</td><td>Testo sincronizzato</td><td>MIT</td></tr>
+          <tr><td>Transformers.js (Hugging Face)</td><td>Testo sincronizzato (motore)</td><td>Apache 2.0</td></tr></table>
         <p class="muted">Le canzoni non lasciano mai il computer. Le tracce separate di brani altrui sono per uso personale: studio, pratica, karaoke.</p>`,
     };
     let current = "generale";
@@ -114,7 +116,7 @@
         <li><b>Scarica</b> quello che ti serve dal riquadro a destra: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ.</li>
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
-        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+N · Ctrl+Alt+S</td><td>Note (piano roll) · Slice to MIDI</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
+        <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+N · Ctrl+Alt+S</td><td>Note (piano roll) · Slice to MIDI</td></tr><tr><td>Ctrl+Alt+L</td><td>Testo sincronizzato</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
         <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
         <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr>
         <tr><td>Note</td><td>Trascina una nota per spostarla, il bordo per allungarla · doppio clic aggiunge · Canc toglie · Ctrl+Z annulla · Alt senza aggancio · ↑ ↓ di un semitono (Maiusc: un'ottava)</td></tr>

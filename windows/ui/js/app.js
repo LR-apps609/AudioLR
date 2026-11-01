@@ -326,6 +326,7 @@
               ${melodic(m).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
             <button class="btn" data-act="slice" title="Slice to MIDI: la batteria (o un'altra traccia) tagliata sui colpi, da suonare con i pad e portare in Ableton o Logic (Ctrl+Alt+S)">${Icon("grid")}Slice</button>
           </div>
+          <button class="btn" data-act="lyrics" title="Il testo della canzone dalla voce, parola per parola a tempo: correggilo, esportalo, crea il video karaoke (Ctrl+Alt+L)">${Icon("mic")}Testo</button>
           <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "File: MIDI, spartito e tab"}</option>
             ${melodic(m).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
           <button class="btn" data-act="details">Dettagli della separazione</button>
@@ -397,7 +398,10 @@
           return `<button class="${on ? "on" : ""}" data-section="${i}" style="left:${(100 * x.start) / d}%;width:calc(${(100 * (end - x.start)) / d}% - 1px);background:${on ? "" : `color-mix(in srgb, var(--brass) ${10 + 7 * (x.group % 4)}%, transparent)`}" title="Ripeti «${esc(x.label)}» (${fmt(x.start)}–${fmt(end)})">${esc(x.label)}</button>`;
         }).join("")}<span class="head" id="head"></span></div>`
       : `<span class="hint" style="flex:1">${s ? "Parti della canzone non riconosciute: segna A e B a mano" : "Le parti della canzone (strofa, ritornello…) compaiono nelle canzoni separate da questa versione"}</span>`;
+    // Il testo a tempo (karaoke), se la canzone l'ha già: si carica una volta e si aggiorna in updateLive
+    if (job.current && !window.LyricsUI.cache.has(job.current.folder)) window.LyricsUI.load(job.current.folder).then(() => updateLive());
     return `<div class="practice">
+      <div class="lyr-strip" id="lyr-strip"></div>
       <div class="trow">${sectionsHtml}
         <button class="btn small ${player.metronome ? "on" : ""}" data-act="metronome" ${s && s.beats ? "" : "disabled"} title="Un clic su ogni battito della canzone, più forte sul primo della battuta">${Icon("metronome")}Metronomo</button>
         <button class="btn small ${player.countIn ? "on" : ""}" data-act="count" ${player.bpm || s ? "" : "disabled"} title="Prima di partire, una battuta di clic al tempo della canzone">${Icon("count")}Conteggio</button></div>
@@ -446,6 +450,12 @@
     const t = player.position;
     const tm = $("#time"); if (tm) tm.textContent = `${fmt(t)} / ${fmt(player.duration)}`;
     const head = $("#head"); if (head && player.duration) head.style.left = `calc(${(100 * t) / player.duration}% - 1px)`;
+    const ls = $("#lyr-strip");
+    if (ls && job.current) {
+      const s = window.LyricsUI.strip(window.LyricsUI.cache.get(job.current.folder), t);
+      ls.hidden = !s;
+      if (s && ls.dataset.line !== s.line + "|" + s.next) { ls.dataset.line = s.line + "|" + s.next; ls.innerHTML = `<b>${esc(s.line) || "&nbsp;"}</b><span>${esc(s.next) || "&nbsp;"}</span>`; }
+    }
     const box = $("#chords"), chords = job.current && job.current.meta.analysis && job.current.meta.analysis.chords;
     if (box && chords) {
       let i = chords.findIndex((c) => t < c.end); if (i < 0) i = chords.length - 1;
@@ -644,6 +654,7 @@
       case "transpose": return window.Sheets.transpose(job.current, player, transposeBy);
       case "warp": return window.Editors.warp(job.current, player);
       case "slice": return window.Slicer.open(job.current, player);
+      case "lyrics": return window.LyricsUI.open(job.current, player);
       case "arrange": return window.Editors.arrange(job.current, player);
       case "dl-transposed": ui.downloadTransposed = !ui.downloadTransposed; return panel();
       case "mark-a": player.markA(); return transport();
@@ -727,6 +738,7 @@
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }
     // Come sul Mac (⌥⌘G e ⌥⌘X): Warp e Rimonta
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "n" && job.current) { e.preventDefault(); const s = melodic(job.current.meta)[0]; if (s) window.PianoRoll.open(job.current, player, s.key); }
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "l" && job.current) { e.preventDefault(); window.LyricsUI.open(job.current, player); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "s" && job.current) { e.preventDefault(); window.Slicer.open(job.current, player); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "g" && job.current) { e.preventDefault(); $('[data-act="warp"]') && $('[data-act="warp"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "x" && job.current) { e.preventDefault(); $('[data-act="arrange"]') && $('[data-act="arrange"]').click(); }

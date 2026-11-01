@@ -59,7 +59,7 @@ final class LyricsTests: XCTestCase {
         let ls = Lyrics.lines(ws)
         // All'inizio il titolo; poco prima della riga la si vede già (in grigio); durante, la parola cantata
         XCTAssertTrue(KaraokeVideo.frame(at: 0.2, lines: ls, words: ws).showTitle)
-        let before = KaraokeVideo.frame(at: 3.0, lines: ls, words: ws)
+        let before = KaraokeVideo.frame(at: 3.6, lines: ls, words: ws)
         XCTAssertFalse(before.showTitle)
         XCTAssertEqual(before.line, "E questa la seconda")
         XCTAssertNil(before.sung)

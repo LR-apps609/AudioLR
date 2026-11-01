@@ -135,6 +135,30 @@ async function fakeSong(page) {
       await page.evaluate(() => document.querySelector(".sheet").api.play(2));
       await shot("12-slice");
       await page.keyboard.press("Escape");
+      // Testo sincronizzato: un testo finto salvato con la canzone, la testina a metà di una riga
+      await page.evaluate(async () => {
+        const text = "Ho visto la città dormire sotto la luna. E ho cantato piano per non svegliarla. Poi la notte si è accesa di oro";
+        let t = 0.4; const words = text.split(" ").map((w) => { const x = { text: w, start: t, end: t + 0.22 }; t += w.endsWith(".") ? 0.9 : 0.26; return x; });
+        const lyr = { version: 1, language: "it", words, edited: false };
+        await window.LyricsUI.save(IsoApp.job.current.folder, lyr);
+        IsoApp.player.seek(words[11].start / IsoApp.player.duration + 0.002);
+        window.LyricsUI.open(IsoApp.job.current, IsoApp.player);
+      });
+      await page.waitForTimeout(900);
+      await shot("13-testo");
+      await page.keyboard.press("Escape");
+      // Due fotogrammi del video karaoke, disegnati come nel file
+      for (const shape of ["landscape", "portrait"]) {
+        const png = await page.evaluate((shape) => {
+          const lyr = window.LyricsUI.cache.get(IsoApp.job.current.folder), K = IsoLR.Karaoke, { w, h } = K.SHAPES[shape];
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          const peaks = Array.from({ length: 400 }, (_, i) => 0.2 + 0.7 * Math.abs(Math.sin(i / 9) * Math.cos(i / 31)));
+          const t = lyr.words[11].start + 0.05, lines = IsoLR.Lyrics.lines(lyr.words);
+          window.KaraokeVideo.draw(c.getContext("2d"), K.frame(t, lines, lyr.words), { title: "Canzone di prova", peaks, t, duration: 20, w, h });
+          return c.toDataURL("image/png").split(",")[1];
+        }, shape);
+        fs.writeFileSync(path.join(out, `win-14-video-${shape === "landscape" ? "orizzontale" : "verticale"}${tag}-${scheme === "light" ? "chiaro" : "scuro"}.png`), Buffer.from(png, "base64"));
+      }
       await page.click('[data-act="report"]');
       await page.fill("#r-sum", "Studio si ferma a metà");
       await shot("8-segnala");

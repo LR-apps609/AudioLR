@@ -20,7 +20,7 @@ const BASE: &str = "https://github.com/LR-apps609/AudioLR/releases/download/mode
 /// I modelli che si possono scaricare (nessun altro indirizzo è raggiungibile da qui).
 const MODELS: &[&str] = &[
     "StrumentiSW", "VoceRevive", "VoceRoFormer9", "VoceCori3", "VoceDuetto", "BatteriaDrumSep",
-    "HTDemucs", "HTDemucsFT-1", "BasicPitch",
+    "HTDemucs", "HTDemucsFT-1", "BasicPitch", "WhisperEncoder", "WhisperDecoder",
 ];
 
 /// Le cartelle scelte nelle finestre di salvataggio: solo lì (e in Musica › IsoLR) si può scrivere.

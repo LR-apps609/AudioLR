@@ -368,3 +368,17 @@ select.pop.mini { height: 22px; font-size: 11px; padding: 0 4px; max-width: 120p
 .preview-banner b { display: block; font-size: 12.5px; }
 .preview-banner span { display: block; font-size: 11px; color: var(--muted); }
 .preview-banner > svg.i { color: var(--brass); }
+
+/* Testo sincronizzato (js/lyrics.js) */
+.lyr-list { height: 360px; overflow: auto; border-radius: 12px; background: var(--well); padding: 8px 0; display: grid; align-content: start; }
+.lyr-line { display: flex; gap: 12px; align-items: baseline; text-align: left; border: 0; background: none; color: var(--ink); padding: 5px 14px; border-radius: 8px; font: 500 16px var(--font-display, inherit); cursor: pointer; }
+.lyr-line:hover { background: color-mix(in srgb, var(--brass) 8%, transparent); }
+.lyr-line.sel { background: color-mix(in srgb, var(--brass) 14%, transparent); }
+.lyr-line.now { font-weight: 700; font-size: 20px; }
+.lyr-t { font: 11px var(--mono, ui-monospace, Consolas, monospace); color: var(--faint); min-width: 44px; text-align: right; }
+.lyr-w .sung { color: var(--brass); }
+.lyr-empty { display: grid; justify-items: center; gap: 8px; padding: 70px 20px; text-align: center; }
+.lyr-empty svg { width: 30px; height: 30px; color: var(--brass); }
+.lyr-strip { display: grid; justify-items: center; gap: 2px; }
+.lyr-strip b { font: 700 17px var(--font-display, inherit); color: var(--brass); }
+.lyr-strip span { font-size: 13px; color: var(--muted); }

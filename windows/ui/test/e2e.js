@@ -221,6 +221,27 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   check(tp.len && Math.abs(tp.hz - 493.88) < 6, `Transpose +2: ${tp.hz && tp.hz.toFixed(1)} Hz (atteso 493,9), stessa lunghezza`);
   check(Math.abs(tp.at - 1) < 0.03, `Transpose allineato: colpo a ${tp.at.toFixed(3)} s`);
   check(tp.capo === '{"capo":4,"shapes":["G","D","Em","C"]}' && tp.key === "Re maggiore", `capotasto ${tp.capo}, ${tp.key}`);
+  // Testo sincronizzato con un testo finto: si salva con la canzone, si apre l'editor, .lrc giusto;
+  // video karaoke (solo immagine: qui non c'è l'AAC) che il lettore del browser rilegge
+  const ly = await page.evaluate(async () => {
+    const cur = IsoApp.job.current;
+    const words = [{ text: "Ciao", start: 0.5, end: 1 }, { text: "mondo.", start: 1, end: 1.8 }, { text: "Di", start: 2.5, end: 2.8 }, { text: "nuovo", start: 2.8, end: 3.5 }];
+    await window.LyricsUI.save(cur.folder, { version: 1, language: "it", words, edited: false });
+    window.LyricsUI.cache.clear();
+    const back = await window.LyricsUI.load(cur.folder);
+    window.LyricsUI.open(cur, IsoApp.player);
+    await new Promise((r) => setTimeout(r, 600));
+    const rows = document.querySelectorAll(".sheet .lyr-line").length;
+    document.querySelector(".sheet [data-close]").click();
+    const lrc = IsoLR.Lyrics.lrc(IsoLR.Lyrics.lines(back.words), "Prova");
+    const n = 44100 * 3, ch = [new Float32Array(n), new Float32Array(n)];
+    const mp4 = await KaraokeVideo.render({ lyrics: back, title: "Prova", audio: ch, shape: "portrait", withAudio: false });
+    const v = document.createElement("video"); v.muted = true; v.src = URL.createObjectURL(new Blob([mp4], { type: "video/mp4" }));
+    const meta = await new Promise((ok) => { v.onloadedmetadata = () => ok({ w: v.videoWidth, h: v.videoHeight, d: v.duration }); v.onerror = () => ok({ err: true }); setTimeout(() => ok({ timeout: true }), 8000); });
+    return { words: back.words.length, rows, lrc, meta };
+  });
+  check(ly.words === 4 && ly.rows === 2 && ly.lrc.includes("[00:00.50]Ciao mondo.") && ly.lrc.includes("[00:02.50]Di nuovo"), `testo: ${ly.words} parole, ${ly.rows} righe nell'editor, .lrc giusto`);
+  check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));
   await browser.close();
   server.close();

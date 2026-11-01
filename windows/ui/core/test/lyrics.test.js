@@ -57,3 +57,17 @@ test("pulizia di Whisper", () => {
   assert.strictEqual(c[0].end, 1);
   assert.strictEqual(c.filter((x) => x.text === "la").length, 4);
 });
+
+test("video karaoke: titolo, riga in arrivo, parola cantata", () => {
+  const K = require("../karaoke.js");
+  const ls = L.lines(words);
+  assert.strictEqual(K.frame(0.2, ls, words).showTitle, true);
+  const before = K.frame(3.6, ls, words);
+  assert.strictEqual(before.showTitle, false);
+  assert.strictEqual(before.line, "E questa la seconda");
+  assert.strictEqual(before.sung, null);
+  const during = K.frame(1.45, ls, words);
+  assert.deepStrictEqual(during.lineWords, ["Questa", "è", "la", "prima."]);
+  assert.strictEqual(during.sung, 2);
+  assert.strictEqual(during.next, "E questa la seconda");
+});

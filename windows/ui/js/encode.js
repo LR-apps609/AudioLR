@@ -286,6 +286,8 @@
     return out.slice(0, 2);
   }
 
-  window.Encode = { FORMATS, encode, wav, flac, m4a, stemMp4, readWav, RATE };
+  // Per il video karaoke (js/video.js): l'AAC e i mattoni dell'MP4
+  const mp4parts = { box, full, u32, u16, str, audioTrak: trak };
+  window.Encode = { FORMATS, encode, wav, flac, m4a, stemMp4, readWav, RATE, aacEncode, mp4parts };
   if (typeof module !== "undefined") module.exports = window.Encode;
 })();
