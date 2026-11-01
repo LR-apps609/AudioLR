@@ -1,0 +1,61 @@
+# Il modello del testo (Whisper small, OpenAI, licenza MIT) per «Testo sincronizzato», copiato nelle release di IsoLR:
+# • Mac (modelli-1): la versione Core ML di WhisperKit (argmaxinc/whisperkit-coreml, licenza MIT) più il tokenizer
+#   di openai/whisper-small, in WhisperSmall.zip (+ .sha256). L'app la usa con WhisperKit, senza Internet dopo.
+# • Windows (modelli-windows): l'export ONNX con i tempi delle parole (onnx-community/whisper-small_timestamped):
+#   WhisperEncoder.onnx (fp32) e WhisperDecoder.onnx (q4), ciascuno con il suo .json (i file di configurazione
+#   e del tokenizer, raccolti) e il .sha256, come gli altri modelli di Windows.
+name: Modello del testo
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/model-testo.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  copia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Mac · WhisperKit Core ML (whisper-small) e tokenizer
+        run: |
+          set -e
+          HF=https://huggingface.co
+          mkdir -p w/WhisperSmall/openai_whisper-small w/WhisperSmall/tokenizer/models/openai/whisper-small
+          curl -sSf "$HF/api/models/argmaxinc/whisperkit-coreml" | python3 -c "import json,sys;[print(s['rfilename']) for s in json.load(sys.stdin)['siblings'] if s['rfilename'].startswith('openai_whisper-small/')]" > lista.txt
+          wc -l lista.txt
+          while read -r f; do
+            mkdir -p "w/WhisperSmall/$(dirname "$f")"
+            curl -sSLf -o "w/WhisperSmall/$f" "$HF/argmaxinc/whisperkit-coreml/resolve/main/$f"
+          done < lista.txt
+          for f in tokenizer.json tokenizer_config.json; do
+            curl -sSLf -o "w/WhisperSmall/tokenizer/models/openai/whisper-small/$f" "$HF/openai/whisper-small/resolve/main/$f"
+          done
+          (cd w && zip -qr ../WhisperSmall.zip WhisperSmall)
+          sha256sum WhisperSmall.zip | tee WhisperSmall.sha256
+          echo "::notice::WhisperSmall.zip $(du -h WhisperSmall.zip | cut -f1)"
+          gh release upload modelli-1 WhisperSmall.zip WhisperSmall.sha256 --clobber
+      - name: Windows · ONNX con i tempi delle parole (whisper-small_timestamped)
+        run: |
+          set -e
+          R=https://huggingface.co/onnx-community/whisper-small_timestamped/resolve/main
+          mkdir -p x
+          for f in config.json generation_config.json preprocessor_config.json tokenizer.json tokenizer_config.json; do curl -sSLf -o "x/$f" "$R/$f"; done
+          curl -sSLf -o WhisperEncoder.onnx "$R/onnx/encoder_model.onnx"
+          curl -sSLf -o WhisperDecoder.onnx "$R/onnx/decoder_model_merged_q4.onnx"
+          python3 - <<'PY'
+          import json
+          r = lambda n: json.load(open('x/' + n))
+          json.dump({"kind": "whisper", "part": "encoder", "config": r("config.json"), "generation_config": r("generation_config.json"),
+                     "preprocessor_config": r("preprocessor_config.json")}, open("WhisperEncoder.json", "w"))
+          json.dump({"kind": "whisper", "part": "decoder", "tokenizer": r("tokenizer.json"), "tokenizer_config": r("tokenizer_config.json")},
+                    open("WhisperDecoder.json", "w"))
+          PY
+          for n in WhisperEncoder WhisperDecoder; do sha256sum $n.onnx | tee $n.onnx.sha256; echo "::notice::$n.onnx $(du -h $n.onnx | cut -f1)"; done
+          gh release upload modelli-windows WhisperEncoder.onnx WhisperEncoder.onnx.sha256 WhisperEncoder.json \
+            WhisperDecoder.onnx WhisperDecoder.onnx.sha256 WhisperDecoder.json --clobber
