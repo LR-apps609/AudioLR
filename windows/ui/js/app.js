@@ -273,6 +273,7 @@
           <button class="btn" data-act="dl-mix">Il mix che senti</button>
           <button class="btn" data-act="dl-ab" ${player.isLooping ? "" : "disabled"} title="${player.isLooping ? "Solo il passaggio tra A e B, con il mix che senti" : "Prima segna A e B in «Esercitati»"}">Il passaggio A–B</button>
           <button class="btn" data-act="dl-stem">File per DJ (.stem.mp4)</button>
+          <select class="pop" data-input="project" title="Le tracce pronte da aprire nel tuo programma musicale, con tempo e parti"><option value="">Progetto per…</option><option value="ableton">Ableton Live</option><option value="reaper">REAPER</option><option value="daw">Logic, GarageBand, FL Studio, altri</option></select>
           <p>Scegli tu dove salvare. Le tracce restano anche in Musica › IsoLR.</p>
         </div>
         <div class="box"><h3>Vai più a fondo</h3>
@@ -488,6 +489,46 @@
       Bridge.reveal(path);
     } catch (e) { toast("Download non riuscito: " + (e.message || e)); }
   }
+  /// «Progetto per…»: Ableton Live (.als), REAPER (.rpp) o una cartella per tutti gli altri (core/daw.js).
+  async function exportProject(kind) {
+    const D = IsoLR.Daw, m = job.current.meta, a = m.analysis || {}, sh = shift();
+    const dir = await Bridge.askFolder();
+    if (!dir) return;
+    try {
+      toast("Preparo il progetto…");
+      const stems = m.stems.filter((s) => s.key !== "instrumental");
+      // Tutte le tracce lunghe uguali e dall'inizio: messe una sotto l'altra sono allineate
+      const chs = [];
+      let len = 0;
+      for (const s of stems) {
+        const ch = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
+        chs.push(ch); len = Math.max(len, ch[0].length);
+      }
+      const seconds = len / 44100;
+      const tracks = stems.map((s, i) => ({ key: s.key, name: s.name, file: D.trackFile(kind, i, s.name), seconds }));
+      const key = a.keyRoot != null ? Transpose.keyName(a.keyRoot, a.minor, sh) : null;
+      const p = D.project({ title: m.title + Transpose.suffix(sh), bpm: a.bpm, key, seconds, tracks, structure: a.structure });
+      const base = `${dir}/${D.folderName(p, kind)}`;
+      let target = base, n = 2;
+      while (await Bridge.exists(target)) target = `${base} ${n++}`;
+      for (let i = 0; i < stems.length; i++) {
+        const ch = chs[i].map((c) => { if (c.length === len) return c; const o = new Float32Array(len); o.set(c); return o; });
+        await Bridge.writeFile(`${target}/${tracks[i].file}`, Encode.wav(ch, 24));
+      }
+      const title = D.safe(p.title);
+      if (kind === "ableton") await Bridge.writeFile(`${target}/${title}.als`, await D.als(p));
+      if (kind === "reaper") await Bridge.writeText(`${target}/${title}.rpp`, D.reaper(p));
+      await Bridge.writeFile(`${target}/Tempo e marcatori.mid`, D.tempoMidi(p));
+      if (kind === "daw") {
+        await Bridge.writeText(`${target}/Parti.cue`, D.cueSheet(p, tracks[0] ? tracks[0].file : `${title}.wav`));
+        await Bridge.writeText(`${target}/Parti.txt`, D.partsText(p));
+        await Bridge.writeText(`${target}/LEGGIMI.txt`, D.readme(p));
+      }
+      ui.lastProject = target;
+      Bridge.reveal(target);
+    } catch (e) { toast("Progetto non riuscito: " + (e.message || e)); }
+  }
+
   async function downloadStemFile() {
     const sh = shift();
     const path = await Bridge.askFile(`${job.current.meta.title}${Transpose.suffix(sh)}.stem.mp4`, "mp4");
@@ -497,6 +538,13 @@
       const tracks = {};
       for (const s of MixPlayer.mixable(job.current.meta.stems)) tracks[s.key] = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
       await Bridge.writeFile(path, await Encode.stemMp4(tracks));
+      // Accanto, le parti come foglio CUE (programmi da DJ e lettori lo leggono): il .stem.mp4 non ha un posto documentato per i cue
+      const m = job.current.meta, a = m.analysis || {};
+      if (a.structure && a.structure.sections && a.structure.sections.length) {
+        const p = IsoLR.Daw.project({ title: m.title, bpm: a.bpm, key: a.keyRoot != null ? Transpose.keyName(a.keyRoot, a.minor, sh) : null, seconds: m.duration || 0, tracks: [], structure: a.structure });
+        const file = path.split(/[\\/]/).pop();
+        await Bridge.writeText(path.replace(/\.stem\.mp4$/i, "") + " – Parti.cue", IsoLR.Daw.cueSheet(p, file));
+      }
       Bridge.reveal(path);
     } catch (e) { toast("File per DJ non riuscito: " + (e.message || e)); }
   }
@@ -587,6 +635,7 @@
     const el = ev.target, d = el.dataset;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
     if (d.input === "take") { await player.loadTake(el.value); return transport(); }
+    if (d.input === "project" && el.value) { const k = el.value; el.value = ""; return exportProject(k); }
     if (d.input === "midi" && el.value) return window.Sheets.notes(job.current, el.value, (k) => { ui.midi = k; panel(); }, shift());
     if (d.input === "notes" && el.value) { const k = el.value; el.value = ""; return window.PianoRoll.open(job.current, player, k); }
     if (d.input === "compare" && el.value) {
@@ -640,5 +689,5 @@
   setTimeout(checkUpdate, 3000);
   setInterval(checkUpdate, 3 * 3600 * 1000);
 
-  window.IsoApp = { job, player, ui, render, toast, fmt, esc, refreshLibrary, openEntry, transport, IT_NAMES, KEY_NAMES };
+  window.IsoApp = { job, player, ui, render, toast, fmt, esc, refreshLibrary, openEntry, transport, exportProject, IT_NAMES, KEY_NAMES };
 })();

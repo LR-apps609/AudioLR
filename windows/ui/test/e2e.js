@@ -161,6 +161,25 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     check(pr.count === 4 && pr.saved && Math.abs(pr.len.end - pr.len.start - 0.8) < 1e-6, `Piano roll: ${pr.count} note, una spostata di un'ottava e allungata, salvata con la canzone`);
     await page.screenshot({ path: path.join(out, "win-e2e-note.png") });
     await page.keyboard.press("Escape");
+
+    // «Progetto per…» › Ableton Live: cartella con le tracce allineate, il set .als (gzip di XML) e il MIDI del tempo
+    await page.selectOption('select[data-input="project"]', "ableton");
+    for (let k = 0; k < 600 && !(await page.evaluate(() => IsoApp.ui.lastProject)); k++) await page.waitForTimeout(100);
+    const pj = await page.evaluate(async () => {
+      const dir = IsoApp.ui.lastProject, m = IsoApp.job.current.meta;
+      if (!dir) return {};
+      const title = IsoLR.Daw.safe(m.title);
+      const xml = new TextDecoder().decode(await IsoLR.Daw.gunzip(await Bridge.readFile(`${dir}/${title}.als`)));
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const paths = [...doc.querySelectorAll("SampleRef RelativePath")].map((e) => e.getAttribute("Value"));
+      const lens = [];
+      for (const p of paths) lens.push(Encode.readWav(await Bridge.readFile(`${dir}/${p}`))[0].length);
+      const mid = await Bridge.readFile(`${dir}/Tempo e marcatori.mid`);
+      return { ok: !doc.querySelector("parsererror"), tracks: doc.querySelectorAll("AudioTrack").length, paths, lens,
+        tempo: +doc.querySelector("Tempo Manual").getAttribute("Value"), mid: String.fromCharCode(...mid.slice(0, 4)) };
+    });
+    check(pj.ok && pj.tracks === 4 && pj.lens && pj.lens.every((l) => l === pj.lens[0]) && pj.mid === "MThd" && pj.tempo > 40,
+      `Progetto Ableton: ${pj.tracks} tracce allineate (${pj.paths && pj.paths[0]}), tempo ${pj.tempo && pj.tempo.toFixed(1)}, MIDI del tempo`);
   }
   // Transpose: +2 semitoni sposta davvero il tono, la lunghezza resta e il colpo resta al suo posto
   const tp = await page.evaluate(async () => {
