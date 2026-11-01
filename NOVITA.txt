@@ -1,3 +1,9 @@
+Novità della 0.37.0 «Per DJ e produttori»:
+• Libreria con i filtri: sotto la ricerca, «Filtri» per tonalità (anche quelle che si mixano bene, Camelot), BPM (anche a metà e al doppio), strumento presente e qualità, più l'ordine (recenti, titolo, BPM, Camelot). «Come la canzone aperta» trova i pezzi che ci stanno bene vicino. Gli stessi filtri valgono nella Cronologia
+• Anteprima di 20 s: con Massima o Studio, prima di separare tutta la canzone ne separi solo 20 secondi dal centro e li ascolti nel mixer. Poi «Separa tutta» o «Indietro». L'anteprima non va in libreria
+• BPM e tonalità dentro i file scaricati (WAV, FLAC, M4A), con titolo e artista se il nome è «Artista - Titolo»: Rekordbox, Serato, Traktor e Ableton li leggono subito. Con il tono cambiato viene scritta la tonalità nuova
+• Progetto per… (riquadro Scarica): le tracce pronte da aprire nel tuo programma musicale, allineate e nella tonalità scelta. Ableton Live: un set con una traccia per strumento, il tempo della canzone, la griglia sui battiti veri e i locatori sulle parti. REAPER: un progetto con tracce colorate, tempo e marcatori. Logic, GarageBand, FL Studio e gli altri: una cartella con le tracce numerate, un MIDI con il tempo e le parti da trascinare per primo, e un LEGGIMI con i passi per ogni programma. Accanto al file per DJ (.stem.mp4) c'è anche un foglio .cue con le parti
+
 Novità della 0.36.0:
 • Più vita nello Studio di notte: mentre la canzone suona il logo in alto pulsa sui suoi battiti veri, con un alone d'oro. Quando un modello si scarica o si prepara girano le bobine di un registratore, così si vede sempre che IsoLR sta lavorando. A fine separazione una spunta d'oro e una pioggia di coriandoli nei colori delle tracce, poi il mixer. Con «Riduci movimento» attivo, le animazioni restano ferme
 
