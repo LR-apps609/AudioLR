@@ -144,6 +144,12 @@ jobs:
           path: test.log
 
       - name: Pacchetto .audiolr
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           VERSION=$(cat version.txt)
           mkdir -p dist/AudioLR
@@ -152,6 +158,8 @@ jobs:
           # L'app già compilata: «Costruisci e installa» e gli aggiornamenti la installano direttamente (pochi secondi).
           mkdir -p dist/AudioLR/Prebuilt
           ditto build/Build/Products/Release/AudioLR.app dist/AudioLR/Prebuilt/AudioLR.app
+          # Con i segreti di Apple l'app è firmata Developer ID (niente avviso «sviluppatore non identificato»)
+          Tools/firma-mac.sh firma dist/AudioLR/Prebuilt/AudioLR.app
           ditto -c -k --keepParent dist/AudioLR "dist/IsoLR $VERSION.audiolr"
           # La stessa cosa in .zip, per la prima installazione (prima che il Mac conosca i file .audiolr)
           cp "dist/IsoLR $VERSION.audiolr" "dist/IsoLR $VERSION.zip"
@@ -163,6 +171,11 @@ jobs:
       - name: App completa con i modelli (.dmg)
         if: github.event_name != 'pull_request'
         env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
@@ -177,9 +190,11 @@ jobs:
             cp "modelli/$n.json" "$M/"
             test -d "$M/$n.mlmodelc"
           done
-          codesign --force --deep -s - full/IsoLR/AudioLR.app
+          Tools/firma-mac.sh firma full/IsoLR/AudioLR.app
           ln -s /Applications full/IsoLR/Applicazioni
           hdiutil create -volname "IsoLR $VERSION" -srcfolder full/IsoLR -ov -format UDZO "dist/IsoLR $VERSION.dmg"
+          # Solo sul ramo principale (i rilasci): notarizzazione di Apple, se configurata
+          if [ "$GITHUB_REF_NAME" = main ]; then Tools/firma-mac.sh notarizza "dist/IsoLR $VERSION.dmg"; fi
           echo "::notice::App completa: $(du -h "dist/IsoLR $VERSION.dmg" | cut -f1) ($(ls "$M" | grep -c mlmodelc) modelli inclusi)"
 
       - uses: actions/upload-artifact@v6

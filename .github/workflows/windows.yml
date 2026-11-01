@@ -121,6 +121,22 @@ jobs:
           EXE=$(ls windows/src-tauri/target/release/bundle/nsis/*.exe | head -n 1)
           cp "$EXE" "IsoLR-Windows-${{ steps.v.outputs.version }}.exe"
           echo "::notice::Installer: $(du -h IsoLR-Windows-*.exe | cut -f1)"
+      - name: Firma dell'installer (se c'è il certificato)
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          # Senza certificato l'installer resta non firmato (Windows mostra «Esegui comunque»), come finora
+          if (-not $env:WINDOWS_CERT_PFX_BASE64) { Write-Output "::notice::Firma Windows non configurata"; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Where-Object { $_.FullName -like "*x64*" } | Select-Object -Last 1
+          $exe = Get-ChildItem "IsoLR-Windows-*.exe" | Select-Object -First 1
+          & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $exe.FullName
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::Firma non riuscita"; exit 1 }
+          Remove-Item $pfx
+          Write-Output "::notice::Installer firmato"
       - name: Prova di avvio (installa, apri, fotografa)
         shell: pwsh
         run: |
