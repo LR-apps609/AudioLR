@@ -10,10 +10,15 @@ rm -rf windows/dist/core/test
 cp site/app/engine-core.js site/app/roformer-core.js windows/dist/app/
 cp site/img/logo.png windows/dist/img/
 T=$(mktemp -d)
-(cd "$T" && npm pack onnxruntime-web@1.19.2 signalsmith-stretch@1.3.2 --silent >/dev/null && for f in *.tgz; do mkdir -p "${f%.tgz}" && tar xzf "$f" -C "${f%.tgz}"; done)
+(cd "$T" && npm pack onnxruntime-web@1.19.2 signalsmith-stretch@1.3.2 @huggingface/transformers@3.7.1 --silent >/dev/null && for f in *.tgz; do mkdir -p "${f%.tgz}" && tar xzf "$f" -C "${f%.tgz}"; done)
 cp "$T"/onnxruntime-web-1.19.2/package/dist/ort.webgpu.min.js "$T"/onnxruntime-web-1.19.2/package/dist/ort-wasm-simd-threaded.jsep.mjs \
    "$T"/onnxruntime-web-1.19.2/package/dist/ort-wasm-simd-threaded.jsep.wasm windows/dist/vendor/
 cp "$T"/signalsmith-stretch-1.3.2/package/SignalsmithStretch.js windows/dist/vendor/
+# Testo sincronizzato: Transformers.js (Hugging Face, Apache 2.0), versione bloccata, con il suo ONNX Runtime;
+# i modelli Whisper li dà l'app (cartella dei modelli), niente caricamenti da Internet
+mkdir -p windows/dist/vendor/tjs
+TJ=$(ls -d "$T"/huggingface-transformers-3.7.1/package/dist)
+cp "$TJ"/transformers.min.js "$TJ"/ort-wasm-simd-threaded.jsep.mjs "$TJ"/ort-wasm-simd-threaded.jsep.wasm windows/dist/vendor/tjs/
 [ "${SALTA_MODELLI:-}" = 1 ] && { echo "modello Veloce saltato"; exit 0; }
 # Il modello Veloce dalla release «modelli-web» (solo l'API REST: funziona anche dove GraphQL è bloccato)
 R="${GITHUB_REPOSITORY:-LR-apps609/AudioLR}"

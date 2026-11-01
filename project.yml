@@ -6,6 +6,12 @@ options:
   createIntermediateGroups: true
   developmentLanguage: it
 
+# Testo sincronizzato: Whisper sul Mac con Core ML (WhisperKit di Argmax, licenza MIT), versione bloccata
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit
+    exactVersion: 0.9.4
+
 targets:
   AudioLR:
     type: application
@@ -62,6 +68,9 @@ targets:
             UTTypeConformsTo: [public.data, public.archive]
             UTTypeTagSpecification:
               public.filename-extension: [audiolr]
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.ledion.AudioLR
