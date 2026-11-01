@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import AVFoundation
 import CoreVideo
+import UniformTypeIdentifiers
 
 // ════════════════════════════════════════════════════════════════════
 //  Video karaoke: la base (senza voce, o con la voce bassa) e il testo
