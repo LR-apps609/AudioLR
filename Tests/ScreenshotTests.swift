@@ -168,6 +168,40 @@ final class ScreenshotTests: XCTestCase {
         try shot(SliceView(mixer: mixer, startKey: "drums", preloaded: [drum, drum]) {}.environmentObject(job), "18-slice", width: 1040, height: 660)
     }
 
+    /// Il testo sincronizzato a metà canzone, e due fotogrammi del video karaoke (orizzontale e verticale).
+    func testShotLyrics() throws {
+        let job = SeparationJob.shared
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.reset() }
+        job.showcase(title: "Canzone di prova", stems: stems, folder: dir, quality: .studio, duration: 6,
+                     analysis: SongAnalysis(bpm: 120, keyRoot: 9, minor: true, keyConfidence: 0.8, structure: Self.parts),
+                     elapsed: 312, engine: "Neural Engine", timings: [])
+        let text = "Ho visto la città dormire sotto la luna. E ho cantato piano per non svegliarla. Poi la notte si è accesa di oro"
+        var words: [LyricWord] = []
+        var t = 0.4
+        for w in text.split(separator: " ") {
+            words.append(LyricWord(text: String(w), start: t, end: t + 0.22))
+            t += w.hasSuffix(".") ? 0.9 : 0.26
+        }
+        let lyrics = Lyrics(language: "it", words: words)
+        let mixer = MixPlayer()
+        try shot(LyricsView(mixer: mixer, preloaded: lyrics) {}.environmentObject(job), "25-testo", width: 960, height: 620)
+        let lines = Lyrics.lines(words)
+        let peaks = (0..<400).map { i in Float(0.2 + 0.7 * abs(sin(Double(i) / 9) * cos(Double(i) / 31))) }
+        for shape in KaraokeVideo.Shape.allCases {
+            let size = shape.size
+            let at = words[11].start + 0.05
+            let f = KaraokeVideo.frame(at: at, lines: lines, words: words)
+            let ctx = try XCTUnwrap(CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                                              bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
+            KaraokeVideo.draw(f, title: "Canzone di prova", peaks: peaks, at: at, duration: 20, size: size, in: ctx)
+            let image = try XCTUnwrap(ctx.makeImage())
+            let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+            try png.write(to: out.appendingPathComponent("26-video-\(shape == .landscape ? "orizzontale" : "verticale").png"))
+        }
+    }
+
     /// Una canzone trascinata in attesa di «Separa».
     func testShotWorking() throws {
         let job = SeparationJob.shared

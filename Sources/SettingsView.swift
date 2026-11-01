@@ -258,7 +258,9 @@ struct AboutSettings: View {
                 }
             }
             Section {
-                Text("Incluso nell'app: Basic Pitch di Spotify (licenza Apache 2.0), per le note MIDI.")
+                Text("Incluso nell'app: Basic Pitch di Spotify (licenza Apache 2.0), per le note MIDI; WhisperKit di Argmax (licenza MIT), per il testo sincronizzato.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Testo sincronizzato: Whisper small di OpenAI (licenza MIT), nella versione Core ML di WhisperKit; si scarica al primo uso (\(LyricsEngine.isReady ? "scaricato" : "circa 500 MB")).")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Le canzoni non lasciano mai il Mac. Le tracce separate di brani altrui sono per uso personale: studio, pratica, karaoke.")
                     .font(.caption).foregroundStyle(.secondary)

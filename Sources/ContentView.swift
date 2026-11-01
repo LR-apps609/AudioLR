@@ -28,6 +28,7 @@ extension Notification.Name {
     static let audiolrArrange = Notification.Name("audiolrArrange")
     static let audiolrNotes = Notification.Name("audiolrNotes")
     static let audiolrSlice = Notification.Name("audiolrSlice")
+    static let audiolrLyrics = Notification.Name("audiolrLyrics")
     /// Menu Vista › Dettagli della separazione (⌘I).
     static let audiolrDetails = Notification.Name("audiolrDetails")
 }
@@ -65,6 +66,7 @@ struct ContentView: View {
     @State private var showArrange = false
     @State private var notesStem: Stem?
     @State private var showSlice = false
+    @State private var showLyrics = false
     @AppStorage("showPractice") private var showPractice = false
     @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
@@ -553,7 +555,8 @@ struct ContentView: View {
         .onChange(of: job.folder) { _, _ in unselected = [] }
         .onChange(of: job.stems) { _, stems in mixer.load(stems, folder: job.folder) }
         .onDisappear { mixer.stop() }
-        .modifier(EditorSheets(showWarp: $showWarp, showArrange: $showArrange, notesStem: $notesStem, showSlice: $showSlice, job: job, mixer: mixer))
+        .modifier(EditorSheets(showWarp: $showWarp, showArrange: $showArrange, notesStem: $notesStem, showSlice: $showSlice,
+                               showLyrics: $showLyrics, job: job, mixer: mixer))
     }
 
     /// Le divisioni in più: «Separa voce e cori» e «Dividi la batteria», con la barra mentre lavorano.
@@ -601,6 +604,8 @@ struct ContentView: View {
     /// Sala prove: le parti della canzone e il metronomo; sotto velocità, tono, un passaggio da ripetere.
     private var practiceBar: some View {
         VStack(spacing: 8) {
+            // Il testo a tempo, se la canzone l'ha già (karaoke)
+            LyricsStrip(mixer: mixer, folder: job.folder)
             HStack(spacing: 10) {
                 sectionStrip
                 Toggle(isOn: $mixer.metronome) { Label("Metronomo", systemImage: "metronome") }
@@ -1097,6 +1102,10 @@ struct ContentView: View {
                     Button { mixer.pause(); showSlice = true } label: { Label("Slice", systemImage: "square.grid.4x3.fill").frame(maxWidth: .infinity) }
                         .help("Slice to MIDI: la batteria (o un'altra traccia) tagliata sui colpi, da suonare con i pad e portare in Ableton o Logic (⌥⌘S)")
                 }
+                // Il testo della voce, a tempo: correggibile, .lrc/.srt e video karaoke
+                Button { mixer.pause(); showLyrics = true } label: { Label("Testo", systemImage: "text.quote").frame(maxWidth: .infinity) }
+                    .help("Il testo della canzone dalla voce, parola per parola a tempo: correggilo, esportalo, crea il video karaoke (⌥⌘L)")
+                    .disabled(job.stems.isEmpty || job.folder == nil)
                 .disabled(job.stems.isEmpty || job.folder == nil)
                 Menu {
                     ForEach(job.midiStems) { s in
@@ -1708,6 +1717,7 @@ struct EditorSheets: ViewModifier {
     @Binding var showArrange: Bool
     @Binding var notesStem: Stem?
     @Binding var showSlice: Bool
+    @Binding var showLyrics: Bool
     let job: SeparationJob
     let mixer: MixPlayer
 
@@ -1729,5 +1739,9 @@ struct EditorSheets: ViewModifier {
             }
             .sheet(item: $notesStem) { s in PianoRollView(mixer: mixer, stem: s) { notesStem = nil }.environmentObject(job) }
             .sheet(isPresented: $showSlice) { SliceView(mixer: mixer) { showSlice = false }.environmentObject(job) }
+            .onReceive(NotificationCenter.default.publisher(for: .audiolrLyrics)) { _ in
+                if job.phase == .done, !job.stems.isEmpty { mixer.pause(); showLyrics = true }
+            }
+            .sheet(isPresented: $showLyrics) { LyricsView(mixer: mixer) { showLyrics = false }.environmentObject(job) }
     }
 }

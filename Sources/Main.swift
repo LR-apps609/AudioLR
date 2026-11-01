@@ -134,6 +134,9 @@ struct AudioLRCommands: Commands {
             Button("Slice to MIDI…") { post(.audiolrSlice) }
                 .keyboardShortcut("s", modifiers: [.command, .option])
                 .disabled(job.phase != .done)
+            Button("Testo sincronizzato…") { post(.audiolrLyrics) }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .disabled(job.phase != .done)
             Divider()
             Button("Esporta il mix") { post(.audiolrExport) }
                 .keyboardShortcut("e")

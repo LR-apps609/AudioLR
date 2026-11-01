@@ -54,6 +54,21 @@ final class LyricsTests: XCTestCase {
         XCTAssertEqual(moved[4].start, 4.0)
     }
 
+    func testKaraokeFrame() {
+        let ws = words
+        let ls = Lyrics.lines(ws)
+        // All'inizio il titolo; poco prima della riga la si vede già (in grigio); durante, la parola cantata
+        XCTAssertTrue(KaraokeVideo.frame(at: 0.2, lines: ls, words: ws).showTitle)
+        let before = KaraokeVideo.frame(at: 3.0, lines: ls, words: ws)
+        XCTAssertFalse(before.showTitle)
+        XCTAssertEqual(before.line, "E questa la seconda")
+        XCTAssertNil(before.sung)
+        let during = KaraokeVideo.frame(at: 1.45, lines: ls, words: ws)
+        XCTAssertEqual(during.lineWords, ["Questa", "è", "la", "prima."])
+        XCTAssertEqual(during.sung, 2)
+        XCTAssertEqual(during.next, "E questa la seconda")
+    }
+
     func testCleanAndSave() throws {
         let raw = [w(" ciao ", 1, 0.5), w("", 2, 3)] + (0..<7).map { i in w("la", 3 + Double(i), 3.5 + Double(i)) }
         let c = Lyrics.clean(raw)
