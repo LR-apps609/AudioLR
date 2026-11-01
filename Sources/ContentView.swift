@@ -1062,6 +1062,11 @@ struct ContentView: View {
                 Button { exportStemFile() } label: { Text("File per DJ (.stem.mp4)").frame(maxWidth: .infinity) }
                     .disabled(makingStemFile)
                     .help("Traktor e Mixxx: la canzone intera più batteria, basso, altri strumenti e voce")
+                Menu {
+                    ForEach(DawExport.Kind.allCases) { k in Button(k.title) { exportProject(k) } }
+                } label: { Text("Progetto per…").frame(maxWidth: .infinity) }
+                .disabled(downloading)
+                .help("Le tracce pronte da aprire nel tuo programma musicale: allineate, con il tempo e le parti della canzone")
                 if downloading || mixer.exporting || makingStemFile {
                     HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Preparo i file…").font(.system(size: 11)).foregroundStyle(.secondary) }
                 } else {
@@ -1271,15 +1276,39 @@ struct ContentView: View {
     }
 
     /// Il file per Traktor e Mixxx: canzone intera più batteria, basso, altri strumenti e voce.
+    /// «Progetto per…»: Ableton Live (.als), REAPER (.rpp) o una cartella per tutti gli altri programmi.
+    private func exportProject(_ kind: DawExport.Kind) {
+        guard job.phase == .done, !downloading, let folder = Downloads.askFolder() else { return }
+        let stems = job.stems, title = job.title, analysis = job.analysis, shift = downloadShift
+        downloading = true
+        Task {
+            do {
+                let dir = try await Task.detached(priority: .userInitiated) {
+                    try DawExport.write(kind: kind, stems: stems, title: title, analysis: analysis, shift: shift, into: folder)
+                }.value
+                NSWorkspace.shared.activateFileViewerSelecting([dir])
+            } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+            downloading = false
+        }
+    }
+
     private func exportStemFile() {
         guard job.phase == .done, !makingStemFile, let f = job.folder else { return }
         let song = job.song
         makingStemFile = true
-        let stems = job.stems, title = job.title, shift = downloadShift
+        let stems = job.stems, title = job.title, shift = downloadShift, analysis = job.analysis
         Task {
             defer { makingStemFile = false }
             do {
                 let url = try await StemFile.make(stems: stems, song: song, folder: f, title: title, shift: shift)
+                // Accanto, le parti come foglio CUE (programmi da DJ e lettori lo leggono): il .stem.mp4 non ha un posto documentato per i cue
+                if let a = analysis, let s = a.structure, !s.sections.isEmpty {
+                    let key = Transpose.keyName(root: a.keyRoot, minor: a.minor, shift: shift)
+                    let p = DawExport.project(title: title, bpm: a.bpm, key: key, seconds: job.duration, tracks: [], structure: s)
+                    let name = url.lastPathComponent
+                    let cue = url.deletingLastPathComponent().appendingPathComponent(name.replacingOccurrences(of: ".stem.mp4", with: "") + " – Parti.cue")
+                    try? Data(DawExport.cueSheet(p, file: name).utf8).write(to: cue)
+                }
                 exported = url
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
