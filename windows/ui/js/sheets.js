@@ -176,8 +176,9 @@
   }
 
   // ── Cronologia ──
-  function history(list, openEntry) {
+  function history(list, openEntry, filters = []) {
     open(`<h2>Cronologia</h2>
+      ${filters.length ? `<p class="muted" style="margin:0">Con i filtri della libreria: ${filters.map(esc).join(" · ")} · ${list.length} ${list.length === 1 ? "canzone" : "canzoni"}</p>` : ""}
       ${list.length ? `<table class="plain"><tr><th>Canzone</th><th>Qualità</th><th>Durata</th><th>BPM · tonalità</th><th>Data</th></tr>
         ${list.map((e, i) => { const a = e.meta.analysis || {}; return `<tr data-h="${i}" style="cursor:pointer"><td>${esc(e.meta.title)}</td><td>${esc(Separation.QUALITY[e.meta.quality] ? Separation.QUALITY[e.meta.quality].title : "")}</td><td>${IsoApp.fmt(e.meta.duration)}</td><td>${a.bpm ? Math.round(a.bpm) + " BPM · " + IsoApp.KEY_NAMES[a.keyRoot] + (a.minor ? "m" : "") : "—"}</td><td>${new Date(e.meta.created).toLocaleDateString("it-IT")}</td></tr>`; }).join("")}</table>`
         : `<p class="muted">Ancora nessuna canzone separata.</p>`}

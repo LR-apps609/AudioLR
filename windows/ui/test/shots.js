@@ -78,6 +78,24 @@ async function fakeSong(page) {
       await page.evaluate(() => { IsoApp.ui.frozenParty = 0.42; IsoApp.ui.frozenPulse = 0.8; IsoApp.job.finishedAt = Date.now(); IsoApp.render(); });
       await shot("3b-fine");
       await page.evaluate(() => { document.querySelectorAll(".party").forEach((e) => e.remove()); IsoApp.ui.frozenParty = null; IsoApp.ui.frozenPulse = null; IsoApp.job.finishedAt = null; });
+      // Anteprima di 20 s pronta (il riquadro sopra il mixer)
+      await page.evaluate(() => { IsoApp.job.preview = { file: null, quality: "studio", start: 83 }; IsoApp.render(); });
+      await shot("3c-anteprima");
+      await page.evaluate(() => { IsoApp.job.preview = null; });
+      // La libreria con i filtri accesi (altre canzoni finte, solo per la lista)
+      await page.evaluate(() => {
+        const base = IsoApp.ui.library.slice(0, 1);
+        const fake = [["Eminem - Till I Collapse", 85, 9, true, "studio"], ["Daft Punk - Get Lucky", 116, 6, true, "best"], ["Bruno Mars - Uptown Funk", 115, 2, true, "best"],
+          ["Adele - Rolling in the Deep", 105, 0, true, "studio"], ["Coldplay - Clocks", 131, 3, false, "best"]].map(([title, bpm, keyRoot, minor, quality], i) =>
+          ({ folder: "C:/Users/prova/Music/IsoLR/finta " + i, meta: { title, quality, duration: 200 + i * 17, created: new Date(Date.now() - i * 3600e3).toISOString(), analysis: { bpm, keyRoot, minor }, stems: [{ key: "vocals" }] } }));
+        IsoApp.ui.savedLibrary = IsoApp.ui.library;
+        IsoApp.ui.library = base.concat(fake);
+        IsoApp.ui.filter = { ...IsoLR.Library.empty(), keyRoot: 9, minor: true, compatible: true, bpmMin: 100, bpmMax: 125, halfDouble: true, sort: "bpm" };
+        IsoApp.ui.filtersOpen = true;
+        IsoApp.render();
+      });
+      await shot("3d-libreria-filtri");
+      await page.evaluate(() => { IsoApp.ui.library = IsoApp.ui.savedLibrary; IsoApp.ui.filter = IsoLR.Library.empty(); IsoApp.ui.filtersOpen = false; IsoApp.render(); });
       await page.click('[data-act="practice"]');
       await shot("4-esercitati");
       await page.click('[data-act="practice"]');

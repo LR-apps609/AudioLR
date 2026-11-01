@@ -226,7 +226,7 @@
     return res;
   }
 
-  async function m4a(ch, gain = 1) { return mp4([await aacEncode(ch, gain)], 256000); }
+  async function m4a(ch, gain = 1, udta) { return mp4([await aacEncode(ch, gain)], 256000, udta); }
 
   // Il file per DJ: canzone intera, batteria, basso, altro, voce (nomi e colori come Native Instruments)
   const STEM_LAYOUT = [
@@ -254,12 +254,13 @@
     return mp4(encs, 320000, box("stem", str(meta)));
   }
 
-  /** Un file nel formato scelto. */
-  async function encode(ch, format, gain = 1) {
-    if (format === "wav16") return wav(ch, 16, gain);
-    if (format === "flac") return flac(ch, gain);
-    if (format === "aac") return m4a(ch, gain);
-    return wav(ch, 24, gain);
+  /** Un file nel formato scelto. Con `tags` (core/tags.js: titolo, artista, BPM, tonalità) i dati vanno nel file. */
+  async function encode(ch, format, gain = 1, tags = null) {
+    const T = tags && self.IsoLR && self.IsoLR.Tags;
+    if (format === "aac") return m4a(ch, gain, T ? T.m4aUdta(tags) : undefined);
+    if (format === "flac") { const b = flac(ch, gain); return T ? T.flac(b, tags) : b; }
+    const b = wav(ch, format === "wav16" ? 16 : 24, gain);
+    return T ? T.wav(b, tags) : b;
   }
 
   /** Legge un WAV a 16 o 24 bit (le tracce salvate da IsoLR) come canali Float32. */

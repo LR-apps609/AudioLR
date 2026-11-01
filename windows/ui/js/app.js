@@ -15,7 +15,7 @@
   const job = new Separation.Job();
   const player = new MixPlayer.Player();
   const ui = {
-    quality: Prefs.get("quality", "best"), library: [], search: "", showLibrary: Prefs.get("showLibrary", true),
+    quality: Prefs.get("quality", "best"), library: [], filter: IsoLR.Library.empty(), filtersOpen: false, showLibrary: Prefs.get("showLibrary", true),
     practice: Prefs.get("showPractice", false), unselected: new Set(), update: null, updating: null, toast: null,
     italian: Prefs.get("italianChords", false), takes: [], comparing: false, downloadTransposed: true,
   };
@@ -37,12 +37,14 @@
   // ── Libreria ──
   function library() {
     $("#app").classList.toggle("no-library", !ui.showLibrary);
-    const list = ui.library.filter((e) => !ui.search || e.meta.title.toLowerCase().includes(ui.search.toLowerCase()));
+    const LB = IsoLR.Library, f = ui.filter;
+    const list = LB.apply(ui.library, f);
     const cur = job.current && job.current.folder;
     $("#library").innerHTML = `
       <button class="btn new" data-act="new" ${job.busy || job.phase === "idle" ? "disabled" : ""}>${Icon("plus")}Nuova canzone</button>
       <div class="lib-head"><span>LE TUE CANZONI</span><button class="btn borderless icon small" data-act="open-root" title="Apri la cartella Musica › IsoLR">${Icon("folder")}</button></div>
-      <input class="lib-search" placeholder="Cerca" value="${esc(ui.search)}" data-input="search">
+      <input class="lib-search" placeholder="Cerca" value="${esc(f.text)}" data-input="search">
+      ${ui.library.length ? filterBar(list.length) : ""}
       ${list.length ? `<div class="lib-list">${list.map((e, i) => `
         <div class="lib-item ${e.folder === cur ? "on" : ""}" data-open="${i}" title="${esc(e.meta.title)}">
           <span class="ic">${Icon("note")}</span><b>${esc(e.meta.title)}</b>
@@ -54,6 +56,38 @@
         <div style="display:flex;gap:8px"><button class="btn small" data-act="history">${Icon("clock")}Cronologia</button></div>
       </div>`;
     ui.libList = list;
+  }
+
+  // Filtri della libreria (core/library.js), in poco spazio: «Filtri» apre le scelte, i chip dicono cosa è acceso
+  const QUALITY_TITLES = () => Object.fromEntries(Object.entries(Separation.QUALITY).map(([k, v]) => [k, v.title]));
+  const BPM_RANGES = [["", "Qualsiasi"], ["0-90", "Meno di 90"], ["90-110", "90–110"], ["110-125", "110–125"], ["125-140", "125–140"], ["140-", "Più di 140"]];
+  const INSTRUMENTS = ["guitar", "piano", "lead", "male", "kick"];
+  function filterBar(count) {
+    const LB = IsoLR.Library, f = ui.filter;
+    const opt = (v, t, on) => `<option value="${v}" ${on ? "selected" : ""}>${t}</option>`;
+    const keyOpts = [opt("", "Qualsiasi", f.keyRoot == null)]
+      .concat(LB.NAMES.map((n, r) => opt(`${r}M`, n + " maggiore", f.keyRoot === r && !f.minor)))
+      .concat(LB.NAMES.map((n, r) => opt(`${r}m`, n + " minore", f.keyRoot === r && f.minor))).join("");
+    const bpmNow = f.bpmMin == null && f.bpmMax == null ? "" : `${f.bpmMin ?? ""}-${f.bpmMax ?? ""}`.replace(/^-/, "0-");
+    const a = job.current && job.current.meta && job.current.meta.analysis;
+    const chips = LB.chips(f, Separation.NAMES, QUALITY_TITLES());
+    return `<div class="lib-filters">
+        <div class="lib-frow">
+          <button class="btn borderless small ${LB.active(f) ? "on" : ""}" data-act="filters" title="Filtra per tonalità (anche quelle che si mixano bene), BPM, strumento o qualità">${Icon("grid")}Filtri</button>
+          <select class="pop mini" data-input="lib-sort" title="Ordina le canzoni" aria-label="Ordina le canzoni">${Object.entries(LB.SORTS).map(([k, t]) => opt(k, t, f.sort === k)).join("")}</select>
+          <span class="lib-count">${count === 1 ? "1 canzone" : `${count} canzoni`}</span>
+        </div>
+        ${ui.filtersOpen ? `<div class="lib-fpanel">
+          ${a && a.bpm ? `<button class="btn small" data-act="filter-like">Come la canzone aperta</button>` : ""}
+          <label>Tonalità<select class="pop mini" data-input="lib-key">${keyOpts}</select></label>
+          <label class="chk"><input type="checkbox" data-input="lib-compat" ${f.compatible ? "checked" : ""}>Anche le compatibili (Camelot)</label>
+          <label>BPM<select class="pop mini" data-input="lib-bpm">${BPM_RANGES.map(([v, t]) => opt(v, t, v === bpmNow)).join("")}${bpmNow && !BPM_RANGES.some(([v]) => v === bpmNow) ? opt(bpmNow, `${f.bpmMin ?? "…"}–${f.bpmMax ?? "…"}`, true) : ""}</select></label>
+          <label class="chk"><input type="checkbox" data-input="lib-half" ${f.halfDouble ? "checked" : ""}>Anche a metà e al doppio</label>
+          <label>Strumento<select class="pop mini" data-input="lib-inst">${opt("", "Qualsiasi", !f.instrument)}${INSTRUMENTS.map((k) => opt(k, "Con " + (Separation.NAMES[k] || k).toLowerCase(), f.instrument === k)).join("")}</select></label>
+          <label>Qualità<select class="pop mini" data-input="lib-quality">${opt("", "Qualsiasi", !f.quality)}${Object.entries(QUALITY_TITLES()).map(([k, t]) => opt(k, t, f.quality === k)).join("")}</select></label>
+        </div>` : ""}
+        ${chips.map((c) => `<span class="lib-chip">${esc(c.text)}<button class="btn borderless icon small" data-chip="${c.id}" aria-label="Togli il filtro ${esc(c.text)}">${Icon("x")}</button></span>`).join("")}
+      </div>`;
   }
 
   // ── Riquadro centrale ──
@@ -120,7 +154,10 @@
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
         <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
-      <button class="btn prominent round" data-act="separate" ${f ? "" : "disabled"}>${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa · ${Separation.QUALITY[q].title === "Massima" ? "Massima qualità" : Separation.QUALITY[q].title}</button>
+      <div class="go">
+        ${f && q !== "fast" ? `<button class="btn round" data-act="preview" title="Separa solo 20 secondi dal centro della canzone con la qualità scelta, per sentire com'è prima di separarla tutta">${Icon("headphones")}Anteprima 20 s</button>` : ""}
+        <button class="btn prominent round" data-act="separate" ${f ? "" : "disabled"}>${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa · ${Separation.QUALITY[q].title === "Massima" ? "Massima qualità" : Separation.QUALITY[q].title}</button>
+      </div>
       <div class="label">Riceverai</div>
       <div class="chips">${keys.map((k) => `<span class="chip" style="--c:var(--c-${k})">${Icon(ICON[k])}${Separation.NAMES[k]}</span>`).join("")}</div>
       ${job.queue.length ? `<div class="queue">In coda: ${job.queue.length} ${job.queue.length === 1 ? "canzone" : "canzoni"}</div>` : ""}
@@ -254,6 +291,9 @@
     p.innerHTML = `<div class="results">
       <div class="col">
         <div class="song"><span class="ic">${Icon("note")}</span><div style="min-width:0"><b>${esc(m.title)}</b><span>${esc(infoLine(m))}</span></div></div>
+        ${job.preview ? `<div class="preview-banner">${Icon("headphones")}<div style="flex:1;min-width:0"><b>Anteprima di 20 secondi · ${esc(Separation.QUALITY[job.preview.quality].title)}</b>
+          <span>Dal minuto ${fmt(job.preview.start)}. Non va in libreria: ascolta e decidi.</span></div>
+          <button class="btn" data-act="preview-back">Indietro</button><button class="btn prominent" data-act="preview-full">${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa tutta</button></div>` : ""}
         <div class="transport" id="transport"></div>
         <div class="rows">
           ${stems.map((s) => row(s)).join("")}
@@ -455,13 +495,15 @@
 
   async function downloadStems(list) {
     const f = Prefs.get("downloadFormat", "wav24"), sh = shift(), title = job.current.meta.title, sx = Transpose.suffix(sh);
+    // BPM e tonalità (trasposta) dentro i file, per i programmi dei DJ
+    const tags = IsoLR.Tags.info(title, job.current.meta.analysis, sh);
     try {
       if (list.length === 1) {
         const s = list[0], ext = Encode.FORMATS[f].ext;
         const path = await Bridge.askFile(`${title} – ${s.name}${sx}.${ext}`, ext);
         if (!path) return;
         const ch = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
-        await Bridge.writeFile(path, await Encode.encode(ch, f));
+        await Bridge.writeFile(path, await Encode.encode(ch, f, 1, tags));
         Bridge.reveal(path);
       } else {
         const dir = await Bridge.askFolder();
@@ -471,7 +513,7 @@
         while (await Bridge.exists(target)) target = `${dir}/${title} (IsoLR${tag} ${n++})`;
         for (const s of list) {
           const ch = await Transpose.apply(Encode.readWav(await Bridge.readFile(job.current.folder + "/" + s.file)), sh);
-          await Bridge.writeFile(`${target}/${title} – ${s.name}${sx}.${Encode.FORMATS[f].ext}`, await Encode.encode(ch, f));
+          await Bridge.writeFile(`${target}/${title} – ${s.name}${sx}.${Encode.FORMATS[f].ext}`, await Encode.encode(ch, f, 1, tags));
         }
         Bridge.reveal(target);
       }
@@ -484,7 +526,8 @@
     if (!path) return;
     try {
       const m = player.mixdown(range);
-      await Bridge.writeFile(path, await Encode.encode(await Transpose.apply(m.channels, sh), f, m.gain));
+      const tags = IsoLR.Tags.info(job.current.meta.title, job.current.meta.analysis, sh);
+      await Bridge.writeFile(path, await Encode.encode(await Transpose.apply(m.channels, sh), f, m.gain, tags));
       Bridge.reveal(path);
     } catch (e) { toast("Download non riuscito: " + (e.message || e)); }
   }
@@ -501,8 +544,10 @@
     } catch (e) { toast("File per DJ non riuscito: " + (e.message || e)); }
   }
 
-  async function openEntry(e) {
+  async function openEntry(e, keepPreview = false) {
+    const p = job.preview;
     await job.open(e);
+    if (keepPreview) job.preview = p;            // l'anteprima appena fatta resta un'anteprima
     ui.unselected = new Set();
     await player.load(e);
     ui.takes = await Bridge.listFiles(e.folder + "/Registrazioni", "wav");
@@ -511,6 +556,8 @@
   }
 
   document.addEventListener("click", async (ev) => {
+    const chip = ev.target.closest("[data-chip]");
+    if (chip) { ui.filter = IsoLR.Library.clear(ui.filter, chip.dataset.chip); return library(); }
     const el = ev.target.closest("[data-act],[data-quality],[data-open],[data-preset],[data-mute],[data-solo],[data-dl],[data-split],[data-section],[data-chordnames],[data-tab]");
     if (!el) {
       const c = ev.target.closest("canvas[data-wave]");
@@ -534,6 +581,9 @@
       case "choose": { const p = await Bridge.askOpen(); if (p) { const bytes = await Bridge.readFile(p); job.add([new File([bytes], p.split(/[\\/]/).pop())]); } return; }
       case "clear-pending": return job.clearPending();
       case "separate": player.stop(); return job.start(ui.quality);
+      case "preview": player.stop(); return job.startPreview(ui.quality);
+      case "preview-full": player.stop(); return job.separateFull();
+      case "preview-back": player.stop(); return job.backFromPreview();
       case "cancel": return job.cancel();
       case "open-root": return Bridge.reveal(await Bridge.outputDir());
       case "reveal": return Bridge.reveal(job.current.folder + "/isolr.json");
@@ -562,7 +612,14 @@
       case "settings": return window.Sheets.settings();
       case "help": return window.Sheets.help();
       case "report": return window.Sheets.report(job);
-      case "history": return window.Sheets.history(ui.library, openEntry);
+      // La Cronologia segue gli stessi filtri della libreria
+      case "history": return window.Sheets.history(IsoLR.Library.apply(ui.library, ui.filter), openEntry, IsoLR.Library.chips(ui.filter, Separation.NAMES).map((c) => c.text).concat(ui.filter.text ? [`«${ui.filter.text}»`] : []));
+      case "filters": ui.filtersOpen = !ui.filtersOpen; return library();
+      case "filter-like": {
+        const a = job.current.meta.analysis;
+        ui.filter = { ...ui.filter, keyRoot: a.keyRoot, minor: !!a.minor, compatible: true, bpmMin: Math.round(a.bpm * 0.94), bpmMax: Math.round(a.bpm * 1.06), halfDouble: true };
+        return library();
+      }
       case "update": if (ui.update && ui.updating == null) { ui.updating = 0; header(); try { await Bridge.installUpdate(ui.update.url, (p) => { ui.updating = p; header(); }); } catch (e) { ui.updating = null; toast("Aggiornamento non riuscito: " + (e.message || e)); header(); } } return;
       case "rec": return window.Recorder.start(player, job.current, async (path) => { ui.takes = await Bridge.listFiles(job.current.folder + "/Registrazioni", "wav"); await player.loadTake(path); transport(); }, (msg) => toast(msg), () => transport());
       case "rec-stop": return window.Recorder.stop();
@@ -577,7 +634,7 @@
     if (d.gain) { player.setGain(d.gain, +el.value); return; }
     if (d.sel) { el.checked ? ui.unselected.delete(d.sel) : ui.unselected.add(d.sel); const st = job.current.meta.stems; const sel = st.filter((s) => !ui.unselected.has(s.key)); const b = $('[data-act="dl-sel"]'); if (b) { b.textContent = `Le ${sel.length} selezionate`; b.disabled = !(sel.length && sel.length < st.length); } return; }
     switch (d.input) {
-      case "search": ui.search = el.value; { const pos = el.selectionStart; library(); const s = $('[data-input="search"]'); s.focus(); s.setSelectionRange(pos, pos); } return;
+      case "search": ui.filter = { ...ui.filter, text: el.value }; { const pos = el.selectionStart; library(); const s = $('[data-input="search"]'); s.focus(); s.setSelectionRange(pos, pos); } return;
       case "format": Prefs.set("downloadFormat", el.value); return;
       case "rate": player.setRate(+el.value); el.nextElementSibling.nextElementSibling.textContent = Math.round(player.rate * 100) + "%"; return;
       case "take-volume": player.takeVolume = +el.value; player.applyGains(); return;
@@ -586,6 +643,19 @@
   document.addEventListener("change", async (ev) => {
     const el = ev.target, d = el.dataset;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
+    // Filtri della libreria
+    if (d.input && d.input.startsWith("lib-")) {
+      const f = { ...ui.filter };
+      if (d.input === "lib-sort") f.sort = el.value;
+      if (d.input === "lib-key") { if (!el.value) { f.keyRoot = null; } else { f.keyRoot = parseInt(el.value, 10); f.minor = el.value.endsWith("m"); } }
+      if (d.input === "lib-compat") f.compatible = el.checked;
+      if (d.input === "lib-bpm") { const [lo, hi] = el.value.split("-"); f.bpmMin = lo ? +lo || null : null; f.bpmMax = hi ? +hi : null; if (lo === "0") f.bpmMin = null; }
+      if (d.input === "lib-half") f.halfDouble = el.checked;
+      if (d.input === "lib-inst") f.instrument = el.value || null;
+      if (d.input === "lib-quality") f.quality = el.value || null;
+      ui.filter = f;
+      return library();
+    }
     if (d.input === "take") { await player.loadTake(el.value); return transport(); }
     if (d.input === "midi" && el.value) return window.Sheets.notes(job.current, el.value, (k) => { ui.midi = k; panel(); }, shift());
     if (d.input === "notes" && el.value) { const k = el.value; el.value = ""; return window.PianoRoll.open(job.current, player, k); }
@@ -622,7 +692,7 @@
   job.addEventListener("change", async () => {
     if (job.phase !== lastPhase) {
       lastPhase = job.phase;
-      if (job.phase === "done" && job.current) { await refreshLibrary(); await openEntry(job.current); return; }
+      if (job.phase === "done" && job.current) { await refreshLibrary(); await openEntry(job.current, !!job.preview); return; }
       render(); return;
     }
     if (job.phase === "working") return panel();

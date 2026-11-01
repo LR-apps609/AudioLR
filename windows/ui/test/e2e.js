@@ -38,10 +38,31 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   await until(() => IsoApp.job.phase === "pending", 5000, 50);
   const cancelled = await page.evaluate(() => ({ phase: IsoApp.job.phase, error: IsoApp.job.error }));
   check(cancelled.phase === "pending" && !cancelled.error, `Annulla risponde in ${Date.now() - c0} ms (fase ${cancelled.phase})`);
+  // Anteprima di 20 s: si separa un tratto, non va in libreria, «Indietro» riporta la canzone pronta
+  const p0 = Date.now();
+  await page.evaluate(() => { IsoApp.job.startPreview("fast"); });
+  await until(() => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, 10 * 60 * 1000, 500);
+  const pv = await page.evaluate(async () => {
+    const j = IsoApp.job, out = { phase: j.phase, error: j.error, preview: !!j.preview, duration: j.current && j.current.meta.duration, banner: !!document.querySelector(".preview-banner") };
+    await IsoApp.refreshLibrary();
+    out.inLibrary = IsoApp.ui.library.some((e) => /[\\/]\.anteprima$/.test(e.folder));
+    j.backFromPreview();
+    out.after = j.phase;
+    return out;
+  });
+  check(pv.phase === "done" && pv.preview && pv.banner && pv.duration <= 20.1, `anteprima in ${Math.round((Date.now() - p0) / 1000)} s (durata ${pv.duration && pv.duration.toFixed(1)} s) ${pv.error || ""}`);
+  check(!pv.inLibrary && pv.after === "pending", `anteprima fuori dalla libreria, poi la canzone torna pronta (${pv.after})`);
   const t0 = Date.now();
   await page.evaluate(() => IsoApp.job.start("fast"));
   await page.waitForFunction(() => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, null, { timeout: 15 * 60 * 1000, polling: 1000 });
   const r = await page.evaluate(() => ({ phase: IsoApp.job.phase, error: IsoApp.job.error, meta: IsoApp.job.current && IsoApp.job.current.meta }));
+  // BPM e tonalità dentro un WAV scaricato
+  const tg = await page.evaluate(async () => {
+    const m = IsoApp.job.current.meta, ch = Encode.readWav(await Bridge.readFile(IsoApp.job.current.folder + "/" + m.stems[0].file));
+    const bytes = await Encode.encode(ch, "wav24", 1, IsoLR.Tags.info("Artista - " + m.title, m.analysis, 0));
+    return IsoLR.Tags.readWav(bytes);
+  });
+  check(tg.TPE1 === "Artista" && (!tg.TBPM || /^\d+$/.test(tg.TBPM)), `tag nel WAV: ${JSON.stringify(tg)}`);
   check(r.phase === "done", `separazione Rapida (${Math.round((Date.now() - t0) / 1000)} s) ${r.error || ""}`);
   if (r.meta) {
     const keys = r.meta.stems.map((s) => s.key).join(",");

@@ -100,7 +100,7 @@
       this.phase = "pending"; this.error = null; this.emit();
     }
     clearPending() { this.pending = null; this.phase = this.current ? "done" : "idle"; this.emit(); }
-    reset() { if (this.busy) return; this.pending = null; this.current = null; this.queue = []; this.phase = "idle"; this.emit(); }
+    reset() { if (this.busy) return; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.phase = "idle"; this.emit(); }
 
     ensureWorker() {
       if (this.worker) return;
@@ -216,18 +216,45 @@
     }
 
     /** Separa la canzone pronta (e poi quelle in coda) con la qualità scelta. */
-    async start(quality) {
+    /** «Anteprima 20 s»: separa solo 20 s dal centro (o dal punto `at`, 0…1) con la qualità scelta. Non va in libreria. */
+    startPreview(quality, at = 0.5) {
+      if (!this.pending || this.busy) return;
+      return this.start(quality, { preview: true, at });
+    }
+    /** Dall'anteprima alla canzone intera, con la stessa qualità. */
+    separateFull() {
+      const p = this.preview;
+      if (!p || this.busy) return;
+      this.preview = null; this.current = null; this.pending = p.file;
+      return this.start(p.quality);
+    }
+    /** Indietro dall'anteprima: la canzone torna pronta. */
+    backFromPreview() {
+      const p = this.preview;
+      if (!p || this.busy) return;
+      this.preview = null; this.current = null; this.pending = p.file; this.phase = "pending"; this.emit();
+    }
+
+    async start(quality, opts = {}) {
       if (!this.pending || this.busy) return;
       if (!this.batch) { this.batch = { start: Date.now(), songs: 0, failed: 0 }; Bridge.keepAwake(true); }
       const file = this.pending;
+      this.preview = opts.preview ? { file, quality, start: 0 } : null;
       this.pending = null;
       this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
       this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
       const stop = () => { if (this.cancelled) throw new Error("annullato"); };
       this.emit();
       try {
-        const song = await decode(file);
+        let song = await decode(file);
         stop();
+        if (this.preview) {
+          // Solo 20 secondi: il tratto si taglia qui, il resto del lavoro è identico
+          const [a, b] = IsoLR.Library.previewRange(song.seconds, opts.at ?? 0.5);
+          const i0 = Math.floor(a * RATE), i1 = Math.floor(b * RATE);
+          song = { left: song.left.slice(i0, i1), right: song.right.slice(i0, i1), seconds: b - a };
+          this.preview.start = a;
+        }
         // La forma d'onda della canzone, che si colora man mano che viene separata
         this.peaks = measure([song.left, song.right], 240).peaks; this.emit();
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
@@ -265,13 +292,19 @@
         const analysis = await analyze(tracks);
         this.step = "Salvo le tracce"; this.emit();
         const took = (performance.now() - t0) / 1000;
-        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name });
-        this.phase = "done"; this.batch.songs++;
-        this.finishedAt = Date.now();             // per la festa di fine separazione (non riaprendo dalla libreria)
+        // L'anteprima va in Musica › IsoLR › .anteprima (sovrascritta ogni volta), che la libreria non mostra
+        const into = this.preview ? `${await Bridge.outputDir()}/.anteprima` : null;
+        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name }, into);
+        this.phase = "done";
+        if (!this.preview) {
+          this.batch.songs++;
+          this.finishedAt = Date.now();           // per la festa di fine separazione (non riaprendo dalla libreria)
+        }
         this.emit();
       } catch (e) {
         if (this.cancelled) {
           // Annullata: la canzone torna pronta da separare, nessun errore
+          this.preview = null;
           this.pending = file; this.phase = "pending"; this.error = null; this.emit();
           this.finishBatch(true);
           return;
@@ -279,8 +312,8 @@
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
         this.emit();
       }
-      // La prossima della coda, con la stessa qualità
-      if (this.queue.length) { this.pending = this.queue.shift(); return this.start(quality); }
+      // La prossima della coda, con la stessa qualità (non dopo un'anteprima: si ascolta e si decide)
+      if (this.queue.length && !this.preview) { this.pending = this.queue.shift(); return this.start(quality); }
       this.finishBatch();
     }
 
@@ -341,7 +374,7 @@
       return res.notes;
     }
 
-    async open(entry) { if (this.busy) return; this.finishedAt = null; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
+    async open(entry) { if (this.busy) return; this.finishedAt = null; this.preview = null; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
   }
   Job.lines = [];
 
@@ -366,8 +399,8 @@
   const ORDER = ["vocals", "lead", "male", "backing", "female", "drums", "kick", "snare", "toms", "hh", "ride", "crash", "bass", "guitar", "piano", "other", "instrumental"];
 
   /** Le tracce in una cartella nuova, nel formato delle impostazioni, più isolr.json con tutto il resto. */
-  async function save(title, tracks, info) {
-    const folder = await Bridge.newSongDir(title);
+  async function save(title, tracks, info, into = null) {
+    const folder = into || await Bridge.newSongDir(title);
     const format = Prefs.get("outputFormat", "wav24");
     // Se anche una sola traccia supera il massimo, tutte si abbassano dello stesso tanto (Stem.safeGain)
     let top = 0;
@@ -439,7 +472,11 @@
   async function library() {
     const list = await Bridge.library();
     const out = [];
-    for (const it of list) { try { out.push({ folder: it.folder, meta: JSON.parse(it.meta) }); } catch {} }
+    // Le cartelle che iniziano con un punto (l'anteprima) non sono canzoni della libreria
+    for (const it of list) {
+      if (/[\\/]\.[^\\/]*$/.test(it.folder)) continue;
+      try { out.push({ folder: it.folder, meta: JSON.parse(it.meta) }); } catch {}
+    }
     out.sort((a, b) => String(b.meta.created).localeCompare(String(a.meta.created)));
     return out;
   }

@@ -129,6 +129,10 @@ fn library(app: AppHandle) -> Result<Vec<serde_json::Value>, String> {
     let root = output_root(&app)?;
     let mut out = vec![];
     for e in std::fs::read_dir(&root).map_err(|e| e.to_string())?.flatten() {
+        // Le cartelle con il punto davanti (l'anteprima di 20 s) non sono canzoni della libreria
+        if e.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
         let meta = e.path().join("isolr.json");
         if let Ok(text) = std::fs::read_to_string(&meta) {
             out.push(serde_json::json!({ "folder": e.path().to_string_lossy(), "meta": text }));

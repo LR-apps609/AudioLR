@@ -346,3 +346,25 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 .party b { transform: translateY(78px); font-size: 17px; text-shadow: 0 1px 12px var(--bg); animation: rise 2.5s ease-out both; }
 @keyframes rise { 0%, 35% { transform: translateY(92px); opacity: 0; } 55%, 85% { transform: translateY(78px); opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .reels .reel, .reels .tape, .reels.ind .rbar i { animation: none; } .party .ring { display: none; } }
+
+/* Filtri della libreria */
+.lib-filters { display: flex; flex-direction: column; gap: 6px; }
+.lib-frow { display: flex; align-items: center; gap: 6px; }
+.lib-frow .btn.on { color: var(--brass); }
+.lib-count { margin-left: auto; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lib-frow select.pop.mini { min-width: 0; flex: 0 1 96px; }
+select.pop.mini { height: 22px; font-size: 11px; padding: 0 4px; max-width: 120px; }
+.lib-fpanel { display: grid; gap: 6px; padding: 8px; border-radius: 8px; border: 1px solid var(--stroke); background: var(--well); font-size: 11.5px; }
+.lib-fpanel label { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.lib-fpanel label.chk { justify-content: flex-start; color: var(--muted); }
+.lib-chip { display: inline-flex; align-items: center; gap: 2px; align-self: flex-start; max-width: 100%; padding: 1px 2px 1px 8px; border-radius: 99px;
+  font-size: 10.5px; font-weight: 600; background: color-mix(in srgb, var(--brass) 16%, transparent); border: 1px solid color-mix(in srgb, var(--brass) 45%, transparent); }
+.lib-chip .btn { width: 18px; height: 18px; }
+
+/* Anteprima di 20 secondi */
+.go { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.preview-banner { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px;
+  background: color-mix(in srgb, var(--brass) 12%, transparent); border: 1px solid color-mix(in srgb, var(--brass) 50%, transparent); }
+.preview-banner b { display: block; font-size: 12.5px; }
+.preview-banner span { display: block; font-size: 11px; color: var(--muted); }
+.preview-banner > svg.i { color: var(--brass); }
