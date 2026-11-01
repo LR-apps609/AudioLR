@@ -17,13 +17,16 @@ enum Downloads {
     static func suffix(_ shift: Int) -> String { shift == 0 ? "" : " (\(PitchShift.label(shift)))" }
 
     /// Una traccia, letta e riscritta nel formato scelto (e nella tonalità scelta).
-    nonisolated static func write(_ stem: Stem, to url: URL, format: OutputFormat, shift: Int = 0) throws {
+    /// Con `tags`, tempo e tonalità finiscono nei metadati del file (per Rekordbox, Serato, Ableton…).
+    nonisolated static func write(_ stem: Stem, to url: URL, format: OutputFormat, shift: Int = 0, tags: Tags.Info? = nil) throws {
         let audio = try PitchShift.apply(AudioIO.read(stem.url), semitones: shift)
         try AudioIO.write(audio, to: url, format: format)
+        if let t = tags { try? Tags.apply(t, to: url) }
     }
 
     /// Più tracce in una cartella nuova «Canzone (IsoLR)» dentro `folder` (se c'è già: «Canzone (IsoLR 2)»…).
-    nonisolated static func writeAll(_ stems: [Stem], title: String, into folder: URL, format: OutputFormat, shift: Int = 0) throws -> URL {
+    nonisolated static func writeAll(_ stems: [Stem], title: String, into folder: URL, format: OutputFormat, shift: Int = 0,
+                                     tags: Tags.Info? = nil) throws -> URL {
         let fm = FileManager.default
         var dir = folder.appendingPathComponent("\(title) (IsoLR\(shift == 0 ? "" : " " + PitchShift.label(shift)))", isDirectory: true)
         var n = 2
@@ -32,7 +35,9 @@ enum Downloads {
             n += 1
         }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for s in stems { try write(s, to: dir.appendingPathComponent(fileName(title: title, stem: s, format: format, shift: shift)), format: format, shift: shift) }
+        for s in stems {
+            try write(s, to: dir.appendingPathComponent(fileName(title: title, stem: s, format: format, shift: shift)), format: format, shift: shift, tags: tags)
+        }
         return dir
     }
 

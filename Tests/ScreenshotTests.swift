@@ -203,4 +203,36 @@ final class ScreenshotTests: XCTestCase {
         job.prepare([stems[0].url])
         try shot(ContentView().environmentObject(job), "13-canzone-pronta", width: 1180, height: 760)
     }
+
+    func testShotLibraryFilters() throws {
+        let job = SeparationJob.shared
+        let names: [(String, Double, Int, Bool, String)] = [
+            ("Eminem - Till I Collapse", 85, 9, true, "studio"), ("Daft Punk - Get Lucky", 116, 6, true, "best"),
+            ("Bruno Mars - Uptown Funk", 115, 2, true, "best"), ("Adele - Rolling in the Deep", 105, 0, true, "studio"),
+            ("Queen - Another One Bites the Dust", 110, 4, true, "fast"), ("Coldplay - Clocks", 131, 3, false, "best"),
+        ]
+        let items: [HistoryItem] = names.enumerated().map { i, n in
+            var h = HistoryItem(title: n.0, folder: "/tmp/schermate-libreria/\(i)", date: Date(timeIntervalSinceNow: Double(-3600 * i)), quality: n.4)
+            h.duration = 200 + Double(i * 17)
+            h.analysis = SongAnalysis(bpm: n.1, keyRoot: n.2, minor: n.3, keyConfidence: 0.8)
+            return h
+        }
+        job.showcaseHistory(items)
+        let filters = LibraryFilterState.shared
+        defer { job.showcaseHistory(nil); filters.filter = LibraryFilter() }
+        filters.filter = LibraryFilter(keyRoot: 9, minor: true, compatible: true, bpmMin: 100, bpmMax: 125, halfDouble: true, sort: .bpm)
+        try shot(LibraryView().environmentObject(job), "22-libreria-filtri", width: 250, height: 640)
+        try shot(HistoryView().environmentObject(job), "23-cronologia-filtri", width: 860, height: 520)
+    }
+
+    func testShotPreview() throws {
+        let job = SeparationJob.shared
+        let (dir, stems) = try fakeStems()
+        defer { try? FileManager.default.removeItem(at: dir); job.reset() }
+        job.showcase(title: "Canzone di prova", stems: stems, folder: dir, quality: .studio, duration: 20,
+                     analysis: SongAnalysis(bpm: 124, keyRoot: 9, minor: true, keyConfidence: 0.8), elapsed: 41,
+                     engine: "Neural Engine (verificato: 48 dB)", timings: [])
+        job.showcasePreview(source: stems[0].url, start: 83, quality: .studio)
+        try shot(ContentView().environmentObject(job), "24-anteprima", width: 1280, height: 820)
+    }
 }

@@ -117,6 +117,16 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var installing = false
     /// Il passo preciso in corso («Apro il modello sul Neural Engine…») e da quando: la finestra lo mostra col tempo.
     @Published private(set) var stepDetail: String?
+    /// L'anteprima di 20 s in corso o pronta: da quale canzone viene e da che punto. Nil per le separazioni vere.
+    struct Preview: Equatable {
+        let source: URL
+        let start: Double
+        let quality: Quality
+    }
+    @Published private(set) var preview: Preview?
+    /// Quanto dura l'anteprima, in secondi.
+    nonisolated static let previewSeconds = 20.0
+
     /// Quando è finita l'ultima separazione vera (per la festa di fine lavoro; nil riaprendo dalla libreria).
     @Published private(set) var finishedAt: Date?
     /// Per le schermate di prova: la festa ferma a questo punto (0…1).
@@ -233,6 +243,72 @@ final class SeparationJob: ObservableObject {
     /// Al lavoro: una separazione, oppure una divisione in più (batteria, voce e cori).
     /// Aggiornare l'app o eliminare i modelli aspetta che abbia finito.
     var isWorking: Bool { isBusy || splitting != nil }
+
+    // MARK: Anteprima di 20 secondi
+
+    /// Dove finiscono le anteprime (si svuota a ogni anteprima nuova).
+    nonisolated static var previewFolder: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("IsoLR anteprima", isDirectory: true)
+    }
+
+    /// Il tratto da separare: 20 s centrati sul punto scelto (0…1 della canzone), dentro la canzone.
+    nonisolated static func previewRange(duration: Double, at fraction: Double, length: Double = previewSeconds) -> (start: Double, end: Double) {
+        guard duration > length else { return (0, duration) }
+        let center = duration * min(1, max(0, fraction))
+        let start = min(max(0, center - length / 2), duration - length)
+        return (start, start + length)
+    }
+
+    /// «Anteprima 20 s»: la prima canzone pronta, solo 20 s, con la qualità scelta. Resta pronta per la separazione vera.
+    func startPreview(quality: Quality, at fraction: Double = 0.5) {
+        guard let source = pending.first, !isBusy else { return }
+        let dir = Self.previewFolder
+        let title = source.deletingPathExtension().lastPathComponent
+        Task {
+            do {
+                let (clip, from): (URL, Double) = try await Task.detached(priority: .userInitiated) {
+                    let audio = try AudioIO.read(source)
+                    let seconds = Double(audio[0].count) / AudioIO.sampleRate
+                    let r = SeparationJob.previewRange(duration: seconds, at: fraction)
+                    let a = Int(r.start * AudioIO.sampleRate)
+                    let b = min(audio[0].count, Int(r.end * AudioIO.sampleRate))
+                    try? FileManager.default.removeItem(at: dir)
+                    let src = dir.appendingPathComponent("sorgente", isDirectory: true)
+                    try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+                    let url = src.appendingPathComponent(title + ".wav")
+                    try AudioIO.write(audio.map { Array($0[a..<b]) }, to: url, format: .wav24)
+                    return (url, r.start)
+                }.value
+                preview = Preview(source: source, start: from, quality: quality)
+                pending = []
+                start(clip, quality: quality)
+            } catch {
+                phase = .failed("non riesco a leggere la canzone per l'anteprima: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Dall'anteprima alla separazione vera della canzone intera.
+    func separateFullAfterPreview() {
+        guard let p = preview, !isBusy else { return }
+        endPreview()
+        pending = [p.source]
+        startPending(quality: p.quality)
+    }
+
+    /// Indietro dall'anteprima: la canzone torna pronta, con la qualità da scegliere.
+    func backFromPreview() {
+        guard let p = preview, !isBusy else { return }
+        endPreview()
+        reset()
+        pending = [p.source]
+    }
+
+    private func endPreview() {
+        guard preview != nil else { return }
+        preview = nil
+        try? FileManager.default.removeItem(at: Self.previewFolder)
+    }
 
     /// La divisione in più in corso: il suo Annulla, e un segno per riconoscerla quando finisce.
     private var splitCancel = Cancel()
@@ -367,6 +443,8 @@ final class SeparationJob: ObservableObject {
         timings = []
         sourceInfo = AudioIO.describe(url)
         self.quality = quality
+        // L'anteprima si salva in una cartella provvisoria, mai nella libreria
+        let root = preview == nil ? Prefs.folder : Self.previewFolder
         let models = quality.models
         let wantedVoice = quality.voiceModel
         let wantedInstruments = quality.instrumentModel
@@ -816,14 +894,14 @@ final class SeparationJob: ObservableObject {
                 if base == nil, swName != nil, !mix.isEmpty, let v = sources.firstIndex(of: "vocals") {
                     base = (0..<2).map { c in zip(mix[c], out[v][c]).map { $0 - $1 } }
                 }
-                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url, base: base)
+                let (dir, stems) = try SeparationJob.save(out, sources: sources, song: url, into: root, base: base)
                 // Se anche un solo modello ha dovuto usare la grafica, si dice quello
                 let engine = (decisions.values.first(where: { $0.units != .all }) ?? decisions.values.first!).text
                 lap("Salvataggio")
                 let analysis = Analysis.analyze(out, sources: sources)
                 lap("Tempo e tonalità")
                 // Il file per DJ, se scelto nelle Impostazioni: se non riesce, le tracce restano comunque
-                if Prefs.makeStemFile {
+                if Prefs.makeStemFile && root == Prefs.folder {
                     // Le tracce in memoria non servono più: il file si fa da quelle salvate
                     out = []
                     _ = try? await StemFile.make(stems: stems, song: url, folder: dir, title: url.deletingPathExtension().lastPathComponent)
@@ -1130,6 +1208,8 @@ final class SeparationJob: ObservableObject {
         task?.cancel()
         AppLog.write("Annullato dall'utente (fase: \(phase))")
         guard isBusy else { return }
+        // Annullando un'anteprima la canzone torna pronta
+        if let p = preview { endPreview(); pending = [p.source] }
         queue = []
         queuedQuality = [:]
         phase = .idle
@@ -1149,6 +1229,7 @@ final class SeparationJob: ObservableObject {
 
     func reset() {
         guard !isBusy else { return }
+        endPreview()
         finishedAt = nil
         celebrationFrozen = nil
         cancelSplit()
@@ -1210,6 +1291,10 @@ final class SeparationJob: ObservableObject {
         phase = .done
     }
 
+    /// Per le schermate di prova: una libreria finta, e l'anteprima di 20 s pronta.
+    func showcaseHistory(_ items: [HistoryItem]?) { history = items ?? History.all() }
+    func showcasePreview(source: URL, start: Double, quality: Quality) { preview = Preview(source: source, start: start, quality: quality) }
+
     /// Per le schermate di prova: la festa di fine separazione ferma a `at` (0…1).
     func showcaseCelebration(at: Double) {
         finishedAt = Date()
@@ -1263,8 +1348,10 @@ final class SeparationJob: ObservableObject {
         folder = dir
         self.stems = stems
         phase = .done
-        finishedAt = Date()
         remaining = nil
+        // L'anteprima non entra in libreria e non fa festa: si ascolta e si decide
+        if preview != nil { return }
+        finishedAt = Date()
         if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
         if Prefs.revealWhenDone { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
         History.add(song: song, folder: dir, quality: quality, duration: duration, seconds: took, engine: engine, analysis: analysis)

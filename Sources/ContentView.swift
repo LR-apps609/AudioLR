@@ -287,16 +287,25 @@ struct ContentView: View {
             .padding(.top, 4)
             // Canzone pronta: parte solo da qui
             if !job.pending.isEmpty {
-                Button { player.stop(); job.startPending(quality: quality) } label: {
-                    Label(job.pending.count == 1 ? "Separa · \(quality.title)" : "Separa \(job.pending.count) canzoni · \(quality.title)",
-                          systemImage: "play.fill")
-                        .padding(.horizontal, 10)
+                HStack(spacing: 10) {
+                    if job.pending.count == 1 && quality != .fast {
+                        Button { player.stop(); job.startPreview(quality: quality) } label: {
+                            Label("Anteprima 20 s", systemImage: "eye").padding(.horizontal, 6)
+                        }
+                        .controlSize(.large)
+                        .help("Separa solo 20 secondi dal centro della canzone con la qualità scelta, per sentire com'è prima di separarla tutta")
+                    }
+                    Button { player.stop(); job.startPending(quality: quality) } label: {
+                        Label(job.pending.count == 1 ? "Separa · \(quality.title)" : "Separa \(job.pending.count) canzoni · \(quality.title)",
+                              systemImage: "play.fill")
+                            .padding(.horizontal, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    // Invio avvia la separazione, ma non mentre si scrive nella ricerca della libreria
+                    .keyboardShortcut(typing.typing ? nil : .defaultAction)
+                    .help("Avvia la separazione con la qualità scelta (Invio)")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                // Invio avvia la separazione, ma non mentre si scrive nella ricerca della libreria
-                .keyboardShortcut(typing.typing ? nil : .defaultAction)
-                .help("Avvia la separazione con la qualità scelta (Invio)")
             }
             // Primo avvio: modelli che si installano e Neural Engine che si prepara (si può già separare)
             if let w = warmup.text {
@@ -511,6 +520,7 @@ struct ContentView: View {
         HStack(alignment: .top, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
                 songTitle
+                if let p = job.preview { previewBanner(p) }
                 transport
                 ScrollView {
                     VStack(spacing: 6) {
@@ -954,6 +964,28 @@ struct ContentView: View {
         .padding(30)
     }
 
+    /// Anteprima di 20 s: si ascolta e si decide se separare tutta la canzone.
+    private func previewBanner(_ p: SeparationJob.Preview) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "eye").foregroundStyle(Theme.brass)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Anteprima di 20 secondi · \(p.quality.title)").font(.system(size: 12.5, weight: .semibold))
+                Text("Dal minuto \(formatTime(p.start)). Non va in libreria: ascolta e decidi.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("Indietro") { player.stop(); mixer.stop(); job.backFromPreview() }
+            Button { player.stop(); mixer.stop(); job.separateFullAfterPreview() } label: {
+                Label("Separa tutta", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .controlSize(.regular)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.brass.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.brass.opacity(0.5)))
+    }
+
     private var songTitle: some View {
         HStack(spacing: 10) {
             Image(systemName: "music.note")
@@ -1089,11 +1121,12 @@ struct ContentView: View {
 
     private func downloadOne(_ stem: Stem) {
         let f = downloadFormat, shift = downloadShift
+        let tags = Tags.Info(song: job.title, analysis: job.analysis, shift: shift)
         guard let url = Downloads.askFile(name: Downloads.fileName(title: job.title, stem: stem, format: f, shift: shift), format: f) else { return }
         downloading = true
         Task {
             do {
-                try await Task.detached(priority: .userInitiated) { try Downloads.write(stem, to: url, format: f, shift: shift) }.value
+                try await Task.detached(priority: .userInitiated) { try Downloads.write(stem, to: url, format: f, shift: shift, tags: tags) }.value
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
             downloading = false
@@ -1103,10 +1136,13 @@ struct ContentView: View {
     private func downloadMany(_ stems: [Stem]) {
         guard !stems.isEmpty, let folder = Downloads.askFolder() else { return }
         let f = downloadFormat, title = job.title, shift = downloadShift
+        let tags = Tags.Info(song: title, analysis: job.analysis, shift: shift)
         downloading = true
         Task {
             do {
-                let dir = try await Task.detached(priority: .userInitiated) { try Downloads.writeAll(stems, title: title, into: folder, format: f, shift: shift) }.value
+                let dir = try await Task.detached(priority: .userInitiated) {
+                    try Downloads.writeAll(stems, title: title, into: folder, format: f, shift: shift, tags: tags)
+                }.value
                 NSWorkspace.shared.activateFileViewerSelecting([dir])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
             downloading = false
@@ -1122,6 +1158,8 @@ struct ContentView: View {
         Task {
             do {
                 let done = try await mixer.export(stems: job.stems, folder: folder, title: job.title, to: url, format: f, range: range, shift: shift)
+                let tags = Tags.Info(song: job.title, analysis: job.analysis, shift: shift)
+                try? await Task.detached(priority: .userInitiated) { try Tags.apply(tags, to: done) }.value
                 exported = done
                 NSWorkspace.shared.activateFileViewerSelecting([done])
             } catch { downloadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }

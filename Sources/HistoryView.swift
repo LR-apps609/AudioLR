@@ -10,14 +10,11 @@ import AppKit
 struct HistoryView: View {
     @EnvironmentObject private var job: SeparationJob
     @Environment(\.openWindow) private var openWindow
-    @State private var search = ""
+    @ObservedObject private var filters = LibraryFilterState.shared
     @State private var selection: HistoryItem.ID?
     @State private var confirmClear = false
 
-    private var items: [HistoryItem] {
-        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? job.history : job.history.filter { $0.title.lowercased().contains(q) }
-    }
+    private var items: [HistoryItem] { filters.filter.apply(job.history, stems: filters.stems) }
 
     private var selected: HistoryItem? { job.history.first { $0.id == selection } }
 
@@ -53,9 +50,12 @@ struct HistoryView: View {
             }
             .font(.system(size: 12)).foregroundStyle(.secondary)
             Spacer()
-            TextField("Cerca una canzone", text: $search)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 220)
+            VStack(alignment: .trailing, spacing: 6) {
+                TextField("Cerca una canzone", text: $filters.filter.text)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+                LibraryFilterBar(current: nil, count: items.count).frame(width: 260)
+            }
         }
         .padding(18)
     }

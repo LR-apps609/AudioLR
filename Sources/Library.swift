@@ -16,13 +16,10 @@ final class TypingFocus: ObservableObject {
 struct LibraryView: View {
     @EnvironmentObject private var job: SeparationJob
     @Environment(\.openWindow) private var openWindow
-    @State private var search = ""
+    @ObservedObject private var filters = LibraryFilterState.shared
     @FocusState private var searchFocused: Bool
 
-    private var items: [HistoryItem] {
-        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? job.history : job.history.filter { $0.title.lowercased().contains(q) }
-    }
+    private var items: [HistoryItem] { filters.filter.apply(job.history, stems: filters.stems) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -42,7 +39,7 @@ struct LibraryView: View {
                     .help("Apri la cartella delle tracce")
                     .accessibilityLabel("Apri la cartella delle tracce")
             }
-            TextField("Cerca", text: $search)
+            TextField("Cerca", text: $filters.filter.text)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
                 .focused($searchFocused)
@@ -52,6 +49,9 @@ struct LibraryView: View {
                 .onExitCommand { searchFocused = false }
                 // All'apertura la ricerca non deve prendersi il cursore (e il riquadro acceso)
                 .onAppear { DispatchQueue.main.async { searchFocused = false; NSApp.keyWindow?.makeFirstResponder(nil) } }
+            if !job.history.isEmpty {
+                LibraryFilterBar(current: job.phase == .done ? job.analysis : nil, count: items.count)
+            }
             if items.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "music.note.list").font(.system(size: 26)).foregroundStyle(.tertiary)
