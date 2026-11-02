@@ -6,7 +6,7 @@
   --muted: rgba(43,36,51,.66); --faint: rgba(43,36,51,.48); --stroke: rgba(43,36,51,.10); --stroke2: rgba(43,36,51,.18);
   --brass: #9A6F2E; --brass2: #835C22; --green: #4E9A6A; --red: #B8463A; --shadow: rgba(43,36,51,.12); --glow: rgba(154,111,46,.30);
   --c-vocals: #D4553D; --c-drums: #B97F12; --c-bass: #7F55CC; --c-guitar: #4A9438; --c-piano: #4567C8; --c-other: #16917F;
-  --c-lead: #C85A44; --c-backing: #D88F7C; --c-male: #B8553F; --c-female: #DB8A6E;
+  --c-lead: #C85A44; --c-backing: #D88F7C; --c-male: #B8553F; --c-female: #DB8A6E; --c-clean: #D4604A;
   --c-kick: #B0702A; --c-snare: #C9A040; --c-toms: #A9603C; --c-hh: #B9A35A; --c-ride: #9C8A4A; --c-crash: #D08A3A;
   --c-instrumental: #2F7FC0; --c-take: #B8463A;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -19,7 +19,7 @@
   --muted: rgba(237,230,242,.66); --faint: rgba(237,230,242,.46); --stroke: rgba(255,255,255,.08); --stroke2: rgba(255,255,255,.15);
   --brass: #D6AA62; --brass2: #C4954A; --green: #7CC796; --red: #E0705F; --shadow: rgba(0,0,0,.5); --glow: rgba(214,170,98,.45);
   --c-vocals: #FF7A66; --c-drums: #FFC24B; --c-bass: #B48CFF; --c-guitar: #8EE07A; --c-piano: #7FA8FF; --c-other: #43E0C2;
-  --c-lead: #FF8E78; --c-backing: #FFB3A5; --c-male: #F07A62; --c-female: #FFB49B;
+  --c-lead: #FF8E78; --c-backing: #FFB3A5; --c-male: #F07A62; --c-female: #FFB49B; --c-clean: #FF8F7D;
   --c-kick: #F2A24E; --c-snare: #FFD06E; --c-toms: #E68B5E; --c-hh: #E6D488; --c-ride: #D3BF78; --c-crash: #FFB766;
   --c-instrumental: #6CC3FF; --c-take: #FF6B6B;
   color-scheme: dark; } }
@@ -28,7 +28,7 @@
   --muted: rgba(237,230,242,.66); --faint: rgba(237,230,242,.46); --stroke: rgba(255,255,255,.08); --stroke2: rgba(255,255,255,.15);
   --brass: #D6AA62; --brass2: #C4954A; --green: #7CC796; --red: #E0705F; --shadow: rgba(0,0,0,.5); --glow: rgba(214,170,98,.45);
   --c-vocals: #FF7A66; --c-drums: #FFC24B; --c-bass: #B48CFF; --c-guitar: #8EE07A; --c-piano: #7FA8FF; --c-other: #43E0C2;
-  --c-lead: #FF8E78; --c-backing: #FFB3A5; --c-male: #F07A62; --c-female: #FFB49B;
+  --c-lead: #FF8E78; --c-backing: #FFB3A5; --c-male: #F07A62; --c-female: #FFB49B; --c-clean: #FF8F7D;
   --c-kick: #F2A24E; --c-snare: #FFD06E; --c-toms: #E68B5E; --c-hh: #E6D488; --c-ride: #D3BF78; --c-crash: #FFB766;
   --c-instrumental: #6CC3FF; --c-take: #FF6B6B;
   color-scheme: dark; }

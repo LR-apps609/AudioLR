@@ -284,8 +284,10 @@
 
   function results(p) {
     const cur = job.current, m = cur.meta;
-    const stems = m.stems.filter((s) => s.key !== "instrumental"), base = m.stems.find((s) => s.key === "instrumental");
     const keys = m.stems.map((s) => s.key);
+    // Come sul Mac (MixPlayer.mixable): una traccia divisa o pulita lascia il posto alle sue parti
+    const replaced = Object.values(Separation.EXTRA).filter((x) => x.parts.some((pp) => keys.includes(pp))).map((x) => x.source);
+    const stems = m.stems.filter((s) => s.key !== "instrumental" && !replaced.includes(s.key)), base = m.stems.find((s) => s.key === "instrumental");
     const splits = Object.entries(Separation.EXTRA).filter(([k, x]) => keys.includes(x.source) && !Object.values(Separation.EXTRA).filter((y) => y.source === x.source).some((y) => y.parts.some((pp) => keys.includes(pp))));
     const sel = m.stems.filter((s) => !ui.unselected.has(s.key));
     p.innerHTML = `<div class="results">

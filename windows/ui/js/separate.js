@@ -359,7 +359,9 @@
       const x = EXTRA[kind], cur = this.current;
       if (!cur || this.splitting) return;
       this.splitting = kind; this.splitProgress = 0; this.splitError = null; this.emit();
-      const listen = () => { this.splitProgress = this.progress; this.emit(); };
+      // Il progresso del lavoratore diventa quello della divisione; la notifica rientra qui una volta sola
+      let inside = false;
+      const listen = () => { if (inside) return; inside = true; this.splitProgress = this.progress; this.emit(); inside = false; };
       this.addEventListener("change", listen);
       try {
         const src = cur.meta.stems.find((s) => s.key === x.source);

@@ -246,6 +246,7 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   check(ly.words === 4 && ly.rows === 2 && ly.lrc.includes("[00:00.50]Ciao mondo.") && ly.lrc.includes("[00:02.50]Di nuovo"), `testo: ${ly.words} parole, ${ly.rows} righe nell'editor, .lrc giusto`);
   if (ly.meta) check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
   else console.log("::notice::video karaoke non provato: questo Chromium non ha l'H.264 (WebView2 di Windows sì)");
+  const errBefore = errors.length;
   // Pulisci la voce (rumore con DeepFilterNet vero, se il modello è accanto alla pagina, e riverbero)
   const hasDF = await page.evaluate(async () => (await fetch("models/DeepFilter.json")).ok);
   if (r.meta) {
@@ -270,6 +271,7 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     check(cl.len && cl.bad === 0 && cl.ratio < 0.5 && cl.ratio > -40,
       `Pulisci la voce (${hasDF ? "rumore e riverbero" : "solo riverbero: DeepFilter non è accanto alla pagina"}) in ${Math.round((Date.now() - c0) / 1000)} s: «Voce pulita» ${cl.ratio != null ? cl.ratio.toFixed(1) : "?"} dB rispetto alla voce ${cl.error || ""} ${cl.keys || ""}`);
   }
+  if (errors.length) console.log(`::notice::errori nella pagina prima della pulizia: ${errBefore}, dopo: ${errors.length - errBefore}`);
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));
   await browser.close();
   server.close();

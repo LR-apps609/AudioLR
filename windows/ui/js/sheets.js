@@ -52,6 +52,7 @@
           <tr><td>BS-RoFormer Chorus Male-Female (Sucial)</td><td>Voce maschile e femminile</td><td>MIT (codice)</td></tr>
           <tr><td>MDX23C DrumSep (aufr33, jarredou)</td><td>Batteria divisa</td><td>—</td></tr>
           <tr><td>Basic Pitch (Spotify)</td><td>Note MIDI</td><td>Apache 2.0</td></tr>
+          <tr><td>DeepFilterNet3 (Hendrik Schröter)</td><td>Pulisci la voce · rumore</td><td>MIT o Apache 2.0</td></tr>
           <tr><td>Signalsmith Stretch</td><td>Velocità e tono</td><td>MIT</td></tr>
           <tr><td>Whisper small (OpenAI)</td><td>Testo sincronizzato</td><td>MIT</td></tr>
           <tr><td>Transformers.js (Hugging Face)</td><td>Testo sincronizzato (motore)</td><td>Apache 2.0</td></tr></table>
@@ -113,6 +114,8 @@
         <li><b>Ascolta e mescola</b>: volume, muto (altoparlante) e solo (cuffie) per traccia; Tutto, Karaoke, Solo voce; «Senza…» toglie uno strumento.</li>
         <li><b>Esercitati</b>: velocità e tono, ripetizione di un passaggio (A e B, o un clic su una parte della canzone), rampa, metronomo, conteggio, accordi, registrati sopra la base e confronta.</li>
         <li><b>Warp</b>: correggi i segnaposto sulle battute (metronomo e parti diventano più precisi) e crea una versione a tempo fisso, per esempio a 120 BPM. <b>Rimonta</b>: taglia la canzone sulle battute, sposta, duplica o togli le parti e crea la versione nuova.</li>
+        <li><b>Pulisci la voce</b> (Ctrl+Maiusc+P): togli il rumore di fondo e la coda del riverbero; la «Voce pulita» prende il posto della voce nel mixer e si scarica come le altre. Il riverbero che suona insieme a una nota tenuta resta in parte.</li>
+        <li><b>Clic destro</b> su un file audio in Esplora file › «Separa con IsoLR» (su Windows 11 sotto «Mostra altre opzioni»): la canzone si apre in IsoLR, pronta da separare.</li>
         <li><b>Scarica</b> quello che ti serve dal riquadro a destra: una traccia, le spuntate, tutte, il mix che senti, il passaggio A–B, il file per DJ.</li>
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
