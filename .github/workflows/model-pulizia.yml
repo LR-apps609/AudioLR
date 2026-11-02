@@ -1,0 +1,57 @@
+# «Togli rumore»: DeepFilterNet3 (Hendrik Schröter, pesi e codice MIT o Apache 2.0, dal repository dell'autore)
+# in Core ML per il Mac (modelli-1) e ONNX per Windows (modelli-windows), con le prove contro l'originale.
+# «Togli riverbero» non ha modello: è un calcolo di IsoLR (nessun modello di dereverbero con licenza libera).
+name: Modello pulizia
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/model-pulizia.yml, Tools/convert_deepfilter.py, Tools/deepfilter_ref.py]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti
+        run: |
+          pip install "torch==2.2.2" "torchaudio==2.2.2" "coremltools==7.2" "numpy<2" "deepfilternet==0.5.6" \
+            "onnx==1.16.2" "onnxruntime==1.19.2" > pip.log 2>&1 || {
+            grep -iE "error|requires|conflict|no matching" pip.log | tail -n 12 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1; }
+      - name: Modello originale (DeepFilterNet3, commit fisso)
+        run: |
+          git clone -q https://github.com/Rikorose/DeepFilterNet dfn
+          git -C dfn checkout -q d375b2d8309e0935d165700c91da9de862a99c31
+          unzip -q dfn/models/DeepFilterNet3.zip -d .
+          ls DeepFilterNet3 DeepFilterNet3/checkpoints
+      - name: Conversione e prove
+        shell: bash {0}
+        run: |
+          python Tools/convert_deepfilter.py DeepFilterNet3 > conv.log 2>&1
+          code=$?
+          tail -n 40 conv.log
+          grep -E "dB|Fatto" conv.log | tail -n 8 | while IFS= read -r l; do echo "::notice::$l"; done
+          if [ $code -ne 0 ]; then tail -n 8 conv.log | while IFS= read -r l; do echo "::error::$l"; done; fi
+          exit $code
+      - name: Pacchetti
+        run: |
+          N=DeepFilter
+          ditto -c -k --keepParent $N.mlpackage $N.mlpackage.zip
+          shasum -a 256 $N.mlpackage.zip | tee $N.sha256
+          shasum -a 256 $N.onnx | tee $N.onnx.sha256
+          ls -la $N.*
+      - name: Tra i file scaricabili
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload modelli-1 DeepFilter.mlpackage.zip DeepFilter.sha256 DeepFilter.json DeepFilter-prova.f32 --clobber
+          gh release upload modelli-windows DeepFilter.onnx DeepFilter.onnx.sha256 DeepFilter.json DeepFilter-prova.f32 --clobber
