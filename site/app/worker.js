@@ -37,7 +37,7 @@ async function download(url, onBytes) {
     try {
       const res = await fetch(url, { signal: ctl.signal, headers: got ? { Range: `bytes=${got}-` } : {} });
       if (got && res.status === 200) { onBytes(-got, attempt); chunks = []; got = 0; }   // niente ripresa: da capo
-      else if (!res.ok) throw new Error("modello non disponibile (" + res.status + ")");
+      else if (!res.ok) throw new Error("il modello non è sul sito in questo momento (errore " + res.status + "): riprova tra qualche minuto");
       const reader = res.body.getReader();
       for (;;) {
         const { done, value } = await reader.read();
@@ -50,11 +50,12 @@ async function download(url, onBytes) {
       return chunks;
     } catch (e) {
       clearTimeout(timer);
-      lastError = ctl.signal.aborted ? new Error("la connessione si è fermata") : e;
-      if (/non disponibile \(4/.test(String(e.message))) throw e;    // 404 e simili: riprovare non serve
+      // Il motivo in italiano (il browser dice solo «network error» o «Failed to fetch»)
+      lastError = new Error(ctl.signal.aborted ? "nessun dato per 30 secondi" : "la connessione si è interrotta");
+      if (/errore 4/.test(String(e.message))) throw e;    // 404 e simili: riprovare non serve
     }
   }
-  throw new Error("non riesco a scaricare il modello (" + (lastError && lastError.message || "rete") + "): controlla la connessione e riprova");
+  throw new Error("non riesco a scaricare il modello dopo 5 tentativi (" + lastError.message + "): controlla la connessione e riprova");
 }
 
 async function sha256(buf) {
@@ -106,7 +107,7 @@ async function fetchModel(onProgress, again = false) {
   if (bad) {
     if (cache) try { await caches.delete(CACHE); } catch (e) { /* niente */ }
     if (!again) return fetchModel(onProgress, true);
-    throw new Error("il modello scaricato è rovinato: riprova");
+    throw new Error("il modello è arrivato incompleto o rovinato (il controllo non torna): riprova, si scarica di nuovo da capo");
   }
   if (cache) for (const [url, chunks] of fresh) {
     try { await cache.put(url, new Response(new Blob(chunks))); } catch (e) { /* senza cache si riscarica la prossima volta */ }
