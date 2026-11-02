@@ -1,0 +1,84 @@
+# Banco dei tempi del sito: lo stesso banco sulla versione di riferimento («prima») e su questa («dopo»),
+# in Chromium su Linux. Peso della pagina, modello a freddo e a caldo, separazione, fluidità, memoria, rete
+# che cade a metà del modello; poi le tracce si confrontano numericamente (non devono cambiare).
+# Niente esce dalla macchina di GitHub: il banco usa solo un server locale. Non pubblica niente.
+name: Tempi del sito
+
+on:
+  workflow_dispatch:
+    inputs:
+      prima:
+        description: "Versione di riferimento (commit)"
+        default: "297599d"
+  push:
+    branches: [prestazioni-sito, prestazioni]
+    paths: [site/**, .github/workflows/tempi-sito.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  tempi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PRIMA: ${{ inputs.prima || '297599d' }}
+      SECONDI: "30"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Le due versioni, con ONNX Runtime Web e il modello accanto alle pagine (come sito.yml)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p /tmp/b/prima /tmp/b/dopo /tmp/ort /tmp/mod
+          git archive "$PRIMA" site | tar -x -C /tmp/b/prima
+          cp -R site /tmp/b/dopo/
+          (cd /tmp/ort && npm pack onnxruntime-web@1.19.2 --silent && tar xzf onnxruntime-web-1.19.2.tgz)
+          gh release download modelli-web --repo "$GITHUB_REPOSITORY" --dir /tmp/mod --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --pattern "HTDemucsWeb.sha256" --clobber
+          for v in prima dopo; do
+            P=/tmp/b/$v/site
+            mkdir -p $P/vendor $P/models
+            cp /tmp/ort/package/dist/ort.webgpu.min.js /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.mjs /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.wasm $P/vendor/
+            cp /tmp/mod/HTDemucsWeb.onnx.part* $P/models/
+            python3 - "$P" <<'PY'
+          import json, os, glob, sys
+          r = sys.argv[1] + "/models/"
+          d = json.load(open("/tmp/mod/HTDemucsWeb.json"))
+          parts = sorted(os.path.basename(p) for p in glob.glob(r + "HTDemucsWeb.onnx.part*"))
+          d["parts"] = parts
+          d["bytes"] = sum(os.path.getsize(r + p) for p in parts)
+          d["sha256"] = open("/tmp/mod/HTDemucsWeb.sha256").read().split()[0]
+          json.dump(d, open(r + "HTDemucsWeb.json", "w"))
+          PY
+          done
+      - name: Chromium
+        run: |
+          npm i --prefix /tmp/pw playwright@1.47.2 --silent
+          (cd /tmp/pw && npx playwright install --with-deps chromium > /dev/null)
+      - name: Banco, prima e dopo
+        run: |
+          set -e
+          for v in prima dopo; do
+            NODE_PATH=/tmp/pw/node_modules node site/test/tempi.test.js /tmp/b/$v/site $v tempi-$v.json wav-$v $SECONDI
+          done
+      - name: Confronto delle tracce e tabella
+        run: |
+          set +e
+          node site/test/confronta-wav.js wav-prima wav-dopo confronto.json
+          code=$?
+          node site/test/tempi-tabella.js tempi-prima.json tempi-dopo.json confronto.json | tee tabella.md >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: tempi-sito
+          path: |
+            tempi-*.json
+            confronto.json
+            tabella.md
