@@ -1,12 +1,11 @@
 import Accelerate
-import CoreML
 import Foundation
 
-// «Pulisci la voce»: Togli rumore (DeepFilterNet3 di Hendrik Schröter, MIT o Apache 2.0) e Togli riverbero
-// (un calcolo di IsoLR, senza modello). Lo stesso calcolo di Tools/deepfilter_ref.py e Tools/dereverb_ref.py,
-// e di windows/ui/core/cleanup.js su Windows.
+// «Pulisci la voce»: Togli rumore e Togli riverbero, due calcoli di IsoLR senza modelli (niente da scaricare,
+// nessuna licenza di terzi). Gli stessi numeri di Tools/denoise_ref.py e Tools/dereverb_ref.py, e di
+// windows/ui/core/cleanup.js su Windows. Perché non DeepFilterNet: docs/LICENZE-MODELLI.md e Tools/prova_canto.py.
 
-/// Trasformata di Fourier di un segnale reale lungo n (n = f·2^k, f ∈ {1, 3, 5, 15}), con vDSP.
+/// Trasformata di Fourier di un segnale reale lungo n (potenza di 2), con vDSP.
 final class RealFFT {
     let n: Int
     private let fwd: vDSP_DFT_Setup
@@ -46,181 +45,24 @@ final class RealFFT {
     }
 }
 
-struct DeepFilterConfig: Codable, Equatable {
-    let sr, fft, hop: Int
-    let nb_erb, nb_df, order, lookahead: Int
-    let alpha: Float
-    let frames, ctx: Int
-    let widths: [Int]
-}
+/// Lo spettro comune ai due calcoli: finestra di Hann di 2048 punti ogni 512, a 44,1 kHz; un guadagno per riga e
+/// fotogramma, lo stesso per i due canali (l'immagine stereo non cambia).
+enum SpectralGain {
+    static let N = 2048, H = 512
 
-/// Togli rumore: una traccia mono a 48 kHz → la stessa senza rumore, stessa lunghezza.
-final class Denoiser {
-    static let modelName = "DeepFilter"
-    /// La rete: feat_erb [F·32] e feat_spec [2·F·96] → maschera [F·32] e coefficienti [F·96·10].
-    typealias Net = (_ erb: [Float], _ spec: [Float]) throws -> (m: [Float], coefs: [Float])
-    let net: Net
-    let cfg: DeepFilterConfig
-    private let fft: RealFFT
-    private let win: [Float]
-
-    init(net: @escaping Net, config: DeepFilterConfig) {
-        self.net = net
-        cfg = config
-        fft = RealFFT(config.fft)
-        let half = Double(config.fft / 2)
-        win = (0..<config.fft).map { i in
-            let s = sin(0.5 * Double.pi * (Double(i) + 0.5) / half)
-            return Float(sin(0.5 * Double.pi * s * s))
-        }
-    }
-
-    /// Con il modello Core ML (DeepFilter.mlpackage).
-    convenience init(model: MLModel, config: DeepFilterConfig) throws {
-        let F = config.frames, E = config.nb_erb, D = config.nb_df
-        let fe = try MLMultiArray(shape: [1, 1, NSNumber(value: F), NSNumber(value: E)], dataType: .float32)
-        let fs = try MLMultiArray(shape: [1, 2, NSNumber(value: F), NSNumber(value: D)], dataType: .float32)
-        self.init(net: { erb, spec in
-            let pe = fe.dataPointer.assumingMemoryBound(to: Float.self), ps = fs.dataPointer.assumingMemoryBound(to: Float.self)
-            for i in 0..<(F * E) { pe[i] = erb[i] }
-            for i in 0..<(2 * F * D) { ps[i] = spec[i] }
-            let out = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["feat_erb": fe, "feat_spec": fs]))
-            guard let m = out.featureValue(for: "m")?.multiArrayValue, let c = out.featureValue(for: "coefs")?.multiArrayValue else {
-                throw SeparationError("il modello del rumore non ha dato un risultato")
-            }
-            return (MLShapedArray<Float>(converting: m).scalars, MLShapedArray<Float>(converting: c).scalars)
-        }, config: config)
-    }
-
-    func process(_ x: [Float], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [Float] {
-        let N = cfg.fft, H = cfg.hop, B = N / 2 + 1, E = cfg.nb_erb, D = cfg.nb_df, O = cfg.order
-        let n = x.count
-        let xp = x + [Float](repeating: 0, count: N)
-        let T = xp.count / H
-        // Lo spettro (come DFState.analysis)
-        var sr = [Float](repeating: 0, count: T * B), si = sr
-        var buf = [Float](repeating: 0, count: N)
-        let norm = 1 / Float(N * N / (2 * H))
-        sr.withUnsafeMutableBufferPointer { R in
-            si.withUnsafeMutableBufferPointer { I in
-                for t in 0..<T {
-                    for i in 0..<(N - H) { buf[i] = (t > 0 ? xp[(t - 1) * H + i] : 0) * win[i] }
-                    for i in 0..<H { buf[N - H + i] = xp[t * H + i] * win[N - H + i] }
-                    buf.withUnsafeBufferPointer { fft.forward($0.baseAddress!, re: R.baseAddress! + t * B, im: I.baseAddress! + t * B) }
-                    for k in 0..<B { R[t * B + k] *= norm; I[t * B + k] *= norm }
-                }
-            }
-        }
-        // Le caratteristiche: bande ERB in dB normalizzate, spettro basso normalizzato
-        var erb = [Float](repeating: 0, count: T * E)
-        var lowR = [Float](repeating: 0, count: T * D), lowI = lowR
-        var s = (0..<E).map { -60 + Float($0) * (-30 / Float(E - 1)) }
-        var u = (0..<D).map { 0.001 + Float($0) * (-0.0009 / Float(D - 1)) }
-        let a = cfg.alpha
-        for t in 0..<T {
-            var k = 0
-            for b in 0..<E {
-                let w = cfg.widths[b]
-                var sum: Float = 0
-                for j in 0..<w { let r = sr[t * B + k + j], q = si[t * B + k + j]; sum += r * r + q * q }
-                k += w
-                let e = log10(sum / Float(w) + 1e-10) * 10
-                s[b] = e * (1 - a) + s[b] * a
-                erb[t * E + b] = (e - s[b]) / 40
-            }
-            for f in 0..<D {
-                let r = sr[t * B + f], q = si[t * B + f]
-                u[f] = (r * r + q * q).squareRoot() * (1 - a) + u[f] * a
-                let d = u[f].squareRoot()
-                lowR[t * D + f] = r / d
-                lowI[t * D + f] = q / d
-            }
-        }
-        // La rete a pezzi di F fotogrammi; ogni pezzo pronto si applica e si ricostruisce subito
-        let F = cfg.frames
-        var y = [Float](repeating: 0, count: T * H)
-        var mem = [Float](repeating: 0, count: N - H)
-        var orr = [Float](repeating: 0, count: B), oii = orr, frame = [Float](repeating: 0, count: N)
-        var band = [Int](repeating: 0, count: B)
-        do { var k = 0; for b in 0..<E { for _ in 0..<cfg.widths[b] { band[k] = b; k += 1 } } }
-        let back = O - 1 - cfg.lookahead
-        var start = 0
-        while start < T {
-            if isCancelled() { throw CancellationError() }
-            // All'inizio niente contesto finto (la rete parte da zero come sull'intera traccia); gli zeri dopo la
-            // fine invece sono quelli che la rete vede comunque
-            let a0 = max(0, start - cfg.ctx)
-            var fe = [Float](repeating: 0, count: F * E), fs = [Float](repeating: 0, count: 2 * F * D)
-            for i in 0..<F {
-                let t = a0 + i
-                guard t < T else { break }
-                for b in 0..<E { fe[i * E + b] = erb[t * E + b] }
-                for f in 0..<D {
-                    fs[i * D + f] = lowR[t * D + f]
-                    fs[F * D + i * D + f] = lowI[t * D + f]
-                }
-            }
-            let (m, c) = try net(fe, fs)
-            let end = min(a0 + F - cfg.ctx, T)
-            for t in start..<end {
-                let i = t - a0
-                // La maschera ERB su tutte le righe
-                for k in 0..<B {
-                    let g = m[i * E + band[k]]
-                    orr[k] = sr[t * B + k] * g; oii[k] = si[t * B + k] * g
-                }
-                // Il filtro profondo sulle prime righe, dallo spettro originale (2 fotogrammi indietro, 2 avanti)
-                for f in 0..<D {
-                    var re: Float = 0, im: Float = 0
-                    for o in 0..<O {
-                        let tt = t + o - back
-                        guard tt >= 0, tt < T else { continue }
-                        let xr = sr[tt * B + f], xi = si[tt * B + f]
-                        let j = (i * D + f) * O * 2 + 2 * o
-                        let cr = c[j], ci = c[j + 1]
-                        re += xr * cr - xi * ci
-                        im += xr * ci + xi * cr
-                    }
-                    orr[f] = re; oii[f] = im
-                }
-                // Ricostruzione (come DFState.synthesis)
-                orr.withUnsafeBufferPointer { R in oii.withUnsafeBufferPointer { I in
-                    frame.withUnsafeMutableBufferPointer { fft.inverse(re: R.baseAddress!, im: I.baseAddress!, out: $0.baseAddress!) }
-                } }
-                for j in 0..<N { frame[j] *= win[j] }
-                for j in 0..<H { y[t * H + j] = frame[j] + mem[j] }
-                for j in 0..<(N - H) { mem[j] = frame[H + j] }
-            }
-            start = end
-            progress(Double(start) / Double(T))
-        }
-        let d = N - H
-        return Array(y[d..<(d + n)])
-    }
-}
-
-/// Togli riverbero: dove l'energia di una riga dello spettro si spiega come la coda di quella di 116 ms prima,
-/// smorzata come in una sala grande, è riverbero e si abbassa (fino a −18 dB); note che partono o restano tenute
-/// passano intatte. Stesso guadagno per i due canali. Lavora a 44,1 kHz.
-enum Dereverb {
-    static let N = 2048, H = 512, delay = 10
-    static let t60: Float = 2.0, r0: Float = 1.3, r1: Float = 2.2, floorDB: Float = -18
-    static let fw = 3, smooth: Float = 0.85
-
-    static var window: [Float] { (0..<N).map { Float(0.5 - 0.5 * cos(2 * Double.pi * Double($0) / Double(N))) } }
-
-    static func process(_ channels: [[Float]], progress: (Double) -> Void = { _ in },
-                        isCancelled: () -> Bool = { false }) throws -> [[Float]] {
+    /// `gains(p, T, B)`: dall'energia (somma dei canali, T·B) al guadagno (T·B).
+    static func run(_ channels: [[Float]], progress: (Double) -> Void, isCancelled: () -> Bool,
+                    gains: (_ p: [Float], _ T: Int, _ B: Int) -> [Float]) throws -> [[Float]] {
         guard let n = channels.first?.count, n > 0 else { return channels }
         let B = N / 2 + 1, T = (n + N) / H + 1
-        let fft = RealFFT(N), win = window
+        let fft = RealFFT(N)
+        let win = (0..<N).map { Float(0.5 - 0.5 * cos(2 * Double.pi * Double($0) / Double(N))) }
         var frame = [Float](repeating: 0, count: N), re = [Float](repeating: 0, count: B), im = re
         func load(_ x: [Float], _ t: Int) {
             // Il segnale con N/2 zeri prima: il fotogramma t parte da t·H − N/2
             let o = t * H - N / 2
             for i in 0..<N { let j = o + i; frame[i] = (j >= 0 && j < n) ? x[j] * win[i] : 0 }
         }
-        // 1) L'energia (somma dei canali)
         var p = [Float](repeating: 0, count: T * B)
         for x in channels {
             if isCancelled() { throw CancellationError() }
@@ -231,40 +73,9 @@ enum Dereverb {
             }
         }
         progress(0.3)
-        // 2) Il guadagno
-        var row = [Float](repeating: 0, count: B)
-        var total: Double = 0
-        for t in 0..<T {
-            for k in 0..<B {
-                let a = max(0, k - fw), b = min(B, k + fw + 1)
-                var s: Float = 0
-                for j in a..<b { s += p[t * B + j] }
-                row[k] = s / Float(b - a)
-            }
-            for k in 0..<B {
-                let v = t > 0 ? smooth * p[(t - 1) * B + k] + (1 - smooth) * row[k] : row[k]
-                p[t * B + k] = v
-                total += Double(v)
-            }
-        }
-        let eps = Float(1e-10 + 1e-8 * total / Double(T * B))
-        let decay = Float(exp(-2 * (3 * log(10.0) / Double(t60)) * Double(delay * H) / 44100))
-        let floor = Float(pow(10, Double(floorDB) / 20))
-        var g = [Float](repeating: 0, count: T * B), prev = [Float](repeating: 1, count: B)
-        for t in 0..<T {
-            for k in 0..<B {
-                let late: Float = t >= delay ? decay * p[(t - delay) * B + k] : 0
-                let r = p[t * B + k] / (late + eps)
-                var s = min(max((r - r0) / (r1 - r0), 0), 1)
-                s = s * s * (3 - 2 * s)
-                let v = floor + (1 - floor) * s
-                prev[k] = max(v, 0.5 * prev[k] + 0.5 * v)
-                g[t * B + k] = prev[k]
-            }
-        }
+        let g = gains(p, T, B)
         p = []
         progress(0.5)
-        // 3) Ogni canale con il guadagno, ricostruito
         let norm = win.reduce(0) { $0 + $1 * $1 } / Float(H)
         var result: [[Float]] = []
         for (ci, x) in channels.enumerated() {
@@ -285,14 +96,105 @@ enum Dereverb {
         }
         return result
     }
+
+    /// L'energia media sulle righe vicine (±fw) e nel tempo (smooth).
+    static func smoothed(_ p: [Float], _ T: Int, _ B: Int, fw: Int, smooth: Float) -> [Float] {
+        var q = [Float](repeating: 0, count: T * B), row = [Float](repeating: 0, count: B)
+        for t in 0..<T {
+            for k in 0..<B {
+                let a = max(0, k - fw), b = min(B, k + fw + 1)
+                var s: Float = 0
+                for j in a..<b { s += p[t * B + j] }
+                row[k] = s / Float(b - a)
+            }
+            for k in 0..<B { q[t * B + k] = t > 0 ? smooth * q[(t - 1) * B + k] + (1 - smooth) * row[k] : row[k] }
+        }
+        return q
+    }
 }
 
-extension ModelStore {
-    /// Il modello di «Togli rumore», pronto (scaricato e preparato se serve). Sul processore: è piccolo
-    /// e le sue GRU a 16 bit (Neural Engine) sbagliano.
-    func denoiser(progress: @escaping (Double) -> Void) async throws -> Denoiser {
-        let cfg = try JSONDecoder().decode(DeepFilterConfig.self, from: try await config(Denoiser.modelName))
-        return try Denoiser(model: try await mlModel(Denoiser.modelName, units: .cpuOnly, progress: progress), config: cfg)
+/// Togli rumore: un «noise gate» spettrale. Il profilo del rumore è la media delle righe nei momenti più silenziosi
+/// (il 10% dei fotogrammi con meno energia, dove la voce tace); ogni riga si abbassa (fino a −20 dB) solo dove la
+/// sua energia non supera di molto quel profilo. Se la traccia ha silenzio digitale, o se i momenti «silenziosi»
+/// sono ancora voce, toglie meno o niente: una voce pulita non si tocca.
+enum Denoise {
+    static let quiet = 0.10, over: Float = 2.0, floorDB = -20.0, fw = 2, smooth: Float = 0.6, release: Float = 0.7
+    static let silent = 0.05, trustDB = (12.0, 20.0)
+
+    static func gains(_ p: [Float], _ T: Int, _ B: Int) -> [Float] {
+        let ones = [Float](repeating: 1, count: T * B)
+        var total = [Double](repeating: 0, count: T)
+        for t in 0..<T { var s = 0.0; for k in 0..<B { s += Double(p[t * B + k]) }; total[t] = s }
+        let mx = total.max() ?? 0
+        let edge = SpectralGain.N / SpectralGain.H
+        let cand = Array(edge..<max(edge + 1, T - edge)).filter { $0 < T }
+        let alive = cand.filter { total[$0] > 1e-10 * max(mx, 1e-30) }
+        // Tanti fotogrammi di silenzio digitale: la traccia non ha un rumore di fondo da togliere
+        guard !alive.isEmpty, Double(alive.count) >= (1 - silent) * Double(cand.count) else { return ones }
+        let k = max(1, Int((quiet * Double(alive.count)).rounded(.toNearestOrEven)))
+        let order = alive.sorted { total[$0] != total[$1] ? total[$0] < total[$1] : $0 < $1 }
+        let q = Array(order.prefix(k))
+        var noise = [Float](repeating: 0, count: B)
+        for t in q { for f in 0..<B { noise[f] += p[t * B + f] } }
+        for f in 0..<B { noise[f] = noise[f] / Float(k) + 1e-12 }
+        // Quanto il silenzio sta sotto la parte forte (90° percentile, interpolato come numpy): se poco, i momenti
+        // «silenziosi» sono ancora voce e il profilo non è affidabile; allora si toglie meno, fino a niente
+        let sorted = order.map { total[$0] }, pos = 0.9 * Double(sorted.count - 1), lo = Int(pos)
+        let loud = sorted[lo] + (sorted[min(lo + 1, sorted.count - 1)] - sorted[lo]) * (pos - Double(lo))
+        let qm = q.reduce(0.0) { $0 + total[$1] } / Double(k)
+        let span = 10 * log10(loud / max(qm, 1e-30))
+        let trust = Float(min(max((span - trustDB.0) / (trustDB.1 - trustDB.0), 0), 1))
+        guard trust > 0 else { return ones }
+        let s = SpectralGain.smoothed(p, T, B, fw: fw, smooth: smooth)
+        let floor = 1 - trust * (1 - Float(pow(10, floorDB / 20)))
+        var g = ones, prev = [Float](repeating: 1, count: B)
+        for t in 0..<T {
+            for f in 0..<B {
+                let v = floor + (1 - floor) * min(max(1 - over * noise[f] / max(s[t * B + f], 1e-20), 0), 1).squareRoot()
+                prev[f] = max(v, release * prev[f] + (1 - release) * v)
+                g[t * B + f] = prev[f]
+            }
+        }
+        return g
+    }
+
+    static func process(_ channels: [[Float]], progress: (Double) -> Void = { _ in },
+                        isCancelled: () -> Bool = { false }) throws -> [[Float]] {
+        try SpectralGain.run(channels, progress: progress, isCancelled: isCancelled, gains: gains)
+    }
+}
+
+/// Togli riverbero: dove l'energia di una riga dello spettro si spiega come la coda di quella di 116 ms prima,
+/// smorzata come in una sala grande, è riverbero e si abbassa (fino a −18 dB); note che partono o restano tenute
+/// passano intatte.
+enum Dereverb {
+    static let delay = 10
+    static let t60: Float = 2.0, r0: Float = 1.3, r1: Float = 2.2, floorDB: Float = -18
+    static let fw = 3, smooth: Float = 0.85
+
+    static func gains(_ p: [Float], _ T: Int, _ B: Int) -> [Float] {
+        let s = SpectralGain.smoothed(p, T, B, fw: fw, smooth: smooth)
+        let total = s.reduce(0.0) { $0 + Double($1) }
+        let eps = Float(1e-10 + 1e-8 * total / Double(T * B))
+        let decay = Float(exp(-2 * (3 * log(10.0) / Double(t60)) * Double(delay * SpectralGain.H) / 44100))
+        let floor = Float(pow(10, Double(floorDB) / 20))
+        var g = [Float](repeating: 0, count: T * B), prev = [Float](repeating: 1, count: B)
+        for t in 0..<T {
+            for k in 0..<B {
+                let late: Float = t >= delay ? decay * s[(t - delay) * B + k] : 0
+                let r = s[t * B + k] / (late + eps)
+                var v = min(max((r - r0) / (r1 - r0), 0), 1)
+                v = floor + (1 - floor) * v * v * (3 - 2 * v)
+                prev[k] = max(v, 0.5 * prev[k] + 0.5 * v)
+                g[t * B + k] = prev[k]
+            }
+        }
+        return g
+    }
+
+    static func process(_ channels: [[Float]], progress: (Double) -> Void = { _ in },
+                        isCancelled: () -> Bool = { false }) throws -> [[Float]] {
+        try SpectralGain.run(channels, progress: progress, isCancelled: isCancelled, gains: gains)
     }
 }
 
@@ -301,24 +203,10 @@ enum Cleanup {
     static func run(_ audio: [[Float]], noise: Bool, reverb: Bool, progress: @escaping (Double) -> Void,
                     isCancelled: @escaping () -> Bool) async throws -> [[Float]] {
         var x = audio
-        let share = noise && reverb ? 0.75 : 1.0
-        if noise {
-            let model = try await ModelStore.shared.denoiser { p in progress(p * 0.1) }
-            let n = x[0].count
-            let up = try AudioIO.convert(x, from: AudioIO.sampleRate, to: Double(model.cfg.sr))
-            var clean: [[Float]] = []
-            for (c, ch) in up.enumerated() {
-                clean.append(try model.process(ch, progress: { p in
-                    progress(0.1 + (share - 0.1) * (Double(c) + p) / Double(up.count))
-                }, isCancelled: isCancelled))
-            }
-            x = try AudioIO.convert(clean, from: Double(model.cfg.sr), to: AudioIO.sampleRate).map { ch in
-                ch.count >= n ? Array(ch.prefix(n)) : ch + [Float](repeating: 0, count: n - ch.count)
-            }
-        }
+        let both = noise && reverb
+        if noise { x = try Denoise.process(x, progress: { progress((both ? 0.5 : 1) * $0) }, isCancelled: isCancelled) }
         if reverb {
-            let base = noise ? share : 0
-            x = try Dereverb.process(x, progress: { progress(base + (1 - base) * $0) }, isCancelled: isCancelled)
+            x = try Dereverb.process(x, progress: { progress((both ? 0.5 : 0) + (both ? 0.5 : 1) * $0) }, isCancelled: isCancelled)
         }
         progress(1)
         return x

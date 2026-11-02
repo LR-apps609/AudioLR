@@ -15,6 +15,7 @@ from scipy.signal import resample_poly
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deepfilter_ref as R  # noqa: E402
 import dereverb_ref as D  # noqa: E402
+import denoise_ref as Z  # noqa: E402
 from convert_deepfilter import Net, snr  # noqa: E402
 from df.enhance import init_df  # noqa: E402
 
@@ -41,7 +42,7 @@ def main():
         return m.numpy(), c.numpy()
 
     z = RemoteZip(ZIP)
-    rows = []
+    rows, isolr = [], []
     for name in SONGS:
         try:
             v, sr = sf.read(io.BytesIO(z.read(f"test/{name}/vocals.wav")), dtype="float32")
@@ -83,6 +84,25 @@ def main():
         print(f"   solo maschera: voce {level(ym, sing) - level(x, sing):+.1f} dB (SNR {snr(x, ym):.1f}), rumore → {snr(x, ynm):.1f} dB")
         print("   limiti 18/12/9/6 dB: " + " | ".join(f"voce {a:+.1f} dB, SNR {b:.1f}, rumore → {c:.1f}" for a, b, c in lims))
         rows.append((keep, snr(x, noisy), snr(x, yn), drk) + tuple(v for t in lims for v in t))
+        # Il calcolo di IsoLR (denoise_ref) a 44,1 kHz: voce pulita, e fruscio a 30 e a 20 dB (sopra 100 Hz)
+        from scipy.signal import butter, sosfiltfilt
+        hp = butter(4, 100, "hp", fs=44100, output="sos")
+        x44f = x44.astype(np.float32)
+        s44 = resample_poly(sing.astype(float), 147, 160)[:len(x44f)] > 0.5
+        z0 = Z.denoise([x44f])[0]
+        parts = [f"voce pulita {level(z0, s44) - level(x44f, s44):+.2f} dB (SNR {snr(x44f, z0):.1f})"]
+        for db in (30, 20):
+            w = sosfiltfilt(hp, np.random.default_rng(1).standard_normal(len(x44f)))
+            w *= np.sqrt(np.mean(x44f[s44] ** 2) / np.mean(w ** 2)) / 10 ** (db / 20)
+            nz = (x44f + w).astype(np.float32)
+            zz = Z.denoise([nz])[0]
+            parts.append(f"fruscio a {db} dB: {snr(x44f, nz):.1f} → {snr(x44f, zz):.1f} dB")
+        print("   IsoLR Togli rumore: " + " · ".join(parts))
+        isolr.append([level(z0, s44) - level(x44f, s44)] + [float(p.split("→ ")[1].split(" dB")[0]) - float(p.split(": ")[1].split(" →")[0]) for p in parts[1:]])
+    if isolr:
+        b = np.array(isolr)
+        print(f"Media IsoLR Togli rumore su {len(isolr)} voci: voce pulita {b[:, 0].mean():+.2f} dB · fruscio a 30 dB "
+              f"{b[:, 1].mean():+.1f} dB · a 20 dB {b[:, 2].mean():+.1f} dB")
     if rows:
         a = np.array(rows)
         print(f"Media su {len(rows)} voci: voce pulita {a[:, 0].mean():+.1f} dB · rumore {a[:, 1].mean():.1f} → {a[:, 2].mean():.1f} dB · "

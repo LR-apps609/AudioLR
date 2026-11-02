@@ -221,8 +221,7 @@ self.onmessage = async (e) => {
     if (m.type === "load") {
       if (!nets[m.name]) {
         if (m.native) nets[m.name] = { native: true, cfg: m.cfg, backend: m.backend };
-        // DeepFilterNet è piccolo e ha delle GRU: sul processore (WASM), sempre
-        else { const { s, ep } = await session(new Uint8Array(m.bytes), m.forceWasm || m.cfg.kind === "deepfilter"); nets[m.name] = { session: s, cfg: m.cfg, backend: ep }; }
+        else { const { s, ep } = await session(new Uint8Array(m.bytes), m.forceWasm); nets[m.name] = { session: s, cfg: m.cfg, backend: ep }; }
       }
       post("loaded", { name: m.name, backend: nets[m.name].backend });
     } else if (m.type === "cancel") {
@@ -248,28 +247,15 @@ self.onmessage = async (e) => {
       };
       const list = await self.IsoLR.Midi.transcribe([m.left, m.right], run, () => cancelled);
       post("done", { notes: list.map((n) => ({ start: n.start, end: n.end, pitch: n.pitch, velocity: n.velocity })) });
-    } else if (m.type === "denoise") {
-      // Togli rumore: ogni canale da solo, a 48 kHz (la finestra ricampiona prima e dopo)
+    } else if (m.type === "clean") {
+      // Pulisci la voce: rumore, poi riverbero (core/cleanup.js, come Cleanup.swift)
       cancelled = false;
-      const d = nets.DeepFilter;
-      if (!d) throw new Error("modello del rumore non caricato");
-      const cfg = d.cfg, F = cfg.frames;
-      const net = async (fe, fs) => {
-        const o = await d.session.run({ feat_erb: new ort.Tensor("float32", fe, [1, 1, F, cfg.nb_erb]), feat_spec: new ort.Tensor("float32", fs, [1, 2, F, cfg.nb_df]) });
-        return { m: o.m.data, coefs: o.coefs.data };
-      };
-      const out = [];
-      for (const [c, x] of [m.left, m.right].entries()) {
-        out.push(await IsoLR.Cleanup.denoise(x, cfg, net, {
-          onProgress: (p) => post("progress", { progress: (m.span || 1) * (c + p) / 2, step: "Tolgo il rumore" }), isCancelled: () => cancelled }));
-      }
-      post("done", { channels: out }, out.map((b) => b.buffer));
-    } else if (m.type === "dereverb") {
-      cancelled = false;
-      const from = m.from || 0;
-      const out = IsoLR.Cleanup.dereverb([m.left, m.right], {
-        onProgress: (p) => post("progress", { progress: from + (1 - from) * p, step: "Tolgo il riverbero" }), isCancelled: () => cancelled });
-      post("done", { channels: out }, out.map((b) => b.buffer));
+      let audio = [m.left, m.right];
+      const both = m.noise && m.reverb, opts = (from, span, step) => ({
+        onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
+      if (m.noise) audio = IsoLR.Cleanup.denoise(audio, opts(0, both ? 0.5 : 1, "Tolgo il rumore"));
+      if (m.reverb) audio = IsoLR.Cleanup.dereverb(audio, opts(both ? 0.5 : 0, both ? 0.5 : 1, "Tolgo il riverbero"));
+      post("done", { channels: audio }, audio.map((b) => b.buffer));
     } else if (m.type === "split") {
       cancelled = false;
       const parts = await extraSplit(m.kind, [m.left, m.right]);

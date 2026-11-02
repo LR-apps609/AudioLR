@@ -584,14 +584,15 @@ struct ContentView: View {
                     if kind == .clean {
                         // Cosa togliere: il rumore (modello), il riverbero (calcolo, niente da scaricare)
                         Toggle("Rumore", isOn: $cleanNoise).toggleStyle(.checkbox).controlSize(.small)
-                            .help("Fruscio, ronzio, rumore della stanza o della separazione (DeepFilterNet)")
+                            .help("Fruscio, ronzio e rumore di fondo tra una frase e l'altra")
                         Toggle("Riverbero", isOn: $cleanReverb).toggleStyle(.checkbox).controlSize(.small)
                             .help("La coda della stanza o dell'effetto tra una nota e l'altra")
                     }
                     Button(kind == .drums ? "Dividi" : kind == .clean ? "Pulisci" : "Separa") { mixer.stop(); job.split(kind) }
                         .keyboardShortcut(kind == .drums ? "d" : kind == .gender ? "u" : kind == .clean ? "p" : "v", modifiers: [.command, .shift])
                         .disabled(kind == .clean && !cleanNoise && !cleanReverb)
-                        .help("\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : kind == .clean ? "⇧⌘P" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
+                        .help(kind == .clean ? "⇧⌘P · tutto sul Mac, niente da scaricare"
+                              : "\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous)

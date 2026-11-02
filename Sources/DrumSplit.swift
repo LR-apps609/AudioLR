@@ -128,7 +128,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return DrumSplitter.modelName
         case .vocals: return "VoceCori3"
         case .gender: return "VoceDuetto"
-        case .clean: return Denoiser.modelName
+        case .clean: return "PuliziaVoce"          // nessun modello: è un calcolo
         }
     }
 
@@ -164,7 +164,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .clean: return "Pulisco la voce"
         }
     }
-    var downloadSize: String { self == .gender ? "circa 270 MB" : self == .clean ? "circa 10 MB, solo per il rumore" : "circa 200 MB" }
+    var downloadSize: String { self == .gender ? "circa 270 MB" : self == .clean ? "niente da scaricare" : "circa 200 MB" }
 
     /// Divide la traccia: (nomi delle parti, parti).
     func run(_ audio: [[Float]], units: MLComputeUnits, progress: @escaping (Double) -> Void,

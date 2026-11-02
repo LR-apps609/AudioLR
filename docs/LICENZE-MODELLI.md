@@ -7,7 +7,7 @@ MDX23C) è MIT; qui si parla dei **pesi**, cioè dei file addestrati che IsoLR s
 |---|---|---|---|---|
 | HTDemucs, HTDemucsFT-0/1/2 | Rapida, riserve | Meta (Demucs v4) | MIT | ✅ |
 | Basic Pitch | Note MIDI | Spotify | Apache 2.0 | ✅ |
-| DeepFilter (DeepFilterNet3) | Pulisci la voce · rumore | Hendrik Schröter | MIT o Apache 2.0 (pesi nel repository dell'autore, commit d375b2d) | ✅ |
+| — (nessun modello) | Pulisci la voce · rumore | calcolo di IsoLR (Tools/denoise_ref.py) | nostra | ✅ |
 | — (nessun modello) | Pulisci la voce · riverbero | calcolo di IsoLR (Tools/dereverb_ref.py) | nostra | ✅ |
 | StrumentiSW (BS-RoFormer SW) | Massima, Studio | jarredou e altri | non dichiarata («unknown» sulla pagina dell'autore; un terzo dice MIT) | ⚠️ da chiedere |
 | VoceRevive (BS-RoFormer Revive V3e) | Studio, voce | unwa | non trovata | ⚠️ da chiedere |
@@ -15,6 +15,15 @@ MDX23C) è MIT; qui si parla dei **pesi**, cioè dei file addestrati che IsoLR s
 | VoceCori3 (Mel-Band RoFormer karaoke) | Voce e cori | aufr33, viperx | non trovata | ⚠️ da chiedere |
 | VoceDuetto (BS-RoFormer Chorus Male-Female) | Voce maschile e femminile | Sucial | non trovata | ⚠️ da chiedere |
 | BatteriaDrumSep (MDX23C DrumSep) | Dividi la batteria | aufr33, jarredou | non trovata | ⚠️ da chiedere |
+
+## Togli rumore: perché non DeepFilterNet
+DeepFilterNet3 (Hendrik Schröter, MIT o Apache 2.0) ha una licenza perfetta ed è stato convertito e provato
+(Tools/convert_deepfilter.py, workflow «Modello pulizia»: uguale all'originale, 5 → 12 dB sul parlato). Ma è fatto per
+il parlato: sulle voci cantate di 5 canzoni di MUSDB18-HQ (Tools/prova_canto.py) toglie anche pezzi di voce (in media
+−2,5 dB su una voce già pulita, −5,6 dB su un brano rock) e con un rumore a 10 dB il risultato peggiora in media
+(9,1 → 6,5 dB); limitarlo non basta. Per questo «Rumore» è un calcolo nostro, un «noise gate» spettrale: profilo del
+rumore dai momenti più silenziosi della traccia, abbassa solo quello che non supera il profilo; se la traccia non ha un
+rumore di fondo riconoscibile non tocca niente.
 
 ## Togli riverbero: perché senza modello
 Controllo del 2 novembre 2026: i modelli di dereverbero per la musica oggi disponibili hanno pesi con licenze che non

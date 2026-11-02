@@ -1,5 +1,5 @@
-// «Pulisci la voce» (Tests/CleanupTests.swift): FFT, Togli rumore con una rete finta contro il riferimento numpy,
-// Togli riverbero contro il riferimento e su un riverbero sintetico.
+// «Pulisci la voce» (Tests/CleanupTests.swift): FFT, Togli rumore e Togli riverbero contro i riferimenti numpy
+// (Tools/denoise_ref.py, dereverb_ref.py), poi su voci sintetiche con rumore e con riverbero.
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");
@@ -22,41 +22,30 @@ function signal(n, sr, seed) {
   return out;
 }
 
-test("FFT di 960 punti come la somma diretta", () => {
-  const n = 960, f = new C.MixedFFT(n), re = new Float64Array(n), im = new Float64Array(n);
-  for (let i = 0; i < n; i++) { re[i] = Math.sin(i * 0.37) + 0.3 * Math.cos(i * 1.9); im[i] = 0.1 * Math.sin(i * 0.11); }
-  const r0 = re.slice(), i0 = im.slice();
-  f.forward(re, im);
-  let err = 0;
-  for (const k of [0, 1, 7, 63, 64, 480, 959]) {
-    let xr = 0, xi = 0;
-    for (let j = 0; j < n; j++) { const a = (-2 * Math.PI * j * k) / n; xr += r0[j] * Math.cos(a) - i0[j] * Math.sin(a); xi += r0[j] * Math.sin(a) + i0[j] * Math.cos(a); }
-    err = Math.max(err, Math.abs(xr - re[k]), Math.abs(xi - im[k]));
+/** Note a pause sopra un fruscio leggero (phrases di make_cleanup_fixtures.py). */
+function gated(n, sr, seed) {
+  let s = seed;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    s = ((Math.imul(s, 1103515245) + 12345) >>> 0) & 0x7fffffff;
+    const noise = (s / 2147483648) * 2 - 1, t = i / sr;
+    out[i] = 0.3 * Math.sin(2 * Math.PI * 330 * t) * (t % 0.5 < 0.25 ? 1 : 0) + 0.01 * noise;
   }
-  assert.ok(err < 1e-8, `errore ${err}`);
-  const rf = new C.RealFFT(n), x = Float64Array.from(r0), R = new Float64Array(n / 2 + 1), I = new Float64Array(n / 2 + 1), y = new Float64Array(n);
+  return out;
+}
+
+test("FFT reale di 2048 punti: avanti e indietro", () => {
+  const n = 2048, rf = new C.RealFFT(n), x = new Float64Array(n), R = new Float64Array(n / 2 + 1), I = new Float64Array(n / 2 + 1), y = new Float64Array(n);
+  for (let i = 0; i < n; i++) x[i] = Math.sin(i * 0.37) + 0.3 * Math.cos(i * 1.9);
   rf.forward(x, R, I); rf.inverse(R, I, y);
   for (let i = 0; i < n; i++) assert.ok(Math.abs(y[i] / n - x[i]) < 1e-9);
 });
 
-test("Togli rumore: il calcolo intorno alla rete è quello di deepfilter_ref (rete finta)", async () => {
-  const cfg = { sr: 48000, fft: 960, hop: 480, nb_erb: 32, nb_df: 96, order: 5, lookahead: 2, alpha: 0.99, frames: 30, ctx: 5,
-    widths: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 5, 7, 7, 8, 10, 12, 13, 15, 18, 20, 24, 28, 31, 37, 42, 50, 56, 67] };
-  const F = cfg.frames, E = 32, D = 96, O = 5;
-  const net = async (fe, fs) => {
-    const m = new Float32Array(F * E), coefs = new Float32Array(F * D * O * 2);
-    for (let i = 0; i < F * E; i++) m[i] = 1 / (1 + Math.exp(-3 * fe[i]));
-    for (let t = 0; t < F; t++) for (let f = 0; f < D; f++) for (let o = 0; o < O; o++) {
-      coefs[(t * D + f) * O * 2 + 2 * o] = 0.1 * (o + 1) * fs[t * D + f];
-      coefs[(t * D + f) * O * 2 + 2 * o + 1] = 0.05 * fs[F * D + t * D + f];
-    }
-    return { m, coefs };
-  };
-  const y = await C.denoise(signal(19200, 48000, 7), cfg, net);
-  const want = fixture("denoise-finta.f32");
-  assert.strictEqual(y.length, want.length);
-  const q = snr(want, y);
-  assert.ok(q > 60, `${q.toFixed(1)} dB dal riferimento`);
+test("Togli rumore: uguale a denoise_ref", () => {
+  const out = C.denoise([gated(33075, 44100, 17), gated(33075, 44100, 19)]);
+  const want = fixture("denoise.f32");
+  const q0 = snr(want.subarray(0, 33075), out[0]), q1 = snr(want.subarray(33075), out[1]);
+  assert.ok(q0 > 40 && q1 > 40, `${q0.toFixed(1)} / ${q1.toFixed(1)} dB dal riferimento`);
 });
 
 test("Togli riverbero: uguale a dereverb_ref", () => {
@@ -102,6 +91,26 @@ function reverb(x, t60, offset) {
   return out;
 }
 const level = (x, mask) => { let s = 0, c = 0; for (let i = 0; i < x.length; i++) if (mask[i]) { s += x[i] * x[i]; c++; } return 10 * Math.log10(s / Math.max(c, 1) + 1e-20); };
+
+test("Togli rumore: le pause si puliscono, le note restano; una voce senza rumore non cambia", () => {
+  const { dry, env } = phrases();
+  const note = Array.from(env, (e) => e > 0.99);
+  const gap = new Array(dry.length).fill(false);
+  for (let i = 2205; i < dry.length - 2205; i++) { let ok = true; for (let j = i - 2205; j <= i + 2205 && ok; j += 49) ok = env[j] < 0.01; gap[i] = ok; }
+  // Silenzio digitale nelle pause: niente da togliere
+  const same = C.denoise([dry, dry]);
+  assert.ok(snr(dry, same[0]) > 40, `voce senza rumore cambiata: ${snr(dry, same[0]).toFixed(1)} dB`);
+  // Fruscio bianco 30 dB sotto la voce
+  let s = 5, ev = 0, c = 0;
+  for (let i = 0; i < dry.length; i++) if (note[i]) { ev += dry[i] * dry[i]; c++; }
+  const amp = Math.sqrt(ev / c) / Math.pow(10, 30 / 20) * Math.sqrt(3), x = new Float32Array(dry.length);
+  for (let i = 0; i < dry.length; i++) { s = ((Math.imul(s, 1103515245) + 12345) >>> 0) & 0x7fffffff; x[i] = dry[i] + amp * ((s / 2147483648) * 2 - 1); }
+  const out = C.denoise([x, x]);
+  const cut = level(x, gap) - level(out[0], gap), notes = level(out[0], note) - level(x, note);
+  assert.ok(cut > 10, `fruscio nelle pause solo ${cut.toFixed(1)} dB in meno`);
+  assert.ok(Math.abs(notes) < 0.5, `note ${notes.toFixed(2)} dB`);
+  assert.ok(snr(dry, out[0]) > snr(dry, x) + 3, `${snr(dry, x).toFixed(1)} → ${snr(dry, out[0]).toFixed(1)} dB`);
+});
 
 test("Togli riverbero: la voce senza riverbero resta com'è, la coda nelle pause scende", () => {
   const { dry, env } = phrases();

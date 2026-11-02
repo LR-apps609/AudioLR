@@ -1,6 +1,6 @@
-# «Togli rumore»: DeepFilterNet3 (Hendrik Schröter, pesi e codice MIT o Apache 2.0, dal repository dell'autore)
-# in Core ML per il Mac (modelli-1) e ONNX per Windows (modelli-windows), con le prove contro l'originale.
-# «Togli riverbero» non ha modello: è un calcolo di IsoLR (nessun modello di dereverbero con licenza libera).
+# Valutazione di DeepFilterNet3 (Hendrik Schröter, MIT o Apache 2.0) per «Togli rumore»: conversione in Core ML e ONNX
+# con le prove contro l'originale, poi la misura su voci cantate vere (MUSDB18-HQ). Esito: sul canto toglie anche voce,
+# quindi l'app usa un calcolo suo (Tools/denoise_ref.py); vedi docs/LICENZE-MODELLI.md. Niente si pubblica più.
 name: Modello pulizia
 
 on:
@@ -49,17 +49,3 @@ jobs:
           python Tools/prova_canto.py DeepFilterNet3 > canto.log 2>&1
           cat canto.log | grep -v Warning
           grep -E "dB" canto.log | while IFS= read -r l; do echo "::notice::$l"; done
-      - name: Pacchetti
-        run: |
-          N=DeepFilter
-          ditto -c -k --keepParent $N.mlpackage $N.mlpackage.zip
-          shasum -a 256 $N.mlpackage.zip | tee $N.sha256
-          shasum -a 256 $N.onnx | tee $N.onnx.sha256
-          ls -la $N.*
-      - name: Tra i file scaricabili
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh release upload modelli-1 DeepFilter.mlpackage.zip DeepFilter.sha256 DeepFilter.json DeepFilter-prova.f32 --clobber
-          gh release upload modelli-windows DeepFilter.onnx DeepFilter.onnx.sha256 DeepFilter.json DeepFilter-prova.f32 --clobber

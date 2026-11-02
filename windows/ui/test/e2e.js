@@ -247,15 +247,16 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   if (ly.meta) check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
   else console.log("::notice::video karaoke non provato: questo Chromium non ha l'H.264 (WebView2 di Windows sì)");
   const errBefore = errors.length;
-  // Pulisci la voce (rumore con DeepFilterNet vero, se il modello è accanto alla pagina, e riverbero)
-  const hasDF = await page.evaluate(async () => (await fetch("models/DeepFilter.json")).ok);
+  // Pulisci la voce: rumore e riverbero (calcoli senza modelli), dal tasto, al posto della voce nel mixer
   if (r.meta) {
     const c0 = Date.now();
-    await page.evaluate(async (noise) => {
-      Prefs.set("cleanNoise", noise); Prefs.set("cleanReverb", true);
+    await page.evaluate(async () => {
+      Prefs.set("cleanNoise", true); Prefs.set("cleanReverb", true);
       await IsoApp.openEntry(IsoApp.ui.library.find((e) => !e.meta.derivedFrom));
-      await IsoApp.job.split("clean");
-    }, hasDF);
+    });
+    await page.waitForTimeout(500);
+    await page.click('[data-split="clean"]');
+    for (let k = 0; k < 600 && await page.evaluate(() => !!IsoApp.job.splitting || !IsoApp.job.current.meta.stems.some((s) => s.key === "clean")); k++) await page.waitForTimeout(250);
     const cl = await page.evaluate(async () => {
       const c = IsoApp.job.current, st = c.meta.stems, s = st.find((x) => x.key === "clean");
       if (!s) return { error: IsoApp.job.splitError, keys: st.map((x) => x.key).join(",") };
@@ -263,13 +264,14 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
       const v = await read("vocals"), w = await read("clean");
       let ev = 0, ew = 0, bad = 0;
       for (let i = 0; i < v[0].length; i++) { ev += v[0][i] ** 2; ew += w[0][i] ** 2; if (!Number.isFinite(w[0][i])) bad++; }
-      await IsoApp.player.load(c);
-      return { len: w[0].length === v[0].length, ratio: 10 * Math.log10(ew / (ev || 1e-12)), bad };
+      const rows = [...document.querySelectorAll(".rows .row b")].map((b) => b.textContent);
+      return { rows, len: w[0].length === v[0].length, ratio: 10 * Math.log10(ew / (ev || 1e-12)), bad };
     });
     await page.waitForTimeout(800);
     await page.screenshot({ path: path.join(out, "win-e2e-pulizia.png") });
+    check((cl.rows || []).includes("Voce pulita") && !(cl.rows || []).includes("Voce"), `nel mixer la «Voce pulita» al posto della voce: ${(cl.rows || []).join(", ")}`);
     check(cl.len && cl.bad === 0 && cl.ratio < 0.5 && cl.ratio > -40,
-      `Pulisci la voce (${hasDF ? "rumore e riverbero" : "solo riverbero: DeepFilter non è accanto alla pagina"}) in ${Math.round((Date.now() - c0) / 1000)} s: «Voce pulita» ${cl.ratio != null ? cl.ratio.toFixed(1) : "?"} dB rispetto alla voce ${cl.error || ""} ${cl.keys || ""}`);
+      `Pulisci la voce (rumore e riverbero) in ${Math.round((Date.now() - c0) / 1000)} s: «Voce pulita» ${cl.ratio != null ? cl.ratio.toFixed(1) : "?"} dB rispetto alla voce ${cl.error || ""} ${cl.keys || ""}`);
   }
   if (errors.length) console.log(`::notice::errori nella pagina prima della pulizia: ${errBefore}, dopo: ${errors.length - errBefore}`);
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));

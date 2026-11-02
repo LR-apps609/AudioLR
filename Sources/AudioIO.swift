@@ -64,22 +64,10 @@ enum AudioIO {
         return (0..<Int(buf.format.channelCount)).map { Array(UnsafeBufferPointer(start: data[$0], count: n)) }
     }
 
-    /// Tracce da una frequenza di campionamento a un'altra (per i modelli che lavorano a 48 kHz).
-    static func convert(_ channels: [[Float]], from: Double, to: Double) throws -> [[Float]] {
-        guard from != to, let n = channels.first?.count, n > 0 else { return channels }
-        guard let f = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: from, channels: AVAudioChannelCount(channels.count), interleaved: false),
-              let buf = AVAudioPCMBuffer(pcmFormat: f, frameCapacity: AVAudioFrameCount(n)), let dst = buf.floatChannelData else {
-            throw SeparationError("non riesco a convertire questo audio")
-        }
-        buf.frameLength = AVAudioFrameCount(n)
-        for (c, ch) in channels.enumerated() { ch.withUnsafeBufferPointer { dst[c].update(from: $0.baseAddress!, count: n) } }
-        return try resample(buf, to: to)
-    }
-
     /// Cambia la frequenza di campionamento tenendo lo stesso numero di canali.
-    private static func resample(_ inBuf: AVAudioPCMBuffer, to rate: Double = sampleRate) throws -> [[Float]] {
+    private static func resample(_ inBuf: AVAudioPCMBuffer) throws -> [[Float]] {
         let inFormat = inBuf.format
-        guard let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate,
+        guard let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
                                             channels: inFormat.channelCount, interleaved: false),
               let conv = AVAudioConverter(from: inFormat, to: outFormat) else {
             throw SeparationError("non riesco a convertire questo audio")

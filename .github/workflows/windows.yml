@@ -28,12 +28,7 @@ jobs:
       - name: Pagine (con il modello Veloce)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          Tools/win-dist.sh
-          # Solo per la prova completa: il modello di «Togli rumore» accanto alla pagina (nell'app si scarica)
-          for f in DeepFilter.onnx DeepFilter.json; do
-            gh release download modelli-windows --repo "$GITHUB_REPOSITORY" --pattern "$f" --dir windows/dist/models --clobber || true
-          done
+        run: Tools/win-dist.sh
       - name: Schermate dell'interfaccia
         run: |
           npm i --prefix /tmp/pw playwright@1.47.2 --silent

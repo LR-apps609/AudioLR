@@ -52,7 +52,6 @@
           <tr><td>BS-RoFormer Chorus Male-Female (Sucial)</td><td>Voce maschile e femminile</td><td>MIT (codice)</td></tr>
           <tr><td>MDX23C DrumSep (aufr33, jarredou)</td><td>Batteria divisa</td><td>—</td></tr>
           <tr><td>Basic Pitch (Spotify)</td><td>Note MIDI</td><td>Apache 2.0</td></tr>
-          <tr><td>DeepFilterNet3 (Hendrik Schröter)</td><td>Pulisci la voce · rumore</td><td>MIT o Apache 2.0</td></tr>
           <tr><td>Signalsmith Stretch</td><td>Velocità e tono</td><td>MIT</td></tr>
           <tr><td>Whisper small (OpenAI)</td><td>Testo sincronizzato</td><td>MIT</td></tr>
           <tr><td>Transformers.js (Hugging Face)</td><td>Testo sincronizzato (motore)</td><td>Apache 2.0</td></tr></table>
