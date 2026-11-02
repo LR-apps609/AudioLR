@@ -172,7 +172,7 @@ final class CleanupTests: XCTestCase {
 
 /// Clic destro nel Finder › «Separa con IsoLR».
 final class FinderServiceTests: XCTestCase {
-    func testServiceIsDeclaredAndHandled() throws {
+    func testServiceIsDeclared() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let data = try Data(contentsOf: root.appendingPathComponent("Sources/Info.plist"))
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
@@ -181,14 +181,26 @@ final class FinderServiceTests: XCTestCase {
         XCTAssertEqual(s["NSMessage"] as? String, "separateWithIsoLR")
         XCTAssertEqual((s["NSMenuItem"] as? [String: String])?["default"], "Separa con IsoLR")
         XCTAssertEqual(s["NSSendFileTypes"] as? [String], ["public.audio"])
-        XCTAssertTrue(AppDelegate().responds(to: Selector(("separateWithIsoLR:userData:error:"))))
+        XCTAssertTrue(FinderService.shared.responds(to: Selector(("separateWithIsoLR:userData:error:"))))
     }
 
-    func testServiceRefusesEmptyPasteboard() {
+    func testServiceOpensTheFiles() throws {
         let pb = NSPasteboard(name: NSPasteboard.Name("prova-isolr-\(UUID().uuidString)"))
-        pb.clearContents()
+        let svc = FinderService()
+        var got: [URL] = []
+        svc.open = { got = $0 }
         var msg: NSString = ""
-        AppDelegate().separateWithIsoLR(pb, userData: "", error: &msg)
+        pb.clearContents()
+        svc.separateWithIsoLR(pb, userData: "", error: &msg)
         XCTAssertEqual(msg, "Nessun file audio scelto")
+        XCTAssertTrue(got.isEmpty)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("Prova clic destro.wav")
+        try Data([0]).write(to: file)
+        pb.clearContents()
+        pb.writeObjects([file as NSURL])
+        msg = ""
+        svc.separateWithIsoLR(pb, userData: "", error: &msg)
+        XCTAssertEqual(got.map(\.lastPathComponent), ["Prova clic destro.wav"])
+        XCTAssertEqual(msg, "")
     }
 }
