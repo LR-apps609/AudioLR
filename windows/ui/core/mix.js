@@ -16,7 +16,7 @@
   const drumParts = ["kick", "snare", "toms", "hh", "ride", "crash"];
 
   /// Tutte le tracce di voce (intera, oppure solista e cori, o uomo e donna, se è stata divisa).
-  const voices = new Set(["vocals", "lead", "backing", "male", "female"]);
+  const voices = new Set(["vocals", "lead", "backing", "male", "female", "clean"]);
 
   /// Scorciatoie: tutto, karaoke (senza voce), karaoke con i cori (se la voce è divisa), solo voce.
   const Preset = {
@@ -87,7 +87,7 @@
     get preset() {
       // «Tutta la voce»: la voce intera, oppure solista e cori insieme (o uomo e donna)
       const allVoice = (s) => s.size > 0 && subset(s, voices) &&
-        (s.has("vocals") || (s.has("lead") && s.has("backing")) || (s.has("male") && s.has("female")));
+        (s.has("vocals") || s.has("clean") || (s.has("lead") && s.has("backing")) || (s.has("male") && s.has("female")));
       const m = this.muted, s = this.solo;
       if (!m.size && !s.size) return "all";
       if (m.size === 1 && m.has("lead") && !s.size) return "backing";
@@ -122,6 +122,7 @@
     const splits = [
       { source: "vocals", parts: ["lead", "backing"] },
       { source: "vocals", parts: ["male", "female"] },
+      { source: "vocals", parts: ["clean"] },
       { source: "drums", parts: drumParts }];
     const replaced = splits.filter((s) => keys.some((k) => s.parts.includes(k))).map((s) => s.source);
     return keys.filter((k) => k !== "instrumental" && !replaced.includes(k));

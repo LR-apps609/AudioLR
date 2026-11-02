@@ -28,7 +28,12 @@ jobs:
       - name: Pagine (con il modello Veloce)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: Tools/win-dist.sh
+        run: |
+          Tools/win-dist.sh
+          # Solo per la prova completa: il modello di «Togli rumore» accanto alla pagina (nell'app si scarica)
+          for f in DeepFilter.onnx DeepFilter.json; do
+            gh release download modelli-windows --repo "$GITHUB_REPOSITORY" --pattern "$f" --dir windows/dist/models --clobber || true
+          done
       - name: Schermate dell'interfaccia
         run: |
           npm i --prefix /tmp/pw playwright@1.47.2 --silent
@@ -146,6 +151,26 @@ jobs:
           $p = Start-Process -FilePath $exe.FullName -PassThru
           Start-Sleep -Seconds 20
           if ($p.HasExited) { Write-Output "::error::IsoLR si è chiusa da sola dopo l'avvio (codice $($p.ExitCode))"; exit 1 }
+          # Clic destro «Separa con IsoLR»: la voce nel registro, e una seconda copia passa la canzone a quella aperta
+          $cmd = (Get-ItemProperty "HKCU:\Software\Classes\SystemFileAssociations\audio\shell\IsoLR\command" -ErrorAction SilentlyContinue).'(default)'
+          if (-not $cmd -or $cmd -notlike "*$($exe.Name)*") { Write-Output "::error::Manca la voce del clic destro (trovato: $cmd)"; exit 1 }
+          Write-Output "::notice::Clic destro: $cmd"
+          $wav = Join-Path $env:TEMP "Prova clic destro.wav"
+          $n = 44100; $data = New-Object byte[] (44 + $n * 4)
+          [Text.Encoding]::ASCII.GetBytes("RIFF").CopyTo($data, 0); [BitConverter]::GetBytes([int](36 + $n * 4)).CopyTo($data, 4)
+          [Text.Encoding]::ASCII.GetBytes("WAVEfmt ").CopyTo($data, 8); [BitConverter]::GetBytes([int]16).CopyTo($data, 16)
+          [BitConverter]::GetBytes([int16]1).CopyTo($data, 20); [BitConverter]::GetBytes([int16]2).CopyTo($data, 22)
+          [BitConverter]::GetBytes([int]44100).CopyTo($data, 24); [BitConverter]::GetBytes([int](44100 * 4)).CopyTo($data, 28)
+          [BitConverter]::GetBytes([int16]4).CopyTo($data, 32); [BitConverter]::GetBytes([int16]16).CopyTo($data, 34)
+          [Text.Encoding]::ASCII.GetBytes("data").CopyTo($data, 36); [BitConverter]::GetBytes([int]($n * 4)).CopyTo($data, 40)
+          for ($i = 0; $i -lt $n; $i++) { $v = [int16](8000 * [Math]::Sin(2 * [Math]::PI * 440 * $i / 44100)); $b2 = [BitConverter]::GetBytes($v); $b2.CopyTo($data, 44 + 4 * $i); $b2.CopyTo($data, 46 + 4 * $i) }
+          [IO.File]::WriteAllBytes($wav, $data)
+          $p2 = Start-Process -FilePath $exe.FullName -ArgumentList "`"$wav`"" -PassThru
+          Start-Sleep -Seconds 8
+          if (-not $p2.HasExited) { Write-Output "::error::La seconda copia di IsoLR non si è chiusa (la canzone non passa a quella aperta)"; Stop-Process -Id $p2.Id -Force; exit 1 }
+          Start-Sleep -Seconds 4
+          if (Test-Path (Join-Path $env:TEMP "IsoLR-apri\da-aprire.txt")) { Write-Output "::error::La finestra non ha preso la canzone del clic destro" ; exit 1 }
+          Write-Output "::notice::Clic destro: la canzone è passata alla IsoLR aperta"
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height

@@ -16,6 +16,7 @@
   const EXTRA = {
     vocals: { source: "vocals", parts: ["lead", "backing"], model: "VoceCori3", title: "Separa voce e cori", detail: "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori", icon: "people", size: "circa 200 MB" },
     gender: { source: "vocals", parts: ["male", "female"], model: "VoceDuetto", title: "Separa voce maschile e femminile", detail: "Nei duetti la voce di uomo da una parte, quella di donna dall'altra: canti solo la tua parte", icon: "people", size: "circa 170 MB" },
+    clean: { source: "vocals", parts: ["clean"], model: "DeepFilter", title: "Pulisci la voce", detail: "Togli il rumore di fondo e la coda del riverbero: la voce asciutta, per un remix o per cantarci sopra", icon: "sparkle", size: "circa 9 MB, solo per il rumore" },
     drums: { source: "drums", parts: ["kick", "snare", "toms", "hh", "ride", "crash"], model: "BatteriaDrumSep", title: "Dividi la batteria", detail: "Cassa, rullante, tom, charleston, ride e crash in corsie proprie", icon: "grid", size: "circa 200 MB" },
   };
 
@@ -30,6 +31,15 @@
     if (s < 50) return "circa 30 secondi";
     const m = Math.max(1, Math.round(s / 60));
     return `circa ${m} ${m === 1 ? "minuto" : "minuti"}`;
+  }
+
+  /** Tracce da una frequenza a un'altra (AudioIO.convert sul Mac), con il ricampionamento del browser. */
+  async function resample(ch, from, to) {
+    const n = Math.ceil((ch[0].length * to) / from), off = new OfflineAudioContext(2, n, to);
+    const b = off.createBuffer(2, ch[0].length, from); b.copyToChannel(ch[0], 0); b.copyToChannel(ch[1], 1);
+    const s = off.createBufferSource(); s.buffer = b; s.connect(off.destination); s.start();
+    const r = await off.startRendering();
+    return [r.getChannelData(0).slice(), r.getChannelData(1).slice()];
   }
 
   /** Legge e decodifica un file audio in stereo a 44,1 kHz (come AudioIO.read). */
@@ -353,17 +363,42 @@
       this.addEventListener("change", listen);
       try {
         const src = cur.meta.stems.find((s) => s.key === x.source);
-        const res = await this.withFallback(async () => {
-          await this.model(x.model, "il modello");
-          const audio = Encode.readWav(await Bridge.readFile(cur.folder + "/" + src.file));
-          return this.call({ type: "split", kind, left: audio[0], right: audio[1] }, [audio[0].buffer, audio[1].buffer]);
-        });
-        const parts = {};
-        res.keys.forEach((k, i) => { parts[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
-        await addStems(cur, parts);
+        if (kind === "clean") {
+          await addStems(cur, { clean: await this.withFallback(() => this.cleanVoice(cur.folder + "/" + src.file)) });
+        } else {
+          const res = await this.withFallback(async () => {
+            await this.model(x.model, "il modello");
+            const audio = Encode.readWav(await Bridge.readFile(cur.folder + "/" + src.file));
+            return this.call({ type: "split", kind, left: audio[0], right: audio[1] }, [audio[0].buffer, audio[1].buffer]);
+          });
+          const parts = {};
+          res.keys.forEach((k, i) => { parts[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
+          await addStems(cur, parts);
+        }
       } catch (e) { this.splitError = String(e.message || e); }
       this.removeEventListener("change", listen);
       this.splitting = null; this.emit();
+    }
+
+    /** Pulisci la voce (Cleanup.run sul Mac): rumore con DeepFilterNet a 48 kHz, poi riverbero, a 44,1 kHz. */
+    async cleanVoice(path) {
+      const noise = Prefs.get("cleanNoise", true), reverb = Prefs.get("cleanReverb", true);
+      let audio = Encode.readWav(await Bridge.readFile(path));
+      const n = audio[0].length;
+      if (noise) {
+        await this.model("DeepFilter", "il modello del rumore");
+        this.step = "Tolgo il rumore…"; this.emit();
+        const up = await resample(audio, RATE, 48000);
+        const res = await this.call({ type: "denoise", left: up[0], right: up[1], span: reverb ? 0.75 : 1 }, [up[0].buffer, up[1].buffer]);
+        const back = await resample([res.channels[0], res.channels[1]], 48000, RATE);
+        audio = back.map((c) => { const o = new Float32Array(n); o.set(c.subarray(0, n)); return o; });
+      }
+      if (reverb) {
+        this.step = "Tolgo il riverbero…"; this.emit();
+        const res = await this.call({ type: "dereverb", left: audio[0], right: audio[1], from: noise ? 0.75 : 0 }, [audio[0].buffer, audio[1].buffer]);
+        audio = [res.channels[0], res.channels[1]];
+      }
+      return audio;
     }
 
     /** Le note di una traccia (Basic Pitch), per MIDI, spartito e tablatura. */
@@ -392,11 +427,11 @@
   }
 
   const NAMES = {
-    vocals: "Voce", lead: "Voce solista", backing: "Cori", male: "Voce maschile", female: "Voce femminile", drums: "Batteria",
+    vocals: "Voce", clean: "Voce pulita", lead: "Voce solista", backing: "Cori", male: "Voce maschile", female: "Voce femminile", drums: "Batteria",
     kick: "Cassa", snare: "Rullante", toms: "Tom", hh: "Charleston", ride: "Ride", crash: "Crash",
     bass: "Basso", guitar: "Chitarra", piano: "Pianoforte", other: "Altri strumenti", instrumental: "Base (senza voce)",
   };
-  const ORDER = ["vocals", "lead", "male", "backing", "female", "drums", "kick", "snare", "toms", "hh", "ride", "crash", "bass", "guitar", "piano", "other", "instrumental"];
+  const ORDER = ["vocals", "clean", "lead", "male", "backing", "female", "drums", "kick", "snare", "toms", "hh", "ride", "crash", "bass", "guitar", "piano", "other", "instrumental"];
 
   /** Le tracce in una cartella nuova, nel formato delle impostazioni, più isolr.json con tutto il resto. */
   async function save(title, tracks, info, into = null) {

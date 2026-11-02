@@ -20,7 +20,7 @@
 
   /// Colori delle tracce (gli stessi del tema scuro) e il colore più vicino della tavolozza di Ableton (0…69).
   const COLORS = {
-    vocals: [0xFF7A66, 14], lead: [0xEC8A70, 14], backing: [0xF0B3A2, 2], male: [0xE07F66, 14], female: [0xF4B49B, 2],
+    vocals: [0xFF7A66, 14], clean: [0xFF8F7D, 14], lead: [0xEC8A70, 14], backing: [0xF0B3A2, 2], male: [0xE07F66, 14], female: [0xF4B49B, 2],
     drums: [0xFFC24B, 4], bass: [0xB48CFF, 24], guitar: [0x8EE07A, 6], piano: [0x7FA8FF, 21], other: [0x43E0C2, 8],
     instrumental: [0x6CC3FF, 21],
   };

@@ -20,7 +20,7 @@ const BASE: &str = "https://github.com/LR-apps609/AudioLR/releases/download/mode
 /// I modelli che si possono scaricare (nessun altro indirizzo è raggiungibile da qui).
 const MODELS: &[&str] = &[
     "StrumentiSW", "VoceRevive", "VoceRoFormer9", "VoceCori3", "VoceDuetto", "BatteriaDrumSep",
-    "HTDemucs", "HTDemucsFT-1", "BasicPitch", "WhisperEncoder", "WhisperDecoder",
+    "HTDemucs", "HTDemucsFT-1", "BasicPitch", "WhisperEncoder", "WhisperDecoder", "DeepFilter",
 ];
 
 /// Le cartelle scelte nelle finestre di salvataggio: solo lì (e in Musica › IsoLR) si può scrivere.
@@ -472,7 +472,55 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Clic destro › «Separa con IsoLR» (Esplora file): le canzoni da aprire arrivano come argomenti. Se IsoLR è già
+/// aperta, la seconda copia le lascia in una cartella e si chiude; la finestra le prende da lì (take_opened).
+fn inbox() -> PathBuf {
+    let dir = std::env::temp_dir().join("IsoLR-apri");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn leave_for_window(files: &[String]) {
+    if files.is_empty() {
+        return;
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(inbox().join("da-aprire.txt")) {
+        for p in files {
+            let _ = writeln!(f, "{p}");
+        }
+    }
+}
+
+/// Le canzoni arrivate dal clic destro (e mai prese): si possono leggere, poi la lista si svuota.
+#[tauri::command]
+fn take_opened(allowed: State<'_, Allowed>) -> Vec<String> {
+    let path = inbox().join("da-aprire.txt");
+    let Ok(text) = std::fs::read_to_string(&path) else { return vec![] };
+    let _ = std::fs::remove_file(&path);
+    let mut out = vec![];
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let p = PathBuf::from(line);
+        if p.is_file() {
+            allowed.0.lock().unwrap().insert(p.clone());
+            out.push(line.to_string());
+        }
+    }
+    out
+}
+
 fn main() {
+    let files: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with('/') && Path::new(a).is_file()).collect();
+    // Una copia sola: il lucchetto resta preso finché IsoLR è aperta
+    let lock = std::fs::File::create(inbox().join("istanza.lock"));
+    let first = match &lock {
+        Ok(f) => f.try_lock().is_ok(),
+        Err(_) => true,
+    };
+    leave_for_window(&files);
+    if !first {
+        return;
+    }
+    let _keep = lock;
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -481,7 +529,7 @@ fn main() {
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, read_model, models_ready, check_update, install_update,
-            native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade
+            native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade, take_opened
         ])
         .run(tauri::generate_context!())
         .expect("IsoLR non è riuscita ad avviarsi");

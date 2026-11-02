@@ -188,6 +188,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in Warmup.shared.start() }
         // Nel Dock la barra del lavoro in corso
         Task { @MainActor in DockProgress.shared.start() }
+        // Clic destro nel Finder › «Separa con IsoLR»
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
+    }
+
+    /// Il servizio «Separa con IsoLR» (Finder › clic destro › Azioni rapide o Servizi): i file scelti come con «Apri con».
+    @objc func separateWithIsoLR(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        let urls = (pboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        guard !urls.isEmpty else {
+            error.pointee = "Nessun file audio scelto" as NSString
+            return
+        }
+        application(NSApp, open: urls)
     }
 
     /// Doppio clic su un aggiornamento .audiolr, oppure «Apri con → IsoLR» su una canzone

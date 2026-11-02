@@ -8,8 +8,8 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const fmt = (t) => { t = Math.max(0, t || 0); const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, "0")}`; };
   /** Le tracce con note (la batteria no: non ha altezze). */
-  const melodic = (meta) => meta.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].includes(s.key));
-  const ICON = { vocals: "mic", lead: "mic", backing: "people", male: "user", female: "user", drums: "drum", kick: "drum", snare: "drum", toms: "drum", hh: "sparkle", ride: "drum", crash: "sparkle", bass: "bass", guitar: "guitar", piano: "piano", other: "other", instrumental: "headphones" };
+  const melodic = (meta) => meta.stems.filter((s) => ["vocals", "lead", "backing", "male", "female", "clean", "bass", "guitar", "piano", "other"].includes(s.key));
+  const ICON = { vocals: "mic", clean: "sparkle", lead: "mic", backing: "people", male: "user", female: "user", drums: "drum", kick: "drum", snare: "drum", toms: "drum", hh: "sparkle", ride: "drum", crash: "sparkle", bass: "bass", guitar: "guitar", piano: "piano", other: "other", instrumental: "headphones" };
   const KEY_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"], IT_NAMES = ["Do", "Do♯", "Re", "Mi♭", "Mi", "Fa", "Fa♯", "Sol", "La♭", "La", "Si♭", "Si"];
 
   const job = new Separation.Job();
@@ -299,7 +299,9 @@
           ${stems.map((s) => row(s)).join("")}
           ${splits.map(([k, x]) => `<div class="split">${Icon(x.icon)}<div style="flex:1"><b>${x.title}</b><span>${x.detail}</span>
             ${job.splitError && job.splitting == null && ui.lastSplit === k ? `<span class="rec">Non riuscito: ${esc(job.splitError)}</span>` : ""}</div>
-            ${job.splitting === k ? `<div class="bar"><i style="width:${Math.round((job.splitProgress || 0) * 100)}%"></i></div>` : `<button class="btn" data-split="${k}" ${job.splitting ? "disabled" : ""} title="La prima volta scarica il modello (${x.size})">${k === "drums" ? "Dividi" : "Separa"}</button>`}</div>`).join("")}
+            ${k === "clean" && job.splitting !== k ? `<label class="chk" title="Fruscio, ronzio, rumore della stanza o della separazione (DeepFilterNet)"><input type="checkbox" data-input="clean-noise" ${Prefs.get("cleanNoise", true) ? "checked" : ""}> Rumore</label>
+              <label class="chk" title="La coda della stanza o dell'effetto tra una nota e l'altra"><input type="checkbox" data-input="clean-reverb" ${Prefs.get("cleanReverb", true) ? "checked" : ""}> Riverbero</label>` : ""}
+            ${job.splitting === k ? `<div class="bar"><i style="width:${Math.round((job.splitProgress || 0) * 100)}%"></i></div>` : `<button class="btn" data-split="${k}" ${job.splitting || (k === "clean" && !Prefs.get("cleanNoise", true) && !Prefs.get("cleanReverb", true)) ? "disabled" : ""} title="${k === "clean" ? "Ctrl+Maiusc+P · " : ""}La prima volta scarica il modello (${x.size})">${k === "drums" ? "Dividi" : k === "clean" ? "Pulisci" : "Separa"}</button>`}</div>`).join("")}
           ${base ? `<div style="border-top:1px solid var(--stroke);margin:4px 0"></div>${row(base, true)}` : ""}
         </div>
         <div class="hint">Clic sull'onda per ascoltare da quel punto · le tracce si possono anche trascinare nel tuo programma musicale da Esplora file</div>
@@ -702,6 +704,7 @@
   document.addEventListener("change", async (ev) => {
     const el = ev.target, d = el.dataset;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
+    if (d.input === "clean-noise" || d.input === "clean-reverb") { Prefs.set(d.input === "clean-noise" ? "cleanNoise" : "cleanReverb", el.checked); return panel(); }
     // Filtri della libreria
     if (d.input && d.input.startsWith("lib-")) {
       const f = { ...ui.filter };
@@ -743,8 +746,22 @@
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "g" && job.current) { e.preventDefault(); $('[data-act="warp"]') && $('[data-act="warp"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "x" && job.current) { e.preventDefault(); $('[data-act="arrange"]') && $('[data-act="arrange"]').click(); }
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
+    // Come ⇧⌘P sul Mac: Pulisci la voce
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p" && job.phase === "done") { e.preventDefault(); $('[data-split="clean"]') && $('[data-split="clean"]').click(); }
     if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
   });
+  // Clic destro › «Separa con IsoLR» in Esplora file: all'avvio e mentre IsoLR è aperta
+  async function takeOpened() {
+    try {
+      const list = await Bridge.takeOpened();
+      if (!list.length) return;
+      const files = [];
+      for (const p of list) files.push(new File([await Bridge.readFile(p)], p.split(/[\\/]/).pop()));
+      player.stop(); job.add(files); Bridge.focus();
+    } catch (e) { /* un file sparito nel frattempo: niente */ }
+  }
+  takeOpened();
+  setInterval(takeOpened, 1500);
   // Una canzone trascinata ovunque nella finestra
   document.addEventListener("dragover", (e) => e.preventDefault());
   document.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer.files.length) { player.stop(); job.add(e.dataTransfer.files); } });

@@ -246,6 +246,30 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
   check(ly.words === 4 && ly.rows === 2 && ly.lrc.includes("[00:00.50]Ciao mondo.") && ly.lrc.includes("[00:02.50]Di nuovo"), `testo: ${ly.words} parole, ${ly.rows} righe nell'editor, .lrc giusto`);
   if (ly.meta) check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
   else console.log("::notice::video karaoke non provato: questo Chromium non ha l'H.264 (WebView2 di Windows sì)");
+  // Pulisci la voce (rumore con DeepFilterNet vero, se il modello è accanto alla pagina, e riverbero)
+  const hasDF = await page.evaluate(async () => (await fetch("models/DeepFilter.json")).ok);
+  if (r.meta) {
+    const c0 = Date.now();
+    await page.evaluate(async (noise) => {
+      Prefs.set("cleanNoise", noise); Prefs.set("cleanReverb", true);
+      await IsoApp.openEntry(IsoApp.ui.library.find((e) => !e.meta.derivedFrom));
+      await IsoApp.job.split("clean");
+    }, hasDF);
+    const cl = await page.evaluate(async () => {
+      const c = IsoApp.job.current, st = c.meta.stems, s = st.find((x) => x.key === "clean");
+      if (!s) return { error: IsoApp.job.splitError, keys: st.map((x) => x.key).join(",") };
+      const read = async (k) => Encode.readWav(await Bridge.readFile(c.folder + "/" + st.find((x) => x.key === k).file));
+      const v = await read("vocals"), w = await read("clean");
+      let ev = 0, ew = 0, bad = 0;
+      for (let i = 0; i < v[0].length; i++) { ev += v[0][i] ** 2; ew += w[0][i] ** 2; if (!Number.isFinite(w[0][i])) bad++; }
+      await IsoApp.player.load(c);
+      return { len: w[0].length === v[0].length, ratio: 10 * Math.log10(ew / (ev || 1e-12)), bad };
+    });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(out, "win-e2e-pulizia.png") });
+    check(cl.len && cl.bad === 0 && cl.ratio < 0.5 && cl.ratio > -40,
+      `Pulisci la voce (${hasDF ? "rumore e riverbero" : "solo riverbero: DeepFilter non è accanto alla pagina"}) in ${Math.round((Date.now() - c0) / 1000)} s: «Voce pulita» ${cl.ratio != null ? cl.ratio.toFixed(1) : "?"} dB rispetto alla voce ${cl.error || ""} ${cl.keys || ""}`);
+  }
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));
   await browser.close();
   server.close();

@@ -217,7 +217,7 @@
   /// Il suono General MIDI più vicino a ogni traccia.
   function program(stem) {
     switch (stem) {
-      case "vocals": case "lead": case "male": case "female": return 53;   // voce «oohs»
+      case "vocals": case "lead": case "male": case "female": case "clean": return 53;   // voce «oohs»
       case "backing": return 52;                 // coro «aahs»
       case "bass": return 33;                    // basso elettrico
       case "guitar": return 25;                  // chitarra acustica

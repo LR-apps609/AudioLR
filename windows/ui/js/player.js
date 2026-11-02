@@ -7,9 +7,9 @@
 (function () {
   "use strict";
   const RATE = 44100;
-  const VOICES = ["vocals", "lead", "backing", "male", "female"];
-  const SPLITS = { vocals: ["lead", "backing"], gender: ["male", "female"], drums: ["kick", "snare", "toms", "hh", "ride", "crash"] };
-  const SOURCE = { vocals: "vocals", gender: "vocals", drums: "drums" };
+  const VOICES = ["vocals", "lead", "backing", "male", "female", "clean"];
+  const SPLITS = { vocals: ["lead", "backing"], gender: ["male", "female"], clean: ["clean"], drums: ["kick", "snare", "toms", "hh", "ride", "crash"] };
+  const SOURCE = { vocals: "vocals", gender: "vocals", clean: "vocals", drums: "drums" };
   const INSTRUMENTS = { drums: ["drums", "kick", "snare", "toms", "hh", "ride", "crash"], bass: ["bass"], guitar: ["guitar"], piano: ["piano"] };
 
   /** Le tracce da mescolare: la base resta fuori (è già un mix); le tracce divise prendono il posto della loro. */

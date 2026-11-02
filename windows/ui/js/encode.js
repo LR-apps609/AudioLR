@@ -233,7 +233,7 @@
     { name: "Drums", color: "#C48E2C", keys: ["drums", "kick", "snare", "toms", "hh", "ride", "crash"] },
     { name: "Bass", color: "#8C6AAF", keys: ["bass"] },
     { name: "Other", color: "#3C978C", keys: ["guitar", "piano", "other"] },
-    { name: "Vocals", color: "#CF6F57", keys: ["vocals", "lead", "backing", "male", "female"] },
+    { name: "Vocals", color: "#CF6F57", keys: ["vocals", "lead", "backing", "male", "female", "clean"] },
   ];
   async function stemMp4(tracks) {
     const n = Math.max(...Object.values(tracks).map((t) => t[0].length));

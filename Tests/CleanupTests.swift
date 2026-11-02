@@ -1,4 +1,5 @@
 import Accelerate
+import AppKit
 import XCTest
 @testable import AudioLR
 
@@ -167,5 +168,28 @@ final class CleanupTests: XCTestCase {
         let want = try fixture("dereverb.f32")
         XCTAssertGreaterThan(EndToEndTests.snr(Array(want[0..<22050]), out[0]), 60)
         XCTAssertGreaterThan(EndToEndTests.snr(Array(want[22050...]), out[1]), 60)
+    }
+}
+
+/// Clic destro nel Finder › «Separa con IsoLR».
+final class FinderServiceTests: XCTestCase {
+    func testServiceIsDeclaredAndHandled() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("Sources/Info.plist"))
+        let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let services = try XCTUnwrap(plist["NSServices"] as? [[String: Any]])
+        let s = try XCTUnwrap(services.first)
+        XCTAssertEqual(s["NSMessage"] as? String, "separateWithIsoLR")
+        XCTAssertEqual((s["NSMenuItem"] as? [String: String])?["default"], "Separa con IsoLR")
+        XCTAssertEqual(s["NSSendFileTypes"] as? [String], ["public.audio"])
+        XCTAssertTrue(AppDelegate().responds(to: Selector(("separateWithIsoLR:userData:error:"))))
+    }
+
+    func testServiceRefusesEmptyPasteboard() {
+        let pb = NSPasteboard(name: NSPasteboard.Name("prova-isolr-\(UUID().uuidString)"))
+        pb.clearContents()
+        var msg: NSString = ""
+        AppDelegate().separateWithIsoLR(pb, userData: "", error: &msg)
+        XCTAssertEqual(msg, "Nessun file audio scelto")
     }
 }

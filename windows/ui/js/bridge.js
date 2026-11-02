@@ -84,16 +84,22 @@
       w.setProgressBar(p == null ? { status: "none" } : { status: "normal", progress: Math.round(p * 100) }).catch(() => {});
     },
     focus() { if (DESKTOP) invoke("bring_to_front").catch(() => {}); },
+    /** Le canzoni arrivate dal clic destro in Esplora file («Separa con IsoLR»), una volta sola. */
+    async takeOpened() { return DESKTOP ? invoke("take_opened") : []; },
 
     // ── Modelli di Massima e Studio (e delle divisioni in più): scaricati la prima volta ──
     async modelsReady() { return DESKTOP ? invoke("models_ready") : []; },
     async prepareModel(name, onProgress) {
-      if (!DESKTOP) throw new Error("i modelli grandi funzionano solo nell'app");
+      // Nel browser (le prove automatiche) solo i modelli messi accanto alla pagina, in «models»
+      if (!DESKTOP) { if ((await fetch(`models/${enc(name)}.json`)).ok) return; throw new Error("i modelli grandi funzionano solo nell'app"); }
       let un = null;
       if (onProgress && T.event) un = await T.event.listen("model-download", (e) => { if (e.payload.name === name) onProgress(e.payload.progress); });
       try { await invoke("prepare_model", { name }); } finally { if (un) un(); }
     },
-    async readModel(name, part) { return new Uint8Array(await invoke("read_model", { name, part })); },
+    async readModel(name, part) {
+      if (!DESKTOP) return new Uint8Array(await (await fetch(`models/${enc(name)}.${part}`)).arrayBuffer());
+      return new Uint8Array(await invoke("read_model", { name, part }));
+    },
 
     // ── Calcolo nativo dei RoFormer (ONNX Runtime con DirectML o processore, fuori dalla finestra) ──
     async nativeLoad(name, cpuOnly, level) { return invoke("native_load", { name, cpuOnly, level }); },

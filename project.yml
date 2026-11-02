@@ -61,6 +61,14 @@ targets:
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
             LSItemContentTypes: [public.audio]
+        # Clic destro nel Finder su un file audio › Azioni rapide (o Servizi) › «Separa con IsoLR»
+        NSServices:
+          - NSMenuItem:
+              default: "Separa con IsoLR"
+            NSMessage: separateWithIsoLR
+            NSPortName: AudioLR
+            NSRequiredContext: {}
+            NSSendFileTypes: [public.audio]
         # I file .audiolr sono gli aggiornamenti: doppio clic → si installano da soli
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: it.ledion.audiolr.update
