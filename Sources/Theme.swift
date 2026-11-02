@@ -64,6 +64,7 @@ enum Theme {
         case "other": return Color(light: 0x16917F, dark: 0x43E0C2)         // verde acqua
         // Voce solista e cori: sfumature del corallo della voce
         case "lead": return Color(light: 0xC85A44, dark: 0xEC8A70)
+        case "clean": return Color(light: 0xD4604A, dark: 0xFF8F7D)       // voce pulita: il corallo, più chiaro
         case "backing": return Color(light: 0xD88F7C, dark: 0xF0B3A2)
         case "male": return Color(light: 0xB8553F, dark: 0xE07F66)
         case "female": return Color(light: 0xDB8A6E, dark: 0xF4B49B)

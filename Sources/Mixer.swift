@@ -74,7 +74,7 @@ struct MixState: Equatable {
     }
 
     /// Tutte le tracce di voce (intera, oppure solista e cori se è stata divisa).
-    static let voices: Set<String> = ["vocals", "lead", "backing", "male", "female"]
+    static let voices: Set<String> = ["vocals", "lead", "backing", "male", "female", "clean"]
 
     mutating func apply(_ p: Preset) {
         muted = []
@@ -91,7 +91,7 @@ struct MixState: Equatable {
     var preset: Preset? {
         // «Tutta la voce»: la voce intera, oppure solista e cori insieme
         func allVoice(_ s: Set<String>) -> Bool {
-            !s.isEmpty && s.isSubset(of: Self.voices) && (s.contains("vocals") || s.isSuperset(of: ["lead", "backing"]) || s.isSuperset(of: ["male", "female"]))
+            !s.isEmpty && s.isSubset(of: Self.voices) && (s.contains("vocals") || s.contains("clean") || s.isSuperset(of: ["lead", "backing"]) || s.isSuperset(of: ["male", "female"]))
         }
         if muted.isEmpty && solo.isEmpty { return .all }
         if muted == ["lead"] && solo.isEmpty { return .backing }

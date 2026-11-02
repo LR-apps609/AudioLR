@@ -74,6 +74,8 @@ enum FAQ {
               answer: "Apri la Sala prove (⌥⌘P), segna l'inizio con A (⌘[) e la fine con B (⌘]), poi attiva «Rampa»: il passaggio parte al 70% della velocità e a ogni giro accelera del 5%, fino al 100%. Il tono resta quello originale."),
         Entry(topic: "Mixer ed esportazione", question: "Posso tenere i cori nel karaoke?",
               answer: "Sì: dopo una separazione premi «Separa voce e cori» (⇧⌘V). La voce viene divisa in voce solista e cori; nel mixer compare la scorciatoia «Con i cori», che toglie solo la voce principale. La prima volta scarica un modello di circa 200 MB."),
+        Entry(topic: "Mixer ed esportazione", question: "Posso togliere rumore e riverbero dalla voce?",
+              answer: "Sì: dopo una separazione premi «Pulisci la voce» (⇧⌘P) e scegli cosa togliere. «Rumore» toglie fruscio, ronzio e rumore della stanza con DeepFilterNet (la prima volta scarica circa 10 MB). «Riverbero» abbassa la coda della stanza o dell'effetto tra una nota e l'altra; il riverbero che suona insieme a una nota tenuta resta in parte. Nel mixer la «Voce pulita» prende il posto della voce e si scarica come le altre tracce."),
         Entry(topic: "Mixer ed esportazione", question: "Cosa sono BPM e tonalità sotto il mixer?",
               answer: "Dopo ogni separazione IsoLR stima il tempo (BPM, dalla batteria) e la tonalità (dagli strumenti, senza voce e batteria). Passa sopra con il mouse per vedere la sigla (es. Am) e il codice Camelot dei DJ (es. 8A). Se il tempo ti sembra la metà di quello giusto, è il doppio: succede con i brani molto veloci."),
         Entry(topic: "Mixer ed esportazione", question: "Come salvo il mio mix?",

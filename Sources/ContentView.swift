@@ -68,6 +68,8 @@ struct ContentView: View {
     @State private var showSlice = false
     @State private var showLyrics = false
     @AppStorage("showPractice") private var showPractice = false
+    @AppStorage(Prefs.cleanNoiseKey) private var cleanNoise = true
+    @AppStorage(Prefs.cleanReverbKey) private var cleanReverb = true
     @AppStorage("italianChords") private var italianChords = false
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var typing = TypingFocus.shared
@@ -579,9 +581,17 @@ struct ContentView: View {
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(kind == .drums ? "Dividi" : "Separa") { mixer.stop(); job.split(kind) }
-                        .keyboardShortcut(kind == .drums ? "d" : kind == .gender ? "u" : "v", modifiers: [.command, .shift])
-                        .help("\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
+                    if kind == .clean {
+                        // Cosa togliere: il rumore (modello), il riverbero (calcolo, niente da scaricare)
+                        Toggle("Rumore", isOn: $cleanNoise).toggleStyle(.checkbox).controlSize(.small)
+                            .help("Fruscio, ronzio, rumore della stanza o della separazione (DeepFilterNet)")
+                        Toggle("Riverbero", isOn: $cleanReverb).toggleStyle(.checkbox).controlSize(.small)
+                            .help("La coda della stanza o dell'effetto tra una nota e l'altra")
+                    }
+                    Button(kind == .drums ? "Dividi" : kind == .clean ? "Pulisci" : "Separa") { mixer.stop(); job.split(kind) }
+                        .keyboardShortcut(kind == .drums ? "d" : kind == .gender ? "u" : kind == .clean ? "p" : "v", modifiers: [.command, .shift])
+                        .disabled(kind == .clean && !cleanNoise && !cleanReverb)
+                        .help("\(kind == .drums ? "⇧⌘D" : kind == .gender ? "⇧⌘U" : kind == .clean ? "⇧⌘P" : "⇧⌘V") · la prima volta scarica il modello (\(kind.downloadSize))")
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous)

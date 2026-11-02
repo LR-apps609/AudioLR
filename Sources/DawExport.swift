@@ -59,6 +59,7 @@ enum DawExport {
     static func color(_ key: String) -> (rgb: Int, live: Int) {
         switch key {
         case "vocals", "lead", "male": return (key == "vocals" ? 0xFF7A66 : key == "lead" ? 0xEC8A70 : 0xE07F66, 14)
+        case "clean": return (0xFF8F7D, 14)
         case "backing": return (0xF0B3A2, 2)
         case "female": return (0xF4B49B, 2)
         case "drums": return (0xFFC24B, 4)

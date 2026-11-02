@@ -109,7 +109,7 @@ extension ModelStore {
 
 /// Le divisioni in più, a richiesta dopo la separazione: la batteria nelle sue parti, la voce in solista e cori.
 enum ExtraSplit: String, CaseIterable, Identifiable {
-    case vocals, gender, drums
+    case vocals, gender, clean, drums
     var id: String { rawValue }
 
     /// La traccia che si divide.
@@ -120,6 +120,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return DrumSplitter.parts
         case .vocals: return ["lead", "backing"]
         case .gender: return ["male", "female"]
+        case .clean: return ["clean"]
         }
     }
     var modelName: String {
@@ -127,6 +128,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return DrumSplitter.modelName
         case .vocals: return "VoceCori3"
         case .gender: return "VoceDuetto"
+        case .clean: return Denoiser.modelName
         }
     }
 
@@ -135,6 +137,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return "Dividi la batteria"
         case .vocals: return "Separa voce e cori"
         case .gender: return "Separa voce maschile e femminile"
+        case .clean: return "Pulisci la voce"
         }
     }
     var detail: String {
@@ -142,6 +145,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return "Cassa, rullante, tom, charleston, ride e crash in corsie proprie"
         case .vocals: return "La voce principale da una parte, i cori dall'altra: karaoke tenendo i cori"
         case .gender: return "Nei duetti la voce di uomo da una parte, quella di donna dall'altra: canti solo la tua parte"
+        case .clean: return "Togli il rumore di fondo e la coda del riverbero: la voce asciutta, per un remix o per cantarci sopra"
         }
     }
     var symbol: String {
@@ -149,6 +153,7 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return "square.split.2x2"
         case .vocals: return "person.2.wave.2"
         case .gender: return "person.2.fill"
+        case .clean: return "wand.and.stars"
         }
     }
     var working: String {
@@ -156,9 +161,10 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
         case .drums: return "Divido la batteria"
         case .vocals: return "Separo voce e cori"
         case .gender: return "Separo le voci di uomo e di donna"
+        case .clean: return "Pulisco la voce"
         }
     }
-    var downloadSize: String { self == .gender ? "circa 270 MB" : "circa 200 MB" }
+    var downloadSize: String { self == .gender ? "circa 270 MB" : self == .clean ? "circa 10 MB, solo per il rumore" : "circa 200 MB" }
 
     /// Divide la traccia: (nomi delle parti, parti).
     func run(_ audio: [[Float]], units: MLComputeUnits, progress: @escaping (Double) -> Void,
@@ -182,6 +188,10 @@ enum ExtraSplit: String, CaseIterable, Identifiable {
                 throw SeparationError("il modello delle voci non ha le tracce attese")
             }
             return (["male", "female"], [parts[m], parts[f]])
+        case .clean:
+            let clean = try await Cleanup.run(audio, noise: Prefs.cleanNoise, reverb: Prefs.cleanReverb, progress: progress,
+                                              isCancelled: isCancelled)
+            return (["clean"], [clean])
         }
     }
 }

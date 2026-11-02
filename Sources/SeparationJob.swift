@@ -45,11 +45,12 @@ struct Stem: Identifiable, Equatable {
 
     /// Nomi italiani e simboli dei quattro strumenti di Demucs (più la base senza voce).
     /// Tutte le tracce che IsoLR può creare, nell'ordine della libreria.
-    static let allKeys = ["vocals", "lead", "backing", "male", "female", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
+    static let allKeys = ["vocals", "clean", "lead", "backing", "male", "female", "drums", "bass", "guitar", "piano", "other"] + DrumSplitter.parts + ["instrumental"]
 
     static func info(_ key: String) -> (name: String, symbol: String, order: Int) {
         switch key {
         case "vocals": return ("Voce", "music.mic", 0)
+        case "clean": return ("Voce pulita", "wand.and.stars", 1)
         case "lead": return ("Voce solista", "music.mic.circle", 1)
         case "backing": return ("Cori", "person.3.fill", 2)
         case "male": return ("Voce maschile", "person.fill", 1)
@@ -141,7 +142,7 @@ final class SeparationJob: ObservableObject {
 
     /// Le tracce che hanno note da trascrivere (la batteria no: non ha altezze).
     var midiStems: [Stem] {
-        stems.filter { ["vocals", "lead", "backing", "male", "female", "bass", "guitar", "piano", "other"].contains($0.key) }
+        stems.filter { ["vocals", "lead", "backing", "male", "female", "clean", "bass", "guitar", "piano", "other"].contains($0.key) }
     }
 
     /// Le note di una traccia in un file MIDI accanto alle tracce, al tempo della canzone.

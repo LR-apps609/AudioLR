@@ -221,6 +221,7 @@ struct AboutSettings: View {
         ("HTDemucs", "Rapida", "Demucs v4 · Meta · licenza MIT"),
         ("BatteriaDrumSep", "Dividi la batteria", "MDX23C DrumSep · pesi di aufr33 e jarredou · codice MIT"),
         ("VoceCori3", "Separa voce e cori", "Mel-Band RoFormer karaoke · pesi di aufr33 e viperx · codice MIT"),
+        ("DeepFilter", "Pulisci la voce · rumore", "DeepFilterNet3 · Hendrik Schröter · licenza MIT o Apache 2.0 (il riverbero è un calcolo di IsoLR, senza modello)"),
         ("VoceDuetto", "Voce maschile e femminile", "BS-RoFormer Chorus Male-Female · pesi di Sucial · codice MIT"),
         ("VoceRevive", "Studio · voce", "BS-RoFormer Vocals Revive V3e · pesi di unwa · codice MIT"),
         ("VoceRoFormer9", "Riserva della voce", "Mel-Band RoFormer, pezzi da 8 s · pesi di Kimberley Jensen · codice MIT"),

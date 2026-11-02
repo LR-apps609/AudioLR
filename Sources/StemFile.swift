@@ -15,7 +15,7 @@ enum StemFile {
         ("Drums", "#C48E2C", Set(["drums"] + DrumSplitter.parts)),
         ("Bass", "#8C6AAF", ["bass"]),
         ("Other", "#3C978C", ["guitar", "piano", "other"]),
-        ("Vocals", "#CF6F57", ["vocals", "lead", "backing", "male", "female"]),
+        ("Vocals", "#CF6F57", ["vocals", "lead", "backing", "male", "female", "clean"]),
     ]
 
     static let bitrate = 320_000

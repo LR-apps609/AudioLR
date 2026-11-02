@@ -1,6 +1,6 @@
 """«Togli rumore»: DeepFilterNet3 (Hendrik Schröter, MIT o Apache 2.0) in Core ML (Mac) e ONNX (Windows).
 
-Uso: python Tools/convert_deepfilter.py <cartella DeepFilterNet3 con config.ini e checkpoints>
+Uso: python Tools/convert_deepfilter.py <cartella DeepFilterNet3 con config.ini e checkpoints> <cartella assets del repository>
 Esce: DeepFilter.mlpackage, DeepFilter.onnx, DeepFilter.json, DeepFilter-prova.f32.
 Si converte solo la rete (codificatore e due decodificatori), a pezzi fissi di FRAMES fotogrammi; il calcolo intorno
 è in deepfilter_ref.py ed è rifatto uguale in Swift e JavaScript. Le prove confrontano tutto con l'«enhance»
@@ -80,7 +80,13 @@ def main():
     assert list(state.erb_widths()) == R.WIDTHS, "bande ERB diverse da deepfilter_ref"
     net = Net(model).eval()
 
-    clean, noisy = test_signal()
+    # Le prove su una voce vera (gli esempi del repository di DeepFilterNet, solo qui, non pubblicati) a 5 dB
+    import soundfile as sf
+    clean, _ = sf.read(os.path.join(sys.argv[2], "clean_freesound_33711.wav"), dtype="float32")
+    noise, _ = sf.read(os.path.join(sys.argv[2], "noise_freesound_573577.wav"), dtype="float32", always_2d=True)
+    noise = np.resize(noise[:, 0], len(clean))
+    noise *= np.sqrt(np.mean(clean ** 2) / np.mean(noise ** 2)) / 10 ** (5 / 20)
+    noisy = (clean + noise).astype(np.float32)
     with torch.no_grad():
         official = enhance(model, state, torch.from_numpy(noisy)[None], pad=True)[0].numpy()
 
@@ -102,7 +108,7 @@ def main():
         # 2) A pezzi di FRAMES fotogrammi
         y_torch = R.enhance(noisy, torch_net)
         print(f"A pezzi di {R.FRAMES} fotogrammi contro l'originale: {snr(official, y_torch):.1f} dB")
-        assert snr(official, y_torch) > 25
+        assert snr(official, y_torch) > 30
     print(f"Rumore: prima {snr(clean, noisy):.1f} dB, dopo {snr(clean, official):.1f} dB (originale), {snr(clean, y_torch):.1f} dB (IsoLR)")
 
     fe0 = torch.zeros(1, 1, R.FRAMES, R.NB_ERB)
@@ -139,12 +145,15 @@ def main():
                "order": R.ORDER, "lookahead": R.LOOK, "alpha": R.ALPHA, "frames": R.FRAMES, "ctx": R.CTX,
                "widths": R.WIDTHS, "license": "DeepFilterNet3, Hendrik Schröter, MIT o Apache 2.0",
                "db": round(float(snr(clean, y_torch) - snr(clean, noisy)), 2)}, open("DeepFilter.json", "w"))
-    # La prova per l'app: 3 s di entrata a 48 kHz e l'uscita attesa (quella di torch a pezzi)
+    # La prova per l'app: 3 s di entrata a 48 kHz (sintetica, la si può pubblicare) e l'uscita attesa (torch a pezzi)
     k = 3 * R.SR
-    y3 = R.enhance(noisy[:k], torch_net)
+    _, synth = test_signal()
+    noisy = synth[:k]
+    with torch.no_grad():
+        y3 = R.enhance(noisy, torch_net)
     with open("DeepFilter-prova.f32", "wb") as f:
         np.array([k], np.float32).tofile(f)
-        noisy[:k].astype(np.float32).tofile(f)
+        noisy.astype(np.float32).tofile(f)
         y3.astype(np.float32).tofile(f)
     print("Fatto: DeepFilter.mlpackage, DeepFilter.onnx, DeepFilter.json, DeepFilter-prova.f32")
 

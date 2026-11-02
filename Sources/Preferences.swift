@@ -130,6 +130,11 @@ enum Prefs {
     static let sleepAfterBatchKey = "sleepAfterBatch"
     static var sleepAfterBatch: Bool { UserDefaults.standard.bool(forKey: sleepAfterBatchKey) }
 
+    /// «Pulisci la voce»: cosa togliere (tutti e due di serie).
+    static let cleanNoiseKey = "cleanNoise", cleanReverbKey = "cleanReverb"
+    static var cleanNoise: Bool { UserDefaults.standard.object(forKey: cleanNoiseKey) as? Bool ?? true }
+    static var cleanReverb: Bool { UserDefaults.standard.object(forKey: cleanReverbKey) as? Bool ?? true }
+
     static var soundWhenDone: Bool { UserDefaults.standard.object(forKey: soundKey) as? Bool ?? true }
 
     /// «Musica › IsoLR» oppure il percorso abbreviato della cartella scelta.

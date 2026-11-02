@@ -16,7 +16,7 @@ NB_ERB, NB_DF, ORDER, LOOK, CONV_LOOK = 32, 96, 5, 2, 2
 # exp(-hop/sr/tau) con tau = 1 s, arrotondato come get_norm_alpha (3 cifre)
 ALPHA = 0.99
 # La rete gira a pezzi: FRAMES fotogrammi, di cui CTX all'inizio e alla fine solo come contesto
-FRAMES, CTX = 600, 50
+FRAMES, CTX = 700, 100
 
 
 def erb_widths(sr=SR, fft=FFT, nb=NB_ERB, min_freqs=2):
@@ -129,16 +129,18 @@ def run_net(net, erb, low):
     c = np.zeros((t, NB_DF, ORDER * 2), np.float32)
     s = 0
     while s < t:
-        a = s - CTX
+        # All'inizio della traccia niente contesto finto: la rete parte da zero come sull'intera traccia
+        # (gli zeri dopo la fine invece sono uguali a quelli che la rete vede comunque)
+        a = max(0, s - CTX)
         fe = np.zeros((FRAMES, NB_ERB), np.float32)
         fl = np.zeros((FRAMES, NB_DF), np.complex64)
         lo, hi = max(a, 0), min(a + FRAMES, t)
         fe[lo - a:hi - a] = erb[lo:hi]
         fl[lo - a:hi - a] = low[lo:hi]
         mm, cc = net(*net_inputs(fe, fl))
-        e = min(s + core, t)
-        m[s:e] = np.asarray(mm).reshape(FRAMES, NB_ERB)[CTX:CTX + e - s]
-        c[s:e] = np.asarray(cc).reshape(FRAMES, NB_DF, ORDER * 2)[CTX:CTX + e - s]
+        e = min(a + FRAMES - CTX, t)
+        m[s:e] = np.asarray(mm).reshape(FRAMES, NB_ERB)[s - a:e - a]
+        c[s:e] = np.asarray(cc).reshape(FRAMES, NB_DF, ORDER * 2)[s - a:e - a]
         s = e
     return m, c
 
