@@ -75,7 +75,7 @@ def test_signal(seconds=6.0, seed=1):
 
 def main():
     base = sys.argv[1]
-    model, state, _, _ = init_df(model_base_dir=base, post_filter=False, log_level="ERROR")
+    model, state, *_ = init_df(model_base_dir=base, post_filter=False, log_level="ERROR")
     model.eval()
     assert list(state.erb_widths()) == R.WIDTHS, "bande ERB diverse da deepfilter_ref"
     net = Net(model).eval()
