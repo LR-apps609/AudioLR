@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  PRIMA: 297599d          # Mac 0.39: il punto di partenza
+  PRIMA: 297599dc00904ecbd239ccfb8fc0869d63cc41c9   # Mac 0.39: il punto di partenza (checkout vuole il codice intero)
 
 jobs:
   canzone:
