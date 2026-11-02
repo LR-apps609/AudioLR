@@ -60,6 +60,16 @@ jobs:
           cp windows/ui/test/banco.js "$RUNNER_TEMP/banco.js"
           if [ "${{ matrix.versione }}" = prima ]; then git checkout -q "$PRIMA"; fi
           echo "Misuro $(git log --oneline -1)"
+          # Solo per il banco, uguale per le due versioni: la finestra apre la porta di debug di WebView2 (da qui
+          # la guida Playwright). Tauri passa già i suoi argomenti a WebView2, quindi la variabile d'ambiente
+          # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS non basta: si aggiungono agli argomenti predefiniti di Tauri.
+          python - <<'PY'
+          import json
+          p = "windows/src-tauri/tauri.conf.json"
+          c = json.load(open(p, encoding="utf-8"))
+          c["app"]["windows"][0]["additionalBrowserArgs"] = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9333"
+          json.dump(c, open(p, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+          PY
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
