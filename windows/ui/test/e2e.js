@@ -235,13 +235,17 @@ const check = (ok, msg) => { console.log((ok ? "::notice::OK " : "::error::NO ")
     document.querySelector(".sheet [data-close]").click();
     const lrc = IsoLR.Lyrics.lrc(IsoLR.Lyrics.lines(back.words), "Prova");
     const n = 44100 * 3, ch = [new Float32Array(n), new Float32Array(n)];
+    // Il Chromium del server può non avere l'H.264 (WebView2 di Windows sì): allora la prova del video si salta
+    const h264 = typeof VideoEncoder !== "undefined" && (await VideoEncoder.isConfigSupported({ codec: "avc1.640028", width: 1080, height: 1920, bitrate: 6_000_000, framerate: 30, avc: { format: "avc" } })).supported;
+    if (!h264) return { words: back.words.length, rows, lrc, meta: null };
     const mp4 = await KaraokeVideo.render({ lyrics: back, title: "Prova", audio: ch, shape: "portrait", withAudio: false });
     const v = document.createElement("video"); v.muted = true; v.src = URL.createObjectURL(new Blob([mp4], { type: "video/mp4" }));
     const meta = await new Promise((ok) => { v.onloadedmetadata = () => ok({ w: v.videoWidth, h: v.videoHeight, d: v.duration }); v.onerror = () => ok({ err: true }); setTimeout(() => ok({ timeout: true }), 8000); });
     return { words: back.words.length, rows, lrc, meta };
   });
   check(ly.words === 4 && ly.rows === 2 && ly.lrc.includes("[00:00.50]Ciao mondo.") && ly.lrc.includes("[00:02.50]Di nuovo"), `testo: ${ly.words} parole, ${ly.rows} righe nell'editor, .lrc giusto`);
-  check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
+  if (ly.meta) check(ly.meta.w === 1080 && ly.meta.h === 1920 && Math.abs(ly.meta.d - 3) < 0.1, `video karaoke verticale ${ly.meta.w}×${ly.meta.h}, ${ly.meta.d} s`);
+  else console.log("::notice::video karaoke non provato: questo Chromium non ha l'H.264 (WebView2 di Windows sì)");
   check(errors.length === 0, "nessun errore nella pagina " + errors.join(" | ").slice(0, 300));
   await browser.close();
   server.close();

@@ -104,7 +104,7 @@ enum LyricsEngine {
             }
         }
         raw.sort { $0.start < $1.start }
-        return Lyrics(language: results.first?.language ?? language, words: clean(raw))
+        return Lyrics(language: results.first?.language ?? language, words: Lyrics.clean(raw))
     }
 
     private final class ProgressDelegate: NSObject, URLSessionTaskDelegate {
