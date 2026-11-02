@@ -121,4 +121,51 @@ final class CleanupTests: XCTestCase {
         try? (old + line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
         XCTAssertGreaterThan(q, 30, "Togli rumore dell'app è diverso da DeepFilterNet3")
     }
+
+    // MARK: Gli stessi numeri di Windows e del riferimento numpy (windows/ui/core/test/fixtures)
+
+    private func fixture(_ name: String) throws -> [Float] {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("windows/ui/core/test/fixtures/\(name)"))
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+
+    /// Lo stesso ingresso di Tools/make_cleanup_fixtures.py.
+    private func signal(_ n: Int, _ sr: Double, _ seed: UInt32) -> [Float] {
+        var s = seed
+        return (0..<n).map { i in
+            s = (s &* 1_103_515_245 &+ 12345) & 0x7fff_ffff
+            let noise = Double(s) / 2_147_483_648 * 2 - 1, t = Double(i) / sr
+            let gate: Double = t.truncatingRemainder(dividingBy: 0.25) < 0.12 ? 1 : 0
+            return Float(0.3 * sin(2 * Double.pi * 220 * t) + 0.2 * sin(2 * Double.pi * 1330 * t) * gate + 0.05 * noise)
+        }
+    }
+
+    func testDenoiseMathMatchesReference() throws {
+        let widths = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 5, 7, 7, 8, 10, 12, 13, 15, 18, 20, 24, 28, 31, 37, 42, 50, 56, 67]
+        let cfg = DeepFilterConfig(sr: 48000, fft: 960, hop: 480, nb_erb: 32, nb_df: 96, order: 5, lookahead: 2, alpha: 0.99,
+                                   frames: 30, ctx: 5, widths: widths)
+        let F = 30, E = 32, D = 96, O = 5
+        // La rete finta del riferimento: dipende solo dal fotogramma
+        let den = Denoiser(net: { fe, fs in
+            let m = fe.map { 1 / (1 + exp(-3 * $0)) }
+            var c = [Float](repeating: 0, count: F * D * O * 2)
+            for t in 0..<F { for f in 0..<D { for o in 0..<O {
+                c[(t * D + f) * O * 2 + 2 * o] = 0.1 * Float(o + 1) * fs[t * D + f]
+                c[(t * D + f) * O * 2 + 2 * o + 1] = 0.05 * fs[F * D + t * D + f]
+            } } }
+            return (m, c)
+        }, config: cfg)
+        let y = try den.process(signal(19200, 48000, 7))
+        let want = try fixture("denoise-finta.f32")
+        XCTAssertEqual(y.count, want.count)
+        XCTAssertGreaterThan(EndToEndTests.snr(want, y), 60, "il calcolo di Togli rumore è diverso da deepfilter_ref")
+    }
+
+    func testDereverbMatchesReference() throws {
+        let out = try Dereverb.process([signal(22050, 44100, 11), signal(22050, 44100, 13)])
+        let want = try fixture("dereverb.f32")
+        XCTAssertGreaterThan(EndToEndTests.snr(Array(want[0..<22050]), out[0]), 60)
+        XCTAssertGreaterThan(EndToEndTests.snr(Array(want[22050...]), out[1]), 60)
+    }
 }

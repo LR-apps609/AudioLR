@@ -46,7 +46,7 @@ final class RealFFT {
     }
 }
 
-struct DeepFilterConfig: Codable {
+struct DeepFilterConfig: Codable, Equatable {
     let sr, fft, hop: Int
     let nb_erb, nb_df, order, lookahead: Int
     let alpha: Float
@@ -57,13 +57,15 @@ struct DeepFilterConfig: Codable {
 /// Togli rumore: una traccia mono a 48 kHz → la stessa senza rumore, stessa lunghezza.
 final class Denoiser {
     static let modelName = "DeepFilter"
-    let model: MLModel
+    /// La rete: feat_erb [F·32] e feat_spec [2·F·96] → maschera [F·32] e coefficienti [F·96·10].
+    typealias Net = (_ erb: [Float], _ spec: [Float]) throws -> (m: [Float], coefs: [Float])
+    let net: Net
     let cfg: DeepFilterConfig
     private let fft: RealFFT
     private let win: [Float]
 
-    init(model: MLModel, config: DeepFilterConfig) {
-        self.model = model
+    init(net: @escaping Net, config: DeepFilterConfig) {
+        self.net = net
         cfg = config
         fft = RealFFT(config.fft)
         let half = Double(config.fft / 2)
@@ -71,6 +73,23 @@ final class Denoiser {
             let s = sin(0.5 * Double.pi * (Double(i) + 0.5) / half)
             return Float(sin(0.5 * Double.pi * s * s))
         }
+    }
+
+    /// Con il modello Core ML (DeepFilter.mlpackage).
+    convenience init(model: MLModel, config: DeepFilterConfig) throws {
+        let F = config.frames, E = config.nb_erb, D = config.nb_df
+        let fe = try MLMultiArray(shape: [1, 1, NSNumber(value: F), NSNumber(value: E)], dataType: .float32)
+        let fs = try MLMultiArray(shape: [1, 2, NSNumber(value: F), NSNumber(value: D)], dataType: .float32)
+        self.init(net: { erb, spec in
+            let pe = fe.dataPointer.assumingMemoryBound(to: Float.self), ps = fs.dataPointer.assumingMemoryBound(to: Float.self)
+            for i in 0..<(F * E) { pe[i] = erb[i] }
+            for i in 0..<(2 * F * D) { ps[i] = spec[i] }
+            let out = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["feat_erb": fe, "feat_spec": fs]))
+            guard let m = out.featureValue(for: "m")?.multiArrayValue, let c = out.featureValue(for: "coefs")?.multiArrayValue else {
+                throw SeparationError("il modello del rumore non ha dato un risultato")
+            }
+            return (MLShapedArray<Float>(converting: m).scalars, MLShapedArray<Float>(converting: c).scalars)
+        }, config: config)
     }
 
     func process(_ x: [Float], progress: (Double) -> Void = { _ in }, isCancelled: () -> Bool = { false }) throws -> [Float] {
@@ -103,24 +122,22 @@ final class Denoiser {
             for b in 0..<E {
                 let w = cfg.widths[b]
                 var sum: Float = 0
-                for j in 0..<w { let r = sr[t * B + k + j], i = si[t * B + k + j]; sum += r * r + i * i }
+                for j in 0..<w { let r = sr[t * B + k + j], q = si[t * B + k + j]; sum += r * r + q * q }
                 k += w
                 let e = log10(sum / Float(w) + 1e-10) * 10
                 s[b] = e * (1 - a) + s[b] * a
                 erb[t * E + b] = (e - s[b]) / 40
             }
             for f in 0..<D {
-                let r = sr[t * B + f], i = si[t * B + f]
-                u[f] = (r * r + i * i).squareRoot() * (1 - a) + u[f] * a
-                let q = u[f].squareRoot()
-                lowR[t * D + f] = r / q
-                lowI[t * D + f] = i / q
+                let r = sr[t * B + f], q = si[t * B + f]
+                u[f] = (r * r + q * q).squareRoot() * (1 - a) + u[f] * a
+                let d = u[f].squareRoot()
+                lowR[t * D + f] = r / d
+                lowI[t * D + f] = q / d
             }
         }
-        // La rete a pezzi; ogni pezzo pronto si applica e si ricostruisce subito
+        // La rete a pezzi di F fotogrammi; ogni pezzo pronto si applica e si ricostruisce subito
         let F = cfg.frames
-        let fe = try MLMultiArray(shape: [1, 1, NSNumber(value: F), NSNumber(value: E)], dataType: .float32)
-        let fs = try MLMultiArray(shape: [1, 2, NSNumber(value: F), NSNumber(value: D)], dataType: .float32)
         var y = [Float](repeating: 0, count: T * H)
         var mem = [Float](repeating: 0, count: N - H)
         var orr = [Float](repeating: 0, count: B), oii = orr, frame = [Float](repeating: 0, count: N)
@@ -133,21 +150,17 @@ final class Denoiser {
             // All'inizio niente contesto finto (la rete parte da zero come sull'intera traccia); gli zeri dopo la
             // fine invece sono quelli che la rete vede comunque
             let a0 = max(0, start - cfg.ctx)
-            let pe = fe.dataPointer.assumingMemoryBound(to: Float.self), ps = fs.dataPointer.assumingMemoryBound(to: Float.self)
+            var fe = [Float](repeating: 0, count: F * E), fs = [Float](repeating: 0, count: 2 * F * D)
             for i in 0..<F {
                 let t = a0 + i
-                let ok = t >= 0 && t < T
-                for b in 0..<E { pe[i * E + b] = ok ? erb[t * E + b] : 0 }
+                guard t < T else { break }
+                for b in 0..<E { fe[i * E + b] = erb[t * E + b] }
                 for f in 0..<D {
-                    ps[i * D + f] = ok ? lowR[t * D + f] : 0
-                    ps[F * D + i * D + f] = ok ? lowI[t * D + f] : 0
+                    fs[i * D + f] = lowR[t * D + f]
+                    fs[F * D + i * D + f] = lowI[t * D + f]
                 }
             }
-            let out = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["feat_erb": fe, "feat_spec": fs]))
-            guard let mArr = out.featureValue(for: "m")?.multiArrayValue, let cArr = out.featureValue(for: "coefs")?.multiArrayValue else {
-                throw SeparationError("il modello del rumore non ha dato un risultato")
-            }
-            let m = MLShapedArray<Float>(converting: mArr).scalars, c = MLShapedArray<Float>(converting: cArr).scalars
+            let (m, c) = try net(fe, fs)
             let end = min(a0 + F - cfg.ctx, T)
             for t in start..<end {
                 let i = t - a0
@@ -163,7 +176,8 @@ final class Denoiser {
                         let tt = t + o - back
                         guard tt >= 0, tt < T else { continue }
                         let xr = sr[tt * B + f], xi = si[tt * B + f]
-                        let cr = c[(i * D + f) * O * 2 + 2 * o], ci = c[(i * D + f) * O * 2 + 2 * o + 1]
+                        let j = (i * D + f) * O * 2 + 2 * o
+                        let cr = c[j], ci = c[j + 1]
                         re += xr * cr - xi * ci
                         im += xr * ci + xi * cr
                     }
@@ -278,7 +292,7 @@ extension ModelStore {
     /// e le sue GRU a 16 bit (Neural Engine) sbagliano.
     func denoiser(progress: @escaping (Double) -> Void) async throws -> Denoiser {
         let cfg = try JSONDecoder().decode(DeepFilterConfig.self, from: try await config(Denoiser.modelName))
-        return Denoiser(model: try await mlModel(Denoiser.modelName, units: .cpuOnly, progress: progress), config: cfg)
+        return try Denoiser(model: try await mlModel(Denoiser.modelName, units: .cpuOnly, progress: progress), config: cfg)
     }
 }
 
