@@ -39,7 +39,13 @@
       worker = new Worker("app/worker.js");
       worker.onmessage = (e) => {
         const m = e.data;
-        if (m.type === "download") { $("step").textContent = "Scarico il modello (solo la prima volta)…"; setProgress(m.progress); }
+        if (m.type === "download") {
+          // Quanto manca in MB e, se la rete è caduta, che si sta riprendendo da dove si era arrivati
+          const mb = (b) => Math.round(b / 1048576);
+          $("step").textContent = m.retry ? `La connessione si è interrotta: riprendo da dove ero (tentativo ${m.retry} di 5)…`
+            : m.total ? `Scarico il modello (solo la prima volta)… ${mb(m.done)} di ${mb(m.total)} MB` : "Scarico il modello (solo la prima volta)…";
+          setProgress(m.progress);
+        }
         else if (m.type === "fallback") {
           // La scheda grafica non è disponibile: un lavoratore nuovo con il processore
           worker.terminate(); ready = null; forceWasm = true;
@@ -184,6 +190,9 @@
 
   function drawAll() {
     const pos = position();
+    // I colori una volta per disegno, non per ogni traccia (getComputedStyle ricalcola gli stili della pagina)
+    const root = getComputedStyle(document.documentElement), ink = getComputedStyle(document.body).color, colors = {};
+    for (const k in COLORS) colors[k] = root.getPropertyValue(COLORS[k]).trim();
     for (const t of tracks) {
       const c = t.canvas, dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
       if (!w) continue;
@@ -191,7 +200,7 @@
       const g = c.getContext("2d");
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
-      const color = getComputedStyle(document.documentElement).getPropertyValue(COLORS[t.key]).trim();
+      const color = colors[t.key];
       const audible = t.key === "instrumental" || gainOf(t.key) > 0;
       const slots = Math.floor(w / 3), p = duration ? pos / duration : 0;
       for (let s = 0; s < slots; s++) {
@@ -201,7 +210,7 @@
         g.fillStyle = color;
         g.fillRect(s * 3, (h - bh) / 2, 2, bh);
       }
-      if (playing || pos > 0.05) { g.globalAlpha = 0.9; g.fillStyle = getComputedStyle(document.body).color; g.fillRect(p * w - 1, 0, 2, h); }
+      if (playing || pos > 0.05) { g.globalAlpha = 0.9; g.fillStyle = ink; g.fillRect(p * w - 1, 0, 2, h); }
     }
   }
 

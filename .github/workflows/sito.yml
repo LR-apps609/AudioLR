@@ -41,14 +41,17 @@ jobs:
           (cd /tmp/ort && npm pack onnxruntime-web@1.19.2 --silent && tar xzf onnxruntime-web-1.19.2.tgz)
           cp /tmp/ort/package/dist/ort.webgpu.min.js /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.mjs /tmp/ort/package/dist/ort-wasm-simd-threaded.jsep.wasm site/vendor/
           cp /tmp/ort/package/LICENSE site/vendor/LICENZA-onnxruntime.txt 2>/dev/null || true
-          gh release download modelli-web --repo "$GITHUB_REPOSITORY" --dir site/models --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --pattern "HTDemucsWeb-prova.f32" --clobber
-          # La descrizione del modello con i suoi pezzi e la dimensione totale (per la barra di download)
+          gh release download modelli-web --repo "$GITHUB_REPOSITORY" --dir site/models --pattern "HTDemucsWeb.onnx.part*" --pattern "HTDemucsWeb.json" --pattern "HTDemucsWeb-prova.f32" --pattern "HTDemucsWeb.sha256" --clobber
+          # La descrizione del modello con i suoi pezzi, la dimensione totale (per la barra di download) e l'impronta
           python3 - <<'PY'
           import json, os, glob
           d = json.load(open("site/models/HTDemucsWeb.json"))
           parts = sorted(os.path.basename(p) for p in glob.glob("site/models/HTDemucsWeb.onnx.part*"))
           d["parts"] = parts
           d["bytes"] = sum(os.path.getsize("site/models/" + p) for p in parts)
+          # L'impronta del modello intero: il sito la controlla dopo il download (un file rovinato non resta in cache)
+          d["sha256"] = open("site/models/HTDemucsWeb.sha256").read().split()[0]
+          os.remove("site/models/HTDemucsWeb.sha256")
           json.dump(d, open("site/models/HTDemucsWeb.json", "w"))
           print(d["parts"], d["bytes"])
           PY
