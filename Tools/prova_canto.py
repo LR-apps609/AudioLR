@@ -75,6 +75,12 @@ def main():
             g = 10 ** (-db / 20)
             yl, ynl = g * x + (1 - g) * y, g * noisy + (1 - g) * yn
             lims.append((level(yl, sing) - level(x, sing), snr(x, yl), snr(x, ynl)))
+        # Solo la maschera sulle bande (senza il filtro profondo sulle righe basse)
+        full = R.apply
+        R.apply = lambda spec, m, c: spec * np.repeat(m, R.WIDTHS, axis=1)
+        ym, ynm = R.enhance(x, run), R.enhance(noisy, run)
+        R.apply = full
+        print(f"   solo maschera: voce {level(ym, sing) - level(x, sing):+.1f} dB (SNR {snr(x, ym):.1f}), rumore → {snr(x, ynm):.1f} dB")
         print("   limiti 18/12/9/6 dB: " + " | ".join(f"voce {a:+.1f} dB, SNR {b:.1f}, rumore → {c:.1f}" for a, b, c in lims))
         rows.append((keep, snr(x, noisy), snr(x, yn), drk) + tuple(v for t in lims for v in t))
     if rows:
