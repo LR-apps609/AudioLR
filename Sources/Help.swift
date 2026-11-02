@@ -272,6 +272,9 @@ struct BugReport {
             lines.append("Tempi: " + job.timings.map { "\($0.name) \(formatTime($0.seconds))" }.joined(separator: " · "))
         }
         if job.duration > 0 { lines.append("Durata canzone: \(formatTime(job.duration))") }
+        // I tempi delle ultime separazioni su questo Mac (restano sul Mac; qui solo perché lo mandi tu)
+        let times = TimingLog.tail(20)
+        if !times.isEmpty { lines.append("Tempi delle ultime separazioni:\n" + times.joined(separator: "\n")) }
         // Gli ultimi passi del registro: dicono dove si è fermata una separazione
         let log = AppLog.tail(20)
         if !log.isEmpty { lines.append("Registro (ultimi passi):\n" + log) }

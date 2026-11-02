@@ -1231,7 +1231,7 @@ struct ContentView: View {
         switch job.phase {
         case .downloading: return job.installing
             ? "Scaricato: lo verifico e lo installo sul Mac. Solo la prima volta, qualche decina di secondi."
-            : "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
+            : job.downloadNote ?? "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
         case .tuning, .reading:
             if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
             return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica."

@@ -26,16 +26,19 @@ enum LyricsEngine {
         try fm.createDirectory(at: ModelStore.folder, withIntermediateDirectories: true)
         let base = ModelStore.base
         do {
-            let (shaData, shaResp) = try await URLSession.shared.data(from: base.appendingPathComponent(modelName + ".sha256"))
+            let (shaData, shaResp) = try await ModelStore.session.data(from: base.appendingPathComponent(modelName + ".sha256"))
             guard (shaResp as? HTTPURLResponse)?.statusCode == 200,
                   let expected = String(decoding: shaData, as: UTF8.self).split(separator: " ").first.map(String.init) else {
                 throw SeparationError("il modello del testo non è ancora disponibile")
             }
-            let delegate = ProgressDelegate { progress(0.9 * $0) }
-            let (tmp, resp) = try await URLSession.shared.download(from: base.appendingPathComponent(modelName + ".zip"), delegate: delegate)
-            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw SeparationError("il modello del testo non è ancora disponibile") }
+            // Come i modelli della separazione: si riprende da dove si era fermato, con timeout e nuovi tentativi
+            let tmp = ModelStore.folder.appendingPathComponent(modelName + ".zip.parziale")
+            try await ModelStore.fetch(base.appendingPathComponent(modelName + ".zip"), to: tmp, status: { AppLog.write("Testo: \($0)") }) { progress(0.9 * $0) }
+            guard ModelStore.sha256(of: tmp) == expected else {
+                try? fm.removeItem(at: tmp)
+                throw SeparationError("il modello scaricato è rovinato, riprova")
+            }
             defer { try? fm.removeItem(at: tmp) }
-            guard ModelStore.sha256(of: tmp) == expected else { throw SeparationError("il modello scaricato è rovinato, riprova") }
             let work = ModelStore.folder.appendingPathComponent("scarico-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
             defer { try? fm.removeItem(at: work) }
@@ -105,14 +108,5 @@ enum LyricsEngine {
         }
         raw.sort { $0.start < $1.start }
         return Lyrics(language: results.first?.language ?? language, words: Lyrics.clean(raw))
-    }
-
-    private final class ProgressDelegate: NSObject, URLSessionTaskDelegate {
-        let onProgress: (Double) -> Void
-        var obs: NSKeyValueObservation?
-        init(_ f: @escaping (Double) -> Void) { onProgress = f }
-        func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
-            obs = task.progress.observe(\.fractionCompleted) { [weak self] pr, _ in self?.onProgress(pr.fractionCompleted) }
-        }
     }
 }

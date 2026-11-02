@@ -64,9 +64,27 @@ final class ModelStore: @unchecked Sendable {
 
     /// Scarica e installa il modello se manca, senza aprirlo: aprirlo (e adattarlo al Neural Engine) si fa dopo,
     /// una volta sola e con le unità di calcolo giuste. `progress`: 0…0,8 scaricamento, poi verifica e installazione.
-    func prepare(_ name: String, progress: @escaping (Double) -> Void) async throws {
-        if !isReady(name) { try await download(name, progress: progress) }
+    /// `status`: le frasi per chi aspetta («Ripreso da 120 MB», «Connessione interrotta: riprovo tra 4 s…»).
+    func prepare(_ name: String, status: @escaping (String) -> Void = { _ in },
+                 progress: @escaping (Double) -> Void) async throws {
+        if !isReady(name) { try await downloadOnce(name, status: status, progress: progress) }
         progress(1)
+    }
+
+    /// Gli scaricamenti in corso: lo stesso modello non si scarica due volte insieme (es. preparazione e separazione).
+    private var downloading: [String: Task<Void, Error>] = [:]
+
+    private func downloadOnce(_ name: String, status: @escaping (String) -> Void = { _ in },
+                              progress: @escaping (Double) -> Void) async throws {
+        let task: Task<Void, Error> = lock.withLock {
+            if let t = downloading[name] { return t }
+            let t = Task { try await self.download(name, status: status, progress: progress) }
+            downloading[name] = t
+            return t
+        }
+        defer { lock.withLock { if downloading[name] == task { downloading[name] = nil } } }
+        // «Annulla» ferma anche lo scaricamento (la parte già arrivata resta: la prossima volta si riprende da lì)
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
     /// Il modello Core ML così com'è (scaricato e preparato se serve).
@@ -78,7 +96,7 @@ final class ModelStore: @unchecked Sendable {
         let task: Task<MLModel, Error> = lock.withLock {
             if let t = inflight[key] { return t }
             let t = Task { () throws -> MLModel in
-                if !self.isReady(name) { try await self.download(name, progress: progress) }
+                if !self.isReady(name) { try await self.downloadOnce(name, progress: progress) }
                 return try await self.open(name, units: units, key: key)
             }
             inflight[key] = t
@@ -224,22 +242,34 @@ final class ModelStore: @unchecked Sendable {
     /// Dimentica i modelli già aperti (dopo averli eliminati dal disco).
     func forget() { lock.withLock { cores.removeAll(); models.removeAll() } }
 
-    private func download(_ name: String, progress: @escaping (Double) -> Void) async throws {
+    private func download(_ name: String, status: @escaping (String) -> Void = { _ in },
+                          progress: @escaping (Double) -> Void) async throws {
         let fm = FileManager.default
         try fm.createDirectory(at: Self.folder, withIntermediateDirectories: true)
         do {
             // Il codice di controllo, per essere sicuri che il file arrivi intero
-            let (shaData, shaResp) = try await URLSession.shared.data(from: Self.base.appendingPathComponent(name + ".sha256"))
+            let (shaData, shaResp) = try await Self.session.data(from: Self.base.appendingPathComponent(name + ".sha256"))
             guard (shaResp as? HTTPURLResponse)?.statusCode == 200,
                   let expected = String(decoding: shaData, as: UTF8.self).split(separator: " ").first.map(String.init) else {
                 throw SeparationError("il modello di IA non è ancora disponibile")
             }
             let zipURL = Self.base.appendingPathComponent(name + ".mlpackage.zip")
+            // Il file arriva in «.parziale» accanto ai modelli: se si interrompe (rete, Annulla, Mac spento)
+            // la volta dopo si riprende da dove si era fermato
+            let tmp = Self.folder.appendingPathComponent(name + ".mlpackage.zip.parziale")
             // Lo scaricamento è l'80% della barra; il resto è verifica, estrazione e installazione (sul Mac, qualche decina di secondi)
-            let (tmp, resp) = try await URLSession.shared.download(from: zipURL, delegate: ProgressDelegate { progress(0.8 * $0) })
-            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw SeparationError("il modello di IA non è ancora disponibile") }
+            try await Self.fetch(zipURL, to: tmp, status: status) { progress(0.8 * $0) }
             progress(0.81)
-            guard Self.sha256(of: tmp) == expected else { throw SeparationError("il modello scaricato è rovinato, riprova") }
+            if Self.sha256(of: tmp) != expected {
+                // Un pezzo rovinato (o un «.parziale» di una versione vecchia del modello): si ricomincia da zero, una volta
+                try? fm.removeItem(at: tmp)
+                status("Il file scaricato non era intero: lo riscarico da capo…")
+                try await Self.fetch(zipURL, to: tmp, status: status) { progress(0.8 * $0) }
+                guard Self.sha256(of: tmp) == expected else {
+                    try? fm.removeItem(at: tmp)
+                    throw SeparationError("il modello scaricato è rovinato, riprova")
+                }
+            }
             progress(0.84)
             let work = Self.folder.appendingPathComponent("scarico-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
@@ -265,7 +295,137 @@ final class ModelStore: @unchecked Sendable {
             // Annullato dall'utente: non è un problema di rete
             throw CancellationError()
         } catch {
-            throw SeparationError("non riesco a scaricare il modello di IA (serve internet la prima volta)")
+            AppLog.write("Scaricamento di \(name) non riuscito: \(error.localizedDescription)")
+            throw SeparationError("non riesco a scaricare il modello di IA (serve internet la prima volta): \(error.localizedDescription)")
+        }
+    }
+
+    /// La sessione per i modelli: se per 30 s non arriva niente la connessione si considera ferma e si riprova.
+    /// La parte già arrivata resta, quindi riprovare non ricomincia da zero.
+    static let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 30
+        c.timeoutIntervalForResource = 6 * 3600
+        return URLSession(configuration: c)
+    }()
+
+    /// Quante volte si prova uno scaricamento che si interrompe, con attese crescenti (2, 4, 8, 16 s).
+    static let attempts = 5
+
+    /// Scarica `url` in `dest`, riprendendo dalla parte già scaricata (richiesta «Range»). Se la connessione cade o
+    /// si ferma, riprova fino a `attempts` volte. `progress`: 0…1 sul file intero, al massimo 10 volte al secondo
+    /// (prima arrivava a ogni pacchetto: centinaia di aggiornamenti della finestra al secondo).
+    static func fetch(_ url: URL, to dest: URL, session: URLSession = ModelStore.session, status: @escaping (String) -> Void,
+                      progress: @escaping (Double) -> Void) async throws {
+        var attempt = 1
+        while true {
+            try Task.checkCancellation()
+            let have = ((try? FileManager.default.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber)?.int64Value ?? 0
+            if have > 0 { status("Ripreso da \(megabytes(have))…") }
+            do {
+                try await Chunked.run(url, to: dest, from: have, session: session, progress: progress)
+                return
+            } catch let e as URLError where e.code != .cancelled && attempt < attempts && !Task.isCancelled {
+                let wait = 1 << attempt          // 2, 4, 8, 16 s
+                let what = e.code == .timedOut ? "La connessione si è fermata" : "Connessione interrotta"
+                status("\(what): riprovo tra \(wait) s (tentativo \(attempt + 1) di \(attempts))…")
+                AppLog.write("Scaricamento \(url.lastPathComponent): \(e.localizedDescription), riprovo tra \(wait) s")
+                try await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                attempt += 1
+            }
+        }
+    }
+
+    static func megabytes(_ bytes: Int64) -> String { "\(bytes / 1_048_576) MB" }
+
+    /// Uno scaricamento scritto man mano su disco, in coda a quello che c'è già.
+    private final class Chunked: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        private let file: FileHandle
+        private var done: Int64
+        private var total: Int64 = 0
+        private var last = Date.distantPast
+        private let progress: (Double) -> Void
+        private var cont: CheckedContinuation<Void, Error>?
+        private var failure: Error?
+
+        private init(file: FileHandle, from: Int64, progress: @escaping (Double) -> Void) {
+            self.file = file; self.done = from; self.progress = progress
+        }
+
+        static func run(_ url: URL, to dest: URL, from: Int64, session: URLSession, progress: @escaping (Double) -> Void) async throws {
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: dest.path) { fm.createFile(atPath: dest.path, contents: nil) }
+            let file = try FileHandle(forWritingTo: dest)
+            defer { try? file.close() }
+            var req = URLRequest(url: url)
+            if from > 0 { req.setValue("bytes=\(from)-", forHTTPHeaderField: "Range") }
+            let me = Chunked(file: file, from: from, progress: progress)
+            // Una sessione per scaricamento, con le stesse regole (timeout) e questo oggetto a ricevere i dati
+            let own = URLSession(configuration: session.configuration, delegate: me, delegateQueue: nil)
+            defer { own.finishTasksAndInvalidate() }
+            let task = own.dataTask(with: req)
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+                    me.cont = c
+                    task.resume()
+                }
+            } onCancel: { task.cancel() }
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            do {
+                switch code {
+                case 206:
+                    try file.seekToEnd()
+                case 200:
+                    // Il server non riprende da metà: si ricomincia da zero
+                    try file.truncate(atOffset: 0)
+                    done = 0
+                case 416 where done > 0:
+                    // Era già tutto arrivato: resta solo da verificarlo
+                    total = done
+                    completionHandler(.cancel)
+                    return
+                default:
+                    failure = SeparationError("il modello di IA non è ancora disponibile (risposta \(code))")
+                    completionHandler(.cancel)
+                    return
+                }
+            } catch {
+                failure = error
+                completionHandler(.cancel)
+                return
+            }
+            if response.expectedContentLength > 0 { total = done + response.expectedContentLength }
+            completionHandler(.allow)
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            do { try file.write(contentsOf: data) } catch {
+                failure = error
+                dataTask.cancel()
+                return
+            }
+            done += Int64(data.count)
+            let now = Date()
+            if total > 0, now.timeIntervalSince(last) >= 0.1 {
+                last = now
+                progress(min(1, Double(done) / Double(total)))
+            }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            let c = cont
+            cont = nil
+            if let f = failure { c?.resume(throwing: f); return }
+            if total > 0 && done >= total { progress(1); c?.resume(); return }
+            if let error { c?.resume(throwing: error); return }
+            // Finito senza errori ma più corto del previsto: la connessione si è chiusa a metà
+            if total > 0 && done < total { c?.resume(throwing: URLError(.networkConnectionLost)); return }
+            progress(1)
+            c?.resume()
         }
     }
 
@@ -279,14 +439,5 @@ final class ModelStore: @unchecked Sendable {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         return String(decoding: data, as: UTF8.self).split(separator: " ").first.map(String.init)
-    }
-
-    private final class ProgressDelegate: NSObject, URLSessionTaskDelegate {
-        let onProgress: (Double) -> Void
-        var obs: NSKeyValueObservation?
-        init(_ f: @escaping (Double) -> Void) { onProgress = f }
-        func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
-            obs = task.progress.observe(\.fractionCompleted) { [weak self] pr, _ in self?.onProgress(pr.fractionCompleted) }
-        }
     }
 }

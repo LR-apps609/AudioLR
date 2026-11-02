@@ -116,6 +116,8 @@ final class SeparationJob: ObservableObject {
     @Published private(set) var qualityNote: String?
     /// Durante lo scaricamento: il file è arrivato e il modello si sta verificando e installando.
     @Published private(set) var installing = false
+    /// Durante lo scaricamento: cosa succede alla connessione («Ripreso da 120 MB», «riprovo tra 4 s…»), se c'è da dirlo.
+    @Published private(set) var downloadNote: String?
     /// Il passo preciso in corso («Apro il modello sul Neural Engine…») e da quando: la finestra lo mostra col tempo.
     @Published private(set) var stepDetail: String?
     /// L'anteprima di 20 s in corso o pronta: da quale canzone viene e da che punto. Nil per le separazioni vere.
@@ -125,6 +127,8 @@ final class SeparationJob: ObservableObject {
         let quality: Quality
     }
     @Published private(set) var preview: Preview?
+    /// Si sta ritagliando la canzone per l'anteprima.
+    private var cuttingPreview = false
     /// Quanto dura l'anteprima, in secondi.
     nonisolated static let previewSeconds = 20.0
 
@@ -233,6 +237,8 @@ final class SeparationJob: ObservableObject {
 
     private var task: Task<Void, Never>?
     private var cancelled = Cancel()
+    /// La memoria massima della separazione in corso, per il registro dei tempi.
+    private var meter: MemoryMeter?
 
     var isBusy: Bool {
         switch phase {
@@ -262,10 +268,13 @@ final class SeparationJob: ObservableObject {
 
     /// «Anteprima 20 s»: la prima canzone pronta, solo 20 s, con la qualità scelta. Resta pronta per la separazione vera.
     func startPreview(quality: Quality, at fraction: Double = 0.5) {
-        guard let source = pending.first, !isBusy else { return }
+        // Un doppio clic su «Anteprima» non ne prepara due (il ritaglio della canzone richiede un attimo)
+        guard let source = pending.first, !isBusy, !cuttingPreview else { return }
+        cuttingPreview = true
         let dir = Self.previewFolder
         let title = source.deletingPathExtension().lastPathComponent
         Task {
+            defer { cuttingPreview = false }
             do {
                 let (clip, from): (URL, Double) = try await Task.detached(priority: .userInitiated) {
                     let audio = try AudioIO.read(source)
@@ -439,6 +448,7 @@ final class SeparationJob: ObservableObject {
         engineText = nil
         qualityNote = nil
         installing = false
+        downloadNote = nil
         stepDetail = nil
         analysis = nil
         timings = []
@@ -455,6 +465,9 @@ final class SeparationJob: ObservableObject {
         let light = Prefs.oneModelAtATime
         let swOnBase = quality.swOnBase
         phase = downloads.allSatisfy { ModelStore.shared.isReady($0) } ? .reading : .downloading(0)
+        _ = meter?.stop()
+        meter = MemoryMeter()
+        meter?.start()
         let cancel = Cancel()
         cancelled = cancel
         task = Task.detached(priority: .userInitiated) { [weak self] in
@@ -495,7 +508,11 @@ final class SeparationJob: ObservableObject {
                         await say("Scarico il modello \(k + 1) di \(downloads.count) (\(name))…")
                     }
                     do {
-                        try await ModelStore.shared.prepare(name) { p in
+                        try await ModelStore.shared.prepare(name, status: { text in
+                            // Ripresa, connessione ferma, nuovo tentativo: si dice nella finestra, non si tace
+                            AppLog.write("\(name): \(text)")
+                            Task { @MainActor in if self?.cancelled === cancel { self?.downloadNote = text } }
+                        }) { p in
                             let total = (Double(k) + p) / Double(downloads.count)
                             Task { @MainActor in
                                 guard case .downloading = self?.phase else { return }
@@ -542,6 +559,20 @@ final class SeparationJob: ObservableObject {
                     if cancel.isSet { throw CancellationError() }
                 }
                 lap("Preparazione dei modelli")
+                // Mentre si legge la canzone il primo modello si apre già, sullo stesso motore che userà dopo
+                // (solo se la prova del motore è già stata fatta, e non con poca memoria: lì un modello alla volta).
+                // La separazione poi trova il modello aperto, o aspetta la stessa apertura: niente doppioni.
+                if !(Prefs.lowMemory || light) {
+                    var early: (String, MLComputeUnits)?
+                    if let v = voiceName ?? swName, let d = EngineChoice.current(v) {
+                        early = (v, SeparationJob.openUnits(d.units))
+                    } else if voiceName == nil, swName == nil, let m = models.first, let d = EngineChoice.current(m) {
+                        early = (m, d.units)
+                    }
+                    if let e = early {
+                        Task.detached(priority: .userInitiated) { _ = try? await ModelStore.shared.mlModel(e.0, units: e.1) { _ in } }
+                    }
+                }
                 await self?.set(cancel, .reading)
                 await say("Leggo la canzone…")
                 var mix = try AudioIO.read(url)
@@ -958,6 +989,14 @@ final class SeparationJob: ObservableObject {
     /// Con 8 GB due copie da centinaia di MB fanno usare il disco come memoria e tutto rallenta.
     nonisolated static var useDual: Bool { hasNeuralEngine && Prefs.dualEngine && !Prefs.lowMemory }
 
+    /// Su quali unità `workers` apre la prima copia di un modello RoFormer, per la scelta del motore `units`
+    /// (le stesse regole qui sotto): serve ad aprirlo in anticipo mentre si legge la canzone.
+    nonisolated static func openUnits(_ units: MLComputeUnits) -> MLComputeUnits {
+        if units == .cpuOnly { return .cpuOnly }
+        if !hasNeuralEngine || Prefs.gpuOnly || units == .cpuAndGPU { return hasNeuralEngine ? .cpuAndGPU : units }
+        return useDual ? .cpuAndNeuralEngine : .all
+    }
+
     nonisolated static func workers(_ name: String, units: MLComputeUnits, label: String = "",
                                     say: @escaping (String) async -> Void = { _ in }) async throws -> (RoFormer, [RoFormer]) {
         let what = label.isEmpty ? "il modello" : "il modello \(label)"
@@ -1207,6 +1246,8 @@ final class SeparationJob: ObservableObject {
     func cancel() {
         cancelled.set()
         task?.cancel()
+        _ = meter?.stop()
+        meter = nil
         AppLog.write("Annullato dall'utente (fase: \(phase))")
         guard isBusy else { return }
         // Annullando un'anteprima la canzone torna pronta
@@ -1330,6 +1371,8 @@ final class SeparationJob: ObservableObject {
     /// Una canzone non riuscita non blocca le altre.
     private func afterFailure(_ token: Cancel) {
         guard token === cancelled else { return }
+        _ = meter?.stop()
+        meter = nil
         startNextInQueue()
     }
 
@@ -1350,8 +1393,14 @@ final class SeparationJob: ObservableObject {
         self.stems = stems
         phase = .done
         remaining = nil
+        let peak = meter?.stop() ?? 0
+        meter = nil
         // L'anteprima non entra in libreria e non fa festa: si ascolta e si decide
         if preview != nil { return }
+        // Il registro dei tempi, sul Mac (fuori dal thread della finestra: è una scrittura su disco)
+        let line = TimingLog.line(quality: quality.title, songSeconds: duration, seconds: took,
+                                  steps: timings.map { ($0.name, $0.seconds) }, engine: engine, peakBytes: peak, machine: TimingLog.machine)
+        DispatchQueue.global(qos: .utility).async { TimingLog.add(line) }
         finishedAt = Date()
         if Prefs.soundWhenDone { NSSound(named: "Glass")?.play() }
         if Prefs.revealWhenDone { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
