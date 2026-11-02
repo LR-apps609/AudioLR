@@ -69,11 +69,22 @@ def main():
         line = (f"{name}: voce pulita {keep:+.1f} dB (SNR {snr(x, y):.1f} dB) · con rumore a 10 dB: {snr(x, noisy):.1f} → "
                 f"{snr(x, yn):.1f} dB · riverbero: voce {drk:+.1f} dB")
         print(line)
-        rows.append((keep, snr(x, noisy), snr(x, yn), drk))
+        # Con un limite all'abbassamento (come atten_lim di DeepFilterNet): uscita = lim·entrata + (1 − lim)·pulita
+        lims = []
+        for db in (18, 12, 9, 6):
+            g = 10 ** (-db / 20)
+            yl, ynl = g * x + (1 - g) * y, g * noisy + (1 - g) * yn
+            lims.append((level(yl, sing) - level(x, sing), snr(x, yl), snr(x, ynl)))
+        print("   limiti 18/12/9/6 dB: " + " | ".join(f"voce {a:+.1f} dB, SNR {b:.1f}, rumore → {c:.1f}" for a, b, c in lims))
+        rows.append((keep, snr(x, noisy), snr(x, yn), drk) + tuple(v for t in lims for v in t))
     if rows:
         a = np.array(rows)
         print(f"Media su {len(rows)} voci: voce pulita {a[:, 0].mean():+.1f} dB · rumore {a[:, 1].mean():.1f} → {a[:, 2].mean():.1f} dB · "
               f"riverbero {a[:, 3].mean():+.1f} dB")
+        for i, db in enumerate((18, 12, 9, 6)):
+            k = 4 + 3 * i
+            print(f"Media con limite {db} dB: voce pulita {a[:, k].mean():+.1f} dB (SNR {a[:, k + 1].mean():.1f}) · rumore "
+                  f"{a[:, 1].mean():.1f} → {a[:, k + 2].mean():.1f} dB")
 
 
 if __name__ == "__main__":
