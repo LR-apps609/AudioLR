@@ -106,6 +106,10 @@ targets:
       - path: Resources/BasicPitch.mlpackage
         type: file
         buildPhase: sources
+    # I test compilano anche il motore del testo (LyricsEngine.swift), che usa WhisperKit
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.ledion.AudioLRTests
