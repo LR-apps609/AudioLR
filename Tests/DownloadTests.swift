@@ -65,8 +65,8 @@ final class DownloadTests: XCTestCase {
         XCTAssertNil(Stub.ranges.first ?? "manca", "la prima richiesta è senza Range")
         XCTAssertEqual(Stub.ranges.last ?? "manca", "bytes=400000-", "la seconda riprende da dove si era fermata")
         XCTAssertEqual(last, 1, accuracy: 1e-9)
-        XCTAssertTrue(notes.all.contains { $0.contains("riprovo tra 2 s") }, "dice che riprova: \(notes.all)")
-        XCTAssertTrue(notes.all.contains { $0.hasPrefix("Ripreso da") }, "dice da dove riprende: \(notes.all)")
+        XCTAssertTrue(notes.all.contains { $0.contains("riprovo a scaricare tra 2 s") }, "dice che riprova: \(notes.all)")
+        XCTAssertTrue(notes.all.contains { $0.hasPrefix("Riprendo a scaricare da") }, "dice da dove riprende: \(notes.all)")
     }
 
     func testPartialFileContinues() async throws {

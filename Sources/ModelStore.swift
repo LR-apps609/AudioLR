@@ -263,11 +263,11 @@ final class ModelStore: @unchecked Sendable {
             if Self.sha256(of: tmp) != expected {
                 // Un pezzo rovinato (o un «.parziale» di una versione vecchia del modello): si ricomincia da zero, una volta
                 try? fm.removeItem(at: tmp)
-                status("Il file scaricato non era intero: lo riscarico da capo…")
+                status("Il modello scaricato non supera il controllo (è arrivato incompleto): lo scarico di nuovo da capo…")
                 try await Self.fetch(zipURL, to: tmp, status: status) { progress(0.8 * $0) }
                 guard Self.sha256(of: tmp) == expected else {
                     try? fm.removeItem(at: tmp)
-                    throw SeparationError("il modello scaricato è rovinato, riprova")
+                    throw SeparationError("il modello scaricato non supera il controllo per due volte di fila: la connessione lo rovina per strada. Prova un'altra rete e premi di nuovo «Separa»")
                 }
             }
             progress(0.84)
@@ -294,9 +294,13 @@ final class ModelStore: @unchecked Sendable {
         } catch let e as URLError where e.code == .cancelled {
             // Annullato dall'utente: non è un problema di rete
             throw CancellationError()
+        } catch let e as URLError {
+            AppLog.write("Scaricamento di \(name) non riuscito: \(e.localizedDescription)")
+            throw SeparationError("non riesco a scaricare il modello di IA: la connessione a internet si è interrotta per \(Self.attempts) volte. Controlla la rete e premi di nuovo «Separa»: lo scaricamento riprende da dove si era fermato")
         } catch {
+            // Non è la rete: di solito il disco (spazio finito, cartella non scrivibile)
             AppLog.write("Scaricamento di \(name) non riuscito: \(error.localizedDescription)")
-            throw SeparationError("non riesco a scaricare il modello di IA (serve internet la prima volta): \(error.localizedDescription)")
+            throw SeparationError("non riesco a salvare il modello di IA sul Mac (\(error.localizedDescription)): controlla che ci sia spazio libero sul disco e riprova")
         }
     }
 
@@ -321,14 +325,14 @@ final class ModelStore: @unchecked Sendable {
         while true {
             try Task.checkCancellation()
             let have = ((try? FileManager.default.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber)?.int64Value ?? 0
-            if have > 0 { status("Ripreso da \(megabytes(have))…") }
+            if have > 0 { status("Riprendo a scaricare da \(megabytes(have)), dove si era fermato…") }
             do {
                 try await Chunked.run(url, to: dest, from: have, session: session, progress: progress)
                 return
             } catch let e as URLError where e.code != .cancelled && attempt < attempts && !Task.isCancelled {
                 let wait = 1 << attempt          // 2, 4, 8, 16 s
-                let what = e.code == .timedOut ? "La connessione si è fermata" : "Connessione interrotta"
-                status("\(what): riprovo tra \(wait) s (tentativo \(attempt + 1) di \(attempts))…")
+                let what = e.code == .timedOut ? "Da 30 secondi non arrivano dati" : "La connessione si è interrotta"
+                status("\(what): riprovo a scaricare tra \(wait) s (tentativo \(attempt + 1) di \(attempts)). Quello già scaricato resta.")
                 AppLog.write("Scaricamento \(url.lastPathComponent): \(e.localizedDescription), riprovo tra \(wait) s")
                 try await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
                 attempt += 1
@@ -389,7 +393,7 @@ final class ModelStore: @unchecked Sendable {
                     completionHandler(.cancel)
                     return
                 default:
-                    failure = SeparationError("il modello di IA non è ancora disponibile (risposta \(code))")
+                    failure = SeparationError("il modello di IA non è disponibile sul server di IsoLR (risposta \(code)): riprova più tardi, oppure aggiorna IsoLR dal menu IsoLR › Controlla aggiornamenti…")
                     completionHandler(.cancel)
                     return
                 }
