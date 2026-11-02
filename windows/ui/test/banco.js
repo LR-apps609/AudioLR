@@ -84,7 +84,7 @@ async function launch() {
 async function meters(page) {
   await page.evaluate(() => {
     const b = window.__banco = { long: [], gaps: 0, worstGap: 0, steps: [], t0: performance.now() };
-    try { new PerformanceObserver((l) => { for (const e of l.getEntries()) b.long.push(e.duration); }).observe({ type: "longtask" }); } catch {}
+    try { new PerformanceObserver((l) => { for (const e of l.getEntries()) b.long.push({ d: e.duration, stage: IsoApp.job.stage || IsoApp.job.phase }); }).observe({ type: "longtask" }); } catch {}
     let last = performance.now();
     const frame = (t) => { const g = t - last; last = t; if (g > 50) b.gaps++; if (g > b.worstGap) b.worstGap = g; if (!b.stop) requestAnimationFrame(frame); };
     requestAnimationFrame(frame);
@@ -99,8 +99,9 @@ async function meters(page) {
 async function readMeters(page) {
   return page.evaluate(() => {
     const b = window.__banco; b.stop = true; clearInterval(b.timer);
-    const long = b.long;
-    return { longTasks: long.length, longestTask: Math.round(Math.max(0, ...long)), longTotal: Math.round(long.reduce((a, x) => a + x, 0)),
+    const long = b.long.map((x) => x.d), byStage = {};
+    for (const x of b.long) { const s = byStage[x.stage] || (byStage[x.stage] = { n: 0, ms: 0, max: 0 }); s.n++; s.ms += Math.round(x.d); s.max = Math.max(s.max, Math.round(x.d)); }
+    return { byStage, longTasks: long.length, longestTask: Math.round(Math.max(0, ...long)), longTotal: Math.round(long.reduce((a, x) => a + x, 0)),
       frameGaps: b.gaps, worstFrameGap: Math.round(b.worstGap), steps: b.steps };
   });
 }
@@ -133,7 +134,7 @@ async function separate(quality, seconds) {
   const mem = memory();
   const r = await page.evaluate(() => {
     const j = IsoApp.job, c = j.current;
-    return { phase: j.phase, error: j.error, folder: c && c.folder, meta: c && { took: c.meta.took, backend: c.meta.backend, stems: c.meta.stems.map((s) => ({ key: s.key, file: s.file })) } };
+    return { phase: j.phase, error: j.error, folder: c && c.folder, meta: c && { took: c.meta.took, backend: c.meta.engine || c.meta.backend, stems: c.meta.stems.map((s) => ({ key: s.key, file: s.file })) } };
   });
   // Le tracce, per il confronto numerico prima/dopo
   const dest = path.join(outDir, "tracce", quality);
@@ -145,12 +146,14 @@ async function separate(quality, seconds) {
   await browser.close().catch(() => {});
   kill();
   const res = { quality, seconds, ok: ok && r.phase === "done", error: r.error, wall, took: r.meta && r.meta.took, backend: r.meta && r.meta.backend,
-    startup, pageTiming, memory: mem, fluidity: { longTasks: m.longTasks, longestTask: m.longestTask, longTotal: m.longTotal, frameGaps: m.frameGaps, worstFrameGap: m.worstFrameGap }, steps: m.steps };
-  console.log(`::notice::${quality} ${seconds} s: ${wall.toFixed(1)} s (${res.backend || "?"}) · avvio ${startup.toFixed(1)} s · memoria ${mem.totalMB} MB · blocchi ${m.longTasks} (max ${m.longestTask} ms) ${r.error || ""}`);
+    startup, pageTiming, memory: mem, fluidity: { longTasks: m.longTasks, longestTask: m.longestTask, longTotal: m.longTotal, frameGaps: m.frameGaps, worstFrameGap: m.worstFrameGap, byStage: m.byStage }, steps: m.steps };
+  console.log(`::notice::${quality} ${seconds} s: ${wall.toFixed(1)} s (${res.backend || "?"}) · avvio ${startup.toFixed(1)} s · memoria ${mem.totalMB} MB · blocchi ${m.longTasks} (max ${m.longestTask} ms) per fase ${JSON.stringify(m.byStage)} ${r.error || ""}`);
   return res;
 }
 
 /** Processore usato dall'app nei `ms` successivi (secondi di CPU). */
+const state = (page) => page.evaluate(() => ({ phase: IsoApp.job.phase, stage: IsoApp.job.stage, step: IsoApp.job.step, progress: IsoApp.job.progress, error: IsoApp.job.error })).catch((e) => ({ error: String(e) }));
+
 async function cpuAfter(ms) { const a = memory().cpu; await sleep(ms); return +(memory().cpu - a).toFixed(1); }
 
 /** «Annulla» durante lo scaricamento di un modello e durante il calcolo nativo di Studio; poi si riparte. */
@@ -165,10 +168,12 @@ async function cancelTest() {
   await page.evaluate(() => IsoApp.job.start("studio"));
   const sawDownload = await until(page, () => /Scarico/.test(IsoApp.job.step || "") && IsoApp.job.progress > 0.02, 5 * 60 * 1000, 100);
   await sleep(1500);
+  const st0 = await state(page);
   let c0 = Date.now();
   await page.evaluate(() => IsoApp.job.cancel());
-  await until(page, () => IsoApp.job.phase === "pending", 15 * 60 * 1000, 50);
-  out.download = { sawDownload, responseMs: Date.now() - c0, partial: fs.readdirSync(modelsDir).filter((f) => f.startsWith("VoceRevive")) };
+  await until(page, () => IsoApp.job.phase !== "working", 15 * 60 * 1000, 50);
+  const st1 = await state(page);
+  out.download = { sawDownload, before: st0, after: st1, responseMs: Date.now() - c0, partial: fs.readdirSync(modelsDir).filter((f) => f.startsWith("VoceRevive")) };
   // Si riparte subito: il modello deve finire di scaricarsi (ripreso, se possibile) e poi si annulla nel calcolo
   const steps = [];
   const t1 = Date.now();
@@ -180,12 +185,13 @@ async function cancelTest() {
     if (s.phase !== "working" || (s.stage === "separating" && s.p > 0.03)) break;
     await sleep(200);
   }
-  out.restart = { downloadSeconds: (Date.now() - t1) / 1000, steps: steps.filter((s) => /Scarico|Ripres|riprovo/i.test(s.step || "")).slice(0, 6).concat(steps.slice(-2)) };
+  out.restart = { downloadSeconds: (Date.now() - t1) / 1000, steps: steps.filter((s) => /Scarico|riprend|riprovo|connessione/i.test(s.step || "")).slice(0, 6).concat(steps.slice(-2)) };
   await sleep(2000);
+  const st2 = await state(page);
   c0 = Date.now();
   await page.evaluate(() => IsoApp.job.cancel());
-  await until(page, () => IsoApp.job.phase === "pending", 5 * 60 * 1000, 50);
-  out.native = { responseMs: Date.now() - c0, cpuSecondsIn8s: await cpuAfter(8000) };
+  await until(page, () => IsoApp.job.phase !== "working", 5 * 60 * 1000, 50);
+  out.native = { before: st2, responseMs: Date.now() - c0, after: await state(page), cpuSecondsIn8s: await cpuAfter(8000) };
   // Dopo Annulla una nuova separazione parte e arriva in fondo (Rapida, 5 s)
   const t2 = Date.now();
   await page.evaluate(() => { IsoApp.job.start("fast"); });
@@ -196,6 +202,7 @@ async function cancelTest() {
   // Il modello torna com'era (per le misure successive)
   for (const f of fs.readdirSync(modelsBackup)) if (f.startsWith("VoceRevive")) fs.copyFileSync(path.join(modelsBackup, f), path.join(modelsDir, f));
   for (const f of fs.readdirSync(modelsDir)) if (/\.parziale$/.test(f)) fs.rmSync(path.join(modelsDir, f));
+  console.log("Annulla, dettagli: " + JSON.stringify(out));
   console.log(`::notice::Annulla: durante lo scaricamento ${out.download.responseMs} ms · nel calcolo nativo ${out.native.responseMs} ms, processore dopo ${out.native.cpuSecondsIn8s} s in 8 s · nuova separazione ${out.after.ok ? "ok" : "NO"}`);
   return out;
 }
