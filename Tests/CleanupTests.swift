@@ -1,7 +1,6 @@
 import Accelerate
 import AppKit
 import XCTest
-@testable import AudioLR
 
 /// «Pulisci la voce»: Togli riverbero (calcolo di IsoLR) e Togli rumore (DeepFilterNet3).
 final class CleanupTests: XCTestCase {
