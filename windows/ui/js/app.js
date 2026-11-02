@@ -195,6 +195,10 @@
     const peaks = job.peaks, ctx = canvas.getContext("2d"), dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w) return;
+    // Il disegno cambia solo quando la parte separata avanza di una barretta (4 px): altrimenti è identico
+    const key = `${w}|${h}|${dpr}|${peaks.length}|${Math.round(separated() * Math.floor(w / 4))}|${separated() > 0 && separated() < 1}`;
+    if (canvas.dataset.drawn === key) return;
+    canvas.dataset.drawn = key;
     canvas.width = w * dpr; canvas.height = h * dpr; ctx.scale(dpr, dpr);
     // Studio di notte: la parte già separata in oro (sfumato), il resto in penombra, e la testina che brilla
     const css = getComputedStyle(document.documentElement);
@@ -260,7 +264,8 @@
       reels.querySelector(".rbar i").style.width = known ? `${Math.round(job.progress * 100)}%` : "";
       reels.querySelector(".rlabel").textContent = known ? `Scarico il modello · ${Math.round(job.progress * 100)}%` : "Preparo il modello";
     }
-    w.querySelector(".stages").innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
+    const st = w.querySelector(".stages");
+    if (st.dataset.at !== String(current)) st.dataset.at = String(current), st.innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
     if (job.peaks) {
       // La forma d'onda vera al posto delle barre che aspettano
       const c = w.querySelector(".song canvas"), waiting = w.querySelector(".song .wave");
@@ -775,9 +780,15 @@
       if (job.phase === "done" && job.current) { await refreshLibrary(); await openEntry(job.current, !!job.preview); return; }
       render(); return;
     }
-    if (job.phase === "working") return panel();
-    if (job.splitting) panel();
+    // Durante il lavoro gli aggiornamenti si raccolgono e la schermata si ridisegna una volta per fotogramma
+    if (job.phase === "working" || job.splitting) schedulePanel();
   });
+  let panelQueued = false;
+  function schedulePanel() {
+    if (panelQueued) return;
+    panelQueued = true;
+    requestAnimationFrame(() => { panelQueued = false; if (job.phase === "working" || job.splitting) panel(); });
+  }
   player.addEventListener("change", () => { const b = $(".play"); if (b) b.innerHTML = IconFill(player.playing ? "pause" : "play"); });
   window.addEventListener("resize", () => { if (job.phase === "done") drawWaves(); });
 

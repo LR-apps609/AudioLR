@@ -89,12 +89,20 @@
 
     // ── Modelli di Massima e Studio (e delle divisioni in più): scaricati la prima volta ──
     async modelsReady() { return DESKTOP ? invoke("models_ready") : []; },
-    async prepareModel(name, onProgress) {
+    /** Scarica (se manca) e verifica un modello. `onProgress(0…1)` per la barra, `onStatus(testo)` per i messaggi
+     *  («Connessione lenta, riprovo (2/3)…», «Ripreso da 120 MB»). */
+    async prepareModel(name, onProgress, onStatus) {
       if (!DESKTOP) throw new Error("i modelli grandi funzionano solo nell'app");
       let un = null;
-      if (onProgress && T.event) un = await T.event.listen("model-download", (e) => { if (e.payload.name === name) onProgress(e.payload.progress); });
+      if ((onProgress || onStatus) && T.event) un = await T.event.listen("model-download", (e) => {
+        const p = e.payload;
+        if (p.name !== name) return;
+        if (p.status != null) { if (onStatus) onStatus(p.status); } else if (onProgress) onProgress(p.progress);
+      });
       try { await invoke("prepare_model", { name }); } finally { if (un) un(); }
     },
+    /** «Annulla»: gli scaricamenti di modelli in corso si fermano (il pezzo arrivato resta per la volta dopo). */
+    cancelDownloads() { if (DESKTOP) invoke("cancel_downloads").catch(() => {}); },
     async readModel(name, part) { return new Uint8Array(await invoke("read_model", { name, part })); },
 
     // ── Calcolo nativo dei RoFormer (ONNX Runtime con DirectML o processore, fuori dalla finestra) ──
@@ -105,6 +113,16 @@
       return new Float32Array(out instanceof ArrayBuffer ? out : new Uint8Array(out).buffer);
     },
     nativeRelease(name) { if (DESKTOP) invoke("native_release", { name }).catch(() => {}); },
+    /** «Annulla»: il pezzo in calcolo fuori dalla finestra si ferma a metà e i modelli si chiudono. */
+    nativeCancel() { if (DESKTOP) invoke("native_cancel").catch(() => {}); },
+
+    // ── Tempi in locale (una riga per separazione; escono solo dentro una segnalazione mandata dall'utente) ──
+    timingAdd(entry) {
+      if (!DESKTOP) { (window.__tempi = window.__tempi || []).push(JSON.stringify(entry)); return; }
+      invoke("timing_add", { line: JSON.stringify(entry) }).catch(() => {});
+    },
+    async timingLast(n) { return DESKTOP ? invoke("timing_last", { n }).catch(() => []) : (window.__tempi || []).slice(-n); },
+    async peakMemory() { return DESKTOP ? invoke("peak_memory").catch(() => null) : null; },
     async nativeBackend(name) { return DESKTOP ? invoke("native_backend", { name }) : null; },
     async nativeGpuError() { return DESKTOP ? invoke("native_gpu_error") : null; },
 

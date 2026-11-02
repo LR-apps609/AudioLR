@@ -70,7 +70,14 @@ async function launch() {
   if (!page) throw new Error("l'interfaccia non è pronta dopo 2 minuti");
   const startup = (Date.now() - t0) / 1000;
   page.on("pageerror", (e) => console.log("::warning::Errore nella pagina: " + e.message));
-  return { browser, page, startup };
+  // Dentro l'avvio: quanto pesa la pagina (script letti ed eseguiti) rispetto al resto (processo, WebView2)
+  const pageTiming = await page.evaluate(() => {
+    const n = performance.getEntriesByType("navigation")[0] || {};
+    const scripts = performance.getEntriesByType("resource").filter((r) => r.initiatorType === "script");
+    return { domReadyMs: Math.round(n.domContentLoadedEventEnd || 0), loadMs: Math.round(n.loadEventEnd || 0), scripts: scripts.length,
+      scriptKB: Math.round(scripts.reduce((a, r) => a + (r.decodedBodySize || 0), 0) / 1024) };
+  }).catch(() => null);
+  return { browser, page, startup, pageTiming };
 }
 
 /** Misuratori nella pagina: blocchi lunghi (longtask), salti dei fotogrammi, passi della separazione. */
@@ -114,7 +121,7 @@ const until = async (page, fn, ms, every = 500) => {
 
 /** Una separazione vera dall'inizio alla fine, con l'app appena aperta. */
 async function separate(quality, seconds) {
-  const { browser, page, startup } = await launch();
+  const { browser, page, startup, pageTiming } = await launch();
   await sleep(3000);                             // l'avvio si assesta (controllo aggiornamenti, libreria)
   await meters(page);
   await addSong(page, clip(seconds), `Banco ${quality}.wav`, quality);
@@ -138,7 +145,7 @@ async function separate(quality, seconds) {
   await browser.close().catch(() => {});
   kill();
   const res = { quality, seconds, ok: ok && r.phase === "done", error: r.error, wall, took: r.meta && r.meta.took, backend: r.meta && r.meta.backend,
-    startup, memory: mem, fluidity: { longTasks: m.longTasks, longestTask: m.longestTask, longTotal: m.longTotal, frameGaps: m.frameGaps, worstFrameGap: m.worstFrameGap }, steps: m.steps };
+    startup, pageTiming, memory: mem, fluidity: { longTasks: m.longTasks, longestTask: m.longestTask, longTotal: m.longTotal, frameGaps: m.frameGaps, worstFrameGap: m.worstFrameGap }, steps: m.steps };
   console.log(`::notice::${quality} ${seconds} s: ${wall.toFixed(1)} s (${res.backend || "?"}) · avvio ${startup.toFixed(1)} s · memoria ${mem.totalMB} MB · blocchi ${m.longTasks} (max ${m.longestTask} ms) ${r.error || ""}`);
   return res;
 }

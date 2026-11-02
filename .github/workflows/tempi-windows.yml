@@ -168,6 +168,8 @@ jobs:
               print(f"| {name[ra['quality']]} | {ra['seconds']} s | {f(ra,'wall')} → {f(rb,'wall')} s | {ra.get('backend') or '–'} | {f(ra,'startup')} → {f(rb,'startup')} s | {mem(ra)} → {mem(rb)} | {fl(ra)} → {fl(rb)} | {fg(ra)} → {fg(rb)} |")
           pa, pb = out["peso"]["prima"], out["peso"]["dopo"]
           print(f"\nPeso: installer {pa.get('installerMB')} → {pb.get('installerMB')} MB · installata {pa.get('installedMB')} → {pb.get('installedMB')} MB\n")
+          pt = lambda R: " · ".join(f"{name[r['quality']]} {r['pageTiming']['domReadyMs']} ms ({r['pageTiming']['scripts']} script, {r['pageTiming']['scriptKB']} KB)" for r in R["runs"] if r.get("pageTiming"))
+          print(f"Pagina pronta (DOMContentLoaded, dentro l'avvio): prima {pt(A) or '–'} · dopo {pt(B) or '–'}\n")
           ca, cb = A.get("cancel") or {}, B.get("cancel") or {}
           g = lambda c, a, b: (c.get(a) or {}).get(b, "–")
           print("| «Annulla» | Prima | Dopo |\n|---|---|---|")
