@@ -1,3 +1,7 @@
+Novità della 0.39.0 «Voce pulita»:
+• Pulisci la voce (⇧⌘P): dopo una separazione togli il rumore di fondo e la coda del riverbero dalla voce, tutto sul tuo Mac e senza scaricare niente. La «Voce pulita» prende il posto della voce nel mixer e si scarica come le altre. Una voce già pulita non cambia
+• Clic destro su un file audio nel Finder › Azioni rapide (o Servizi) › «Separa con IsoLR». Se non lo vedi, attivalo in Impostazioni di Sistema › Tastiera › Scorciatoie da tastiera › Servizi
+
 Novità della 0.38.0 «Testo e karaoke»:
 • Testo sincronizzato (⌥⌘L, «Vai più a fondo» › «Testo»): IsoLR trascrive la voce sul tuo Mac, senza Internet, e accende le righe a tempo con la parola cantata in oro. Clic su una riga per saltarci, correggi a mano, esporta in .lrc o .srt e vedi il testo anche in Esercitati. La prima volta scarica il modello Whisper (una sola volta)
 • Video karaoke: un MP4 orizzontale o verticale con il testo a tempo e la base, o con la voce bassa per cantarci sopra
