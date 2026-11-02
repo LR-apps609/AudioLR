@@ -158,7 +158,7 @@ final class BenchTests: XCTestCase {
         let kr = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
         }
-        return kr == KERN_SUCCESS ? (info.phys_footprint, info.ledger_phys_footprint_peak) : (0, 0)
+        return kr == KERN_SUCCESS ? (info.phys_footprint, UInt64(max(0, info.ledger_phys_footprint_peak))) : (0, 0)
     }
 
     /// Ogni 10 ms: la memoria (su un thread a parte) e quanto in ritardo arriva il turno della finestra (thread principale).
