@@ -1,0 +1,149 @@
+# Il banco dei tempi del Mac: la stessa canzone separata dalla versione di prima (PRIMA) e da quella di adesso,
+# SULLO STESSO Mac di GitHub e a turno (prima, dopo, dopo, prima…): due Mac di GitHub diversi possono differire
+# del 30% e falsare il confronto. Misura secondi, passi, memoria massima, fluidità della finestra e avvio;
+# poi confronta le tracce (la qualità non deve cambiare).
+# I Mac di GitHub non hanno Neural Engine né grafica vera, e i test girano in Debug: i numeri servono a
+# confrontare prima e dopo, non a dire quanto ci mette un Mac vero (quelli arrivano dal registro dei tempi).
+# Nessun dato va fuori: i numeri restano nel registro e negli «artifact» di questa pagina.
+name: Tempi Mac
+
+on:
+  push:
+    branches: [prestazioni-mac]
+    paths: ["Sources/**", "Tests/**", "project.yml", ".github/workflows/tempi-mac.yml", "Tools/tempi_*"]
+  workflow_dispatch:
+
+env:
+  PRIMA: 297599dc00904ecbd239ccfb8fc0869d63cc41c9   # Mac 0.39: il punto di partenza (checkout vuole il codice intero)
+
+jobs:
+  canzone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: La canzone di prova (estratti di MUSDB18)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q musdb soundfile
+          python Tools/tempi_mac.py canzone canzone-prova.wav
+      - uses: actions/upload-artifact@v6
+        with:
+          name: canzone-prova
+          path: canzone-prova.wav
+
+  misura:
+    needs: canzone
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Sul Mac Apple Silicon di GitHub (macchina virtuale) Rapida non riesce, né prima né dopo: si salta
+          - macchina: macos-15
+            prove: "test1Apertura test3Massima test4Studio test3Massima"
+          # Sul Mac Intel Studio dura 35 minuti a giro: si misura Rapida
+          - macchina: macos-15-intel
+            prove: "test1Apertura test3Massima test2Rapida test3Massima"
+    runs-on: ${{ matrix.macchina }}
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: dopo
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PRIMA }}
+          path: prima
+      - name: Le due versioni
+        # «prima»: il codice di allora con il banco di adesso
+        run: cp dopo/Tests/BenchTests.swift prima/Tests/
+      - uses: actions/download-artifact@v6
+        with:
+          name: canzone-prova
+      - name: Xcode più recente disponibile
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+      - name: Progetti e compilazione (app e prove, prima e dopo)
+        run: |
+          brew install xcodegen
+          for v in prima dopo; do
+            (cd $v && xcodegen generate \
+              && xcodebuild -project AudioLR.xcodeproj -scheme AudioLR -configuration Release -derivedDataPath build \
+                   ARCHS=$(uname -m) ONLY_ACTIVE_ARCH=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build > build.log 2>&1 \
+              && xcodebuild build-for-testing -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+                   -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build-test.log 2>&1) \
+              || { tail -n 40 $v/build.log $v/build-test.log; exit 1; }
+          done
+      - name: Avvio (prima finestra), a turno
+        run: |
+          for v in prima dopo dopo prima; do
+            swift dopo/Tools/tempi_avvio.swift $v/build/Build/Products/Release/AudioLR.app /tmp/avvio-$v-$RANDOM.json || echo "::warning::avvio $v non misurato"
+          done
+          mkdir -p risultati && cp /tmp/avvio-*.json risultati/ 2>/dev/null || true
+      - name: Separazioni misurate, a turno
+        # La parola solo-avvio tra parentesi quadre nel messaggio del commit: si misura solo l'avvio
+        if: ${{ !contains(github.event.head_commit.message, '[solo-avvio]') }}
+        timeout-minutes: 320
+        run: |
+          status=0; giro=0; flip=0
+          for t in ${{ matrix.prove }}; do
+            giro=$((giro + 1))
+            # L'ordine si alterna a ogni prova: prima/dopo, poi dopo/prima (la cache dei file non favorisce nessuno)
+            if [ $flip = 0 ]; then order="prima dopo"; flip=1; else order="dopo prima"; flip=0; fi
+            for v in $order; do
+              (cd $v && TEST_RUNNER_AUDIOLR_BANCO=1 TEST_RUNNER_AUDIOLR_BANCO_CANZONE="$GITHUB_WORKSPACE/canzone-prova.wav" \
+                TEST_RUNNER_AUDIOLR_BANCO_USCITA="/tmp/banco-$v.json" TEST_RUNNER_AUDIOLR_BANCO_TRACCE="/tmp/tracce-$v" \
+                TEST_RUNNER_AUDIOLR_BANCO_GIRO="g$giro" \
+                xcodebuild test-without-building -project AudioLR.xcodeproj -scheme AudioLRTests -destination 'platform=macOS' \
+                  -only-testing:AudioLRTests/BenchTests/$t \
+                  -test-timeouts-enabled YES -default-test-execution-time-allowance 14400 -maximum-test-execution-time-allowance 14400 \
+                  -derivedDataPath build-test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > test-$giro.log 2>&1) || status=1
+              echo "== $v · giro $giro · $t"
+              grep -E "Banco |Test Case .*(passed|failed|skipped)|error:" $v/test-$giro.log | head -n 12 || true
+            done
+          done
+          exit $status
+      - name: Risultati
+        if: always()
+        run: |
+          mkdir -p risultati
+          for v in prima dopo; do
+            cp /tmp/banco-$v.json risultati/ 2>/dev/null || true
+            cp -R /tmp/tracce-$v risultati/ 2>/dev/null || true
+          done
+          ls risultati
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: banco-${{ matrix.macchina }}
+          path: risultati
+
+  confronto:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: banco-*
+          path: banchi
+      - name: Prima e dopo
+        run: |
+          pip install -q numpy soundfile
+          python Tools/tempi_mac.py confronto banchi riepilogo.md
+          cat riepilogo.md >> $GITHUB_STEP_SUMMARY
+          cp riepilogo.md banchi/
+      - uses: actions/upload-artifact@v6
+        with:
+          name: tempi-mac-riepilogo
+          path: |
+            banchi/riepilogo.md
+            banchi/confronto.json
+            banchi/*/*.json

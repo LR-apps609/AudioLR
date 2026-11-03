@@ -62,7 +62,11 @@ struct LibraryView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(items) { item in LibraryRow(item: item) }
+                        let openFolder = job.phase == .done ? job.folder?.standardizedFileURL : nil
+                        let busy = job.isBusy
+                        ForEach(items) { item in
+                            LibraryRow(item: item, open: openFolder == item.folderURL.standardizedFileURL, busy: busy).equatable()
+                        }
                     }
                 }
             }
@@ -99,13 +103,18 @@ struct LibraryView: View {
     }
 }
 
-struct LibraryRow: View {
+/// Una riga della libreria. Dipende solo dai suoi valori (non da tutta la separazione): mentre si separa,
+/// ogni avanzamento non ridisegna più tutte le righe, solo quelle che cambiano davvero.
+struct LibraryRow: View, Equatable {
     let item: HistoryItem
-    @EnvironmentObject private var job: SeparationJob
+    let open: Bool
+    let busy: Bool
     @State private var hover = false
 
+    static func == (a: LibraryRow, b: LibraryRow) -> Bool { a.item == b.item && a.open == b.open && a.busy == b.busy }
+
     var body: some View {
-        let open = job.folder?.standardizedFileURL == item.folderURL.standardizedFileURL && job.phase == .done
+        let job = SeparationJob.shared
         Button { job.open(item) } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(.system(size: 12.5, weight: open ? .semibold : .medium)).lineLimit(1).truncationMode(.middle)
@@ -122,7 +131,7 @@ struct LibraryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(job.isBusy)
+        .disabled(busy)
         .onHover { hover = $0 }
         .contextMenu {
             Button("Mostra nel Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.folderURL]) }
