@@ -131,6 +131,18 @@
   // ── Segnala (come BugReportView in Help.swift) ──
   const KINDS = [["bug", "Qualcosa non funziona"], ["sound", "Problema di suono"], ["slow", "Troppo lenta"], ["idea", "Idea o richiesta"]];
 
+  /** Una riga del registro dei tempi, corta: «02/11 14:05 Massima 3:45 → 210 s · Processore · 2100 MB · Separazione 200 s, …». */
+  function timingLine(json) {
+    try {
+      const t = JSON.parse(json), d = new Date(t.date);
+      const when = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${d.toTimeString().slice(0, 5)}`;
+      const q = (Separation.QUALITY[t.quality] || {}).title || t.quality;
+      const how = t.cancelled ? " annullata" : t.ok ? "" : ` non riuscita (${t.error || "?"})`;
+      const steps = (t.steps || []).filter((s) => s[1] >= 0.5).map((s) => `${s[0]} ${s[1]} s`).join(", ");
+      return `${when} ${q}${t.preview ? " (anteprima)" : ""} ${t.song != null ? IsoApp.fmt(t.song) : "?"} → ${Math.round(t.seconds)} s${how} · ${t.engine || "?"}${t.gpu ? " · " + t.gpu : ""}${t.peakMB ? ` · ${t.peakMB} MB` : ""}${steps ? " · " + steps : ""}`;
+    } catch (e) { return null; }
+  }
+
   /** Versione, Windows, processori, memoria, scheda grafica, impostazioni, ultimo errore e ultimi passi. */
   async function systemInfo(job) {
     const ua = navigator.userAgentData;
@@ -148,6 +160,9 @@
     if (job.current && job.current.meta) lines.push(`Ultima canzone: ${job.current.meta.engine || job.current.meta.backend || "?"} · ${IsoApp.fmt(job.current.meta.duration || 0)}`);
     if (job.error) lines.push(`Ultimo errore: ${job.error}`);
     if (Separation.Job.lines.length) lines.push("Registro (ultimi passi):\n" + Separation.Job.lines.slice(-20).join("\n"));
+    // I tempi delle ultime separazioni (restano su questo computer; escono solo qui, se mandi la segnalazione)
+    const times = (await Bridge.timingLast(20)).map(timingLine).filter(Boolean);
+    if (times.length) lines.push("Tempi delle ultime separazioni (salvati solo su questo computer):\n" + times.join("\n"));
     return lines.join("\n");
   }
 

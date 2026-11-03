@@ -102,17 +102,18 @@
   const still = matchMedia("(prefers-reduced-motion: reduce)");
 
   // Il logo a tempo: mentre la canzone suona pulsa sui suoi battiti veri (o sul BPM), con un alone d'oro
-  (function beat() {
+  function beat() {
     const wrap = document.querySelector(".logo-wrap");
     if (wrap) {
       const a = job.current && job.current.meta && job.current.meta.analysis;
       let p = 0;
       if (ui.frozenPulse != null) p = ui.frozenPulse;
       else if (player.playing && !still.matches && job.phase === "done") p = IsoLR.Anim.pulse(player.position, (a && a.structure && a.structure.beats) || [], a && a.bpm);
-      wrap.style.setProperty("--pulse", p.toFixed(3));
+      // Si scrive solo quando cambia: ogni scrittura costringe la finestra a ricalcolare lo stile
+      const v = p.toFixed(3);
+      if (wrap.dataset.pulse !== v) { wrap.dataset.pulse = v; wrap.style.setProperty("--pulse", v); }
     }
-    requestAnimationFrame(beat);
-  })();
+  }
 
   // La festa di fine separazione: una volta sola per canzone, solo quando la separazione è appena finita
   let partyFor = null;
@@ -195,6 +196,10 @@
     const peaks = job.peaks, ctx = canvas.getContext("2d"), dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w) return;
+    // Il disegno cambia solo quando la parte separata avanza di una barretta (4 px): altrimenti è identico
+    const key = `${w}|${h}|${dpr}|${peaks.length}|${Math.round(separated() * Math.floor(w / 4))}|${separated() > 0 && separated() < 1}`;
+    if (canvas.dataset.drawn === key) return;
+    canvas.dataset.drawn = key;
     canvas.width = w * dpr; canvas.height = h * dpr; ctx.scale(dpr, dpr);
     // Studio di notte: la parte già separata in oro (sfumato), il resto in penombra, e la testina che brilla
     const css = getComputedStyle(document.documentElement);
@@ -260,7 +265,8 @@
       reels.querySelector(".rbar i").style.width = known ? `${Math.round(job.progress * 100)}%` : "";
       reels.querySelector(".rlabel").textContent = known ? `Scarico il modello · ${Math.round(job.progress * 100)}%` : "Preparo il modello";
     }
-    w.querySelector(".stages").innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
+    const st = w.querySelector(".stages");
+    if (st.dataset.at !== String(current)) st.dataset.at = String(current), st.innerHTML = STAGES.map(([, name], i) => `<span class="${i < current ? "done" : i === current ? "now" : ""}">${i < current ? "✓" : i === current ? "◌" : "○"} ${name}</span>`).join("<i></i>");
     if (job.peaks) {
       // La forma d'onda vera al posto delle barre che aspettano
       const c = w.querySelector(".song canvas"), waiting = w.querySelector(".song .wave");
@@ -486,7 +492,7 @@
     }
   }
 
-  function render() { header(); library(); panel(); }
+  function render() { header(); library(); panel(); try { wake(); } catch { /* il giro dei fotogrammi non è ancora pronto */ } }
 
   // ── Azioni ──
   function toast(msg) {
@@ -775,13 +781,35 @@
       if (job.phase === "done" && job.current) { await refreshLibrary(); await openEntry(job.current, !!job.preview); return; }
       render(); return;
     }
-    if (job.phase === "working") return panel();
-    if (job.splitting) panel();
+    // Durante il lavoro gli aggiornamenti si raccolgono e la schermata si ridisegna una volta per fotogramma
+    if (job.phase === "working" || job.splitting) schedulePanel();
   });
+  let panelQueued = false;
+  function schedulePanel() {
+    if (panelQueued) return;
+    panelQueued = true;
+    requestAnimationFrame(() => { panelQueued = false; if (job.phase === "working" || job.splitting) panel(); });
+  }
   player.addEventListener("change", () => { const b = $(".play"); if (b) b.innerHTML = IconFill(player.playing ? "pause" : "play"); });
   window.addEventListener("resize", () => { if (job.phase === "done") drawWaves(); });
 
-  (function loop() { player.tick(); updateLive(); requestAnimationFrame(loop); })();
+  // Il giro dei fotogrammi (logo a tempo, posizione, accordi, testo, livelli) gira solo quando serve: mentre
+  // suona, registra o il polso è fermato per le schermate. Prima girava sempre a 60 al secondo, anche a riposo
+  // e durante la separazione. Fermo, un ultimo giro rimette tutto a posto (polso a zero, posizione giusta);
+  // un clic, un tasto o un cambio del lettore lo risvegliano, e ogni mezzo secondo un giro solo raccoglie i
+  // cambi arrivati da soli (testo appena caricato e simili).
+  let looping = false;
+  const active = () => player.playing || !!(window.Recorder && window.Recorder.recording) || ui.frozenPulse != null;
+  function frame() {
+    player.tick(); beat(); updateLive();
+    if (active()) requestAnimationFrame(frame); else looping = false;
+  }
+  function wake() { if (!looping) { looping = true; requestAnimationFrame(frame); } }
+  player.addEventListener("change", wake);
+  job.addEventListener("change", wake);
+  for (const ev of ["pointerdown", "pointerup", "keydown", "input", "wheel"]) document.addEventListener(ev, wake, { capture: true, passive: true });
+  setInterval(wake, 500);
+  wake();
 
   // Avvio: le canzoni, poi (in silenzio) se c'è un aggiornamento; di nuovo ogni 3 ore
   async function checkUpdate() { try { ui.update = await Bridge.checkUpdate(); header(); } catch {} }

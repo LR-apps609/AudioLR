@@ -82,8 +82,25 @@
       // Il registro: gli ultimi passi, per «Segnala» (dicono dove si è fermata una separazione)
       const line = this.error && this.phase === "failed" ? "Errore: " + this.error : this.step;
       if (line && line !== this.lastLine) { this.lastLine = line; Job.log(line); }
-      this.dispatchEvent(new Event("change"));
+      // Un cambio vero (fase, passo, errore) arriva subito; il solo avanzamento al massimo 10 volte al secondo:
+      // il lavoratore manda anche centinaia di aggiornamenti e ognuno ridisegnava la schermata
+      const key = `${this.phase}|${this.stage}|${this.error}|${String(this.step || "").replace(/\s*\d+%$/, "")}|${this.splitting}|${this.queue.length}`;
+      const now = performance.now();
+      if (key !== this.lastKey || now - (this.lastEmit || 0) >= 100) { this.lastKey = key; this.flush(); return; }
+      if (!this.emitTimer) this.emitTimer = setTimeout(() => this.flush(), Math.max(0, 100 - (now - this.lastEmit)));
     }
+    flush() {
+      clearTimeout(this.emitTimer); this.emitTimer = null;
+      this.lastEmit = performance.now();
+      this.dispatchEvent(new Event("change"));
+      // La barra sull'icona nella barra delle applicazioni: solo quando cambia il numero intero
+      if (this.phase === "working") {
+        const pct = Math.round((this.progress || 0) * 100);
+        if (pct !== this.lastPct) { this.lastPct = pct; Bridge.progress(this.progress); }
+      } else this.lastPct = null;
+    }
+    /** Aspetta `p`, ma un «Annulla» la interrompe subito (prima un download o un'analisi andavano fino in fondo). */
+    guard(p) { return this.cancelGate ? Promise.race([p, this.cancelGate]) : p; }
     static log(line) {
       const t = new Date().toLocaleTimeString("it-IT");
       Job.lines.push(`${t} ${line.replace(/ \d+%$/, "")}`);
@@ -119,7 +136,7 @@
           if (m.type === "released") { this.loaded.delete(m.name); Bridge.nativeRelease(m.name); return; }
           if (m.type === "infer") { this.infer(m); return; }
           if (m.type === "downgrade") { this.downgrade(m); return; }
-          if (m.type === "progress") { if (m.progress != null) this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); Bridge.progress(this.progress); return; }
+          if (m.type === "progress") { if (m.progress != null) this.progress = m.progress; if (m.step) this.step = m.step; this.emit(); return; }
           w.removeEventListener("message", on);
           if (m.type === "error") reject(new Error(m.message)); else resolve(m);
         };
@@ -182,12 +199,26 @@
       }
     }
 
+    /** Il modello sul disco (scaricato la prima volta), con la barra e i messaggi del download
+     *  («Connessione lenta, riprovo (2/3)…», «Ripreso da 120 MB»). «Annulla» la interrompe subito. */
+    async download(name, label) {
+      let note = "", pct = null;
+      const show = () => {
+        this.step = `Scarico ${label} (solo la prima volta)${note ? " · " + note : ""}…${pct != null ? ` ${pct}%` : ""}`;
+        this.emit();
+      };
+      show();
+      await this.guard(Bridge.prepareModel(name,
+        // Appena i dati riprendono ad arrivare, l'avviso «la connessione si è interrotta…» sparisce
+        (p) => { if (/^la connessione/.test(note) && Math.round(p * 100) !== pct) note = ""; this.progress = p; pct = Math.round(p * 100); show(); },
+        (s) => { note = s; show(); }));
+    }
+
     /** Scarica (la prima volta), verifica e carica nel lavoratore un modello. */
     async model(name, label) {
       if (this.loaded.has(name)) return;
       this.setStage("model");
-      this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
-      await Bridge.prepareModel(name, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
+      await this.download(name, label);
       this.step = `Preparo ${label}…`; this.progress = 0; this.emit();
       const cfg = JSON.parse(new TextDecoder().decode(await Bridge.readModel(name, "json")));
       const backend = await this.openNative(name, cfg);
@@ -245,9 +276,17 @@
       this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
       this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
       const stop = () => { if (this.cancelled) throw new Error("annullato"); };
+      // «Annulla» fa finire subito l'attesa in corso (download, analisi, salvataggio), qualunque sia
+      this.cancelGate = new Promise((_, reject) => { this.cancelNow = reject; });
+      this.cancelGate.catch(() => {});
+      // I tempi di ogni passo, per il registro dei tempi su questo computer
+      const tAll = performance.now(), laps = [];
+      let lapAt = tAll, lapName = "Apro la canzone";
+      const lap = (next) => { const t = performance.now(); laps.push([lapName, +((t - lapAt) / 1000).toFixed(1)]); lapAt = t; lapName = next; };
+      let songSeconds = null, backend = null;
       this.emit();
       try {
-        let song = await decode(file);
+        let song = await this.guard(decode(file));
         stop();
         if (this.preview) {
           // Solo 20 secondi: il tratto si taglia qui, il resto del lavoro è identico
@@ -259,6 +298,8 @@
         // La forma d'onda della canzone, che si colora man mano che viene separata
         this.peaks = measure([song.left, song.right], 240).peaks; this.emit();
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
+        songSeconds = song.seconds;
+        lap("Modelli");
         const t0 = performance.now();
         const split = Prefs.get("splitGuitarPiano", true);
         let light = false;
@@ -270,10 +311,10 @@
             const label = m.startsWith("Voce") ? "il modello della voce" : "il modello degli strumenti";
             if (!light) { await this.model(m, label); continue; }
             this.setStage("model");
-            this.step = `Scarico ${label} (solo la prima volta)…`; this.emit();
-            await Bridge.prepareModel(m, (p) => { this.progress = p; this.step = `Scarico ${label} (solo la prima volta)… ${Math.round(p * 100)}%`; this.emit(); });
+            await this.download(m, label);
             stop();
           }
+          lap("Separazione");
           this.setStage("separating");
           this.step = "Separazione"; this.progress = 0; this.emit();
           // Al lavoratore va una copia: la canzone serve ancora qui per la base
@@ -288,31 +329,44 @@
           tracks.instrumental = [new Float32Array(n), new Float32Array(n)];
           for (let i = 0; i < n; i++) { tracks.instrumental[0][i] = mixL[i] - tracks.vocals[0][i]; tracks.instrumental[1][i] = mixR[i] - tracks.vocals[1][i]; }
         }
+        backend = res.backend;
+        stop();
+        lap("Tempo, tonalità e accordi");
         this.setStage("saving"); this.progress = 1;
         this.step = "Tempo, tonalità e accordi"; this.emit();
-        const analysis = await analyze(tracks);
+        const analysis = await this.guard(analyze(tracks, (w) => { this.analysisWorker = w; }));
+        this.analysisWorker = null;
+        stop();
+        lap("Salvataggio");
         this.step = "Salvo le tracce"; this.emit();
         const took = (performance.now() - t0) / 1000;
         // L'anteprima va in Musica › IsoLR › .anteprima (sovrascritta ogni volta), che la libreria non mostra
         const into = this.preview ? `${await Bridge.outputDir()}/.anteprima` : null;
-        this.current = await save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name }, into);
+        this.current = await this.guard(save(this.title, tracks, { quality, seconds: song.seconds, took, backend: res.backend, analysis, source: file.name }, into, () => this.cancelled));
+        lap(null);
         this.phase = "done";
+        this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!this.preview, ok: true });
         if (!this.preview) {
           this.batch.songs++;
           this.finishedAt = Date.now();           // per la festa di fine separazione (non riaprendo dalla libreria)
         }
         this.emit();
       } catch (e) {
+        if (this.analysisWorker) { this.analysisWorker.terminate(); this.analysisWorker = null; }
+        if (lapName) lap(null);
         if (this.cancelled) {
           // Annullata: la canzone torna pronta da separare, nessun errore
           this.preview = null;
           this.pending = file; this.phase = "pending"; this.error = null; this.emit();
+          this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!opts.preview, ok: false, cancelled: true });
           this.finishBatch(true);
           return;
         }
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
+        this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!opts.preview, ok: false, error: this.error.slice(0, 200) });
         this.emit();
       }
+      this.cancelGate = null;
       // La prossima della coda, con la stessa qualità (non dopo un'anteprima: si ascolta e si decide)
       if (this.queue.length && !this.preview) { this.pending = this.queue.shift(); return this.start(quality); }
       this.finishBatch();
@@ -339,10 +393,31 @@
       this.queue = [];
       this.cancelled = true;
       if (this.worker) { this.worker.terminate(); this.worker = null; }
+      // Fuori dalla finestra: il pezzo in calcolo si ferma a metà, i modelli si chiudono, i download si fermano
       for (const n of this.loaded) Bridge.nativeRelease(n);
+      Bridge.nativeCancel();
+      Bridge.cancelDownloads();
+      if (this.analysisWorker) { this.analysisWorker.terminate(); this.analysisWorker = null; }
       this.loaded = new Set();
       if (this.abort) { this.abort(new Error("annullato")); this.abort = null; }
+      if (this.cancelNow) { this.cancelNow(new Error("annullato")); this.cancelNow = null; }
       this.step = "Annullo…"; this.emit();
+    }
+
+    /** Una riga nel registro dei tempi di questo computer (mai inviata da sola: va in «Segnala» se la mandi). */
+    async record(r) {
+      try {
+        const mem = await Bridge.peakMemory();
+        // Il nome della scheda grafica (una volta sola): serve a capire i tempi, niente altro
+        if (this.gpuName === undefined) {
+          this.gpuName = null;
+          try { const a = navigator.gpu && await navigator.gpu.requestAdapter(); if (a && a.info) this.gpuName = a.info.description || [a.info.vendor, a.info.architecture].filter(Boolean).join(" ") || null; } catch {}
+        }
+        const gpu = this.gpuName;
+        Bridge.timingAdd({ date: new Date().toISOString(), quality: r.quality, song: r.seconds != null ? +r.seconds.toFixed(1) : null,
+          seconds: +r.total.toFixed(1), steps: r.laps, engine: r.backend || null, gpu, peakMB: mem, preview: r.preview || undefined,
+          ok: r.ok, cancelled: r.cancelled || undefined, error: r.error || undefined, cores: navigator.hardwareConcurrency, memoryGB: navigator.deviceMemory });
+      } catch {}
     }
 
     /** Voce e cori, voce maschile e femminile, batteria nei suoi pezzi: accanto alle altre tracce. */
@@ -395,10 +470,11 @@
   Job.lines = [];
 
   // ── Analisi: tempo, tonalità, battiti, parti e accordi (core/*.js, come Analysis.swift), in un lavoratore ──
-  function analyze(tracks) {
+  function analyze(tracks, onWorker) {
     return new Promise((resolve) => {
       let w;
       try { w = new Worker("js/analysis-worker.js"); } catch { resolve(null); return; }
+      if (onWorker) onWorker(w);                 // «Annulla» lo può chiudere a metà
       const keys = Object.keys(tracks).filter((k) => k !== "instrumental");
       const buffers = keys.flatMap((k) => [tracks[k][0].slice(), tracks[k][1].slice()]);
       w.onmessage = (e) => { w.terminate(); resolve(e.data.analysis || null); };
@@ -415,8 +491,15 @@
   const ORDER = ["vocals", "clean", "lead", "male", "backing", "female", "drums", "kick", "snare", "toms", "hh", "ride", "crash", "bass", "guitar", "piano", "other", "instrumental"];
 
   /** Le tracce in una cartella nuova, nel formato delle impostazioni, più isolr.json con tutto il resto. */
-  async function save(title, tracks, info, into = null) {
+  async function save(title, tracks, info, into = null, cancelled = () => false) {
     const folder = into || await Bridge.newSongDir(title);
+    // «Annulla» durante il salvataggio: ci si ferma tra un file e l'altro e la cartella a metà va nel Cestino
+    // (isolr.json si scrive per ultimo, quindi una cartella a metà non compare mai nella libreria)
+    const stop = async () => {
+      if (!cancelled()) return;
+      if (!into) await Bridge.remove(folder).catch(() => {});
+      throw new Error("annullato");
+    };
     const format = Prefs.get("outputFormat", "wav24");
     // Se anche una sola traccia supera il massimo, tutte si abbassano dello stesso tanto (Stem.safeGain)
     let top = 0;
@@ -426,6 +509,7 @@
     const total = Object.keys(tracks).filter((k) => k !== "instrumental").reduce((s, k) => s + m[k].energy, 0) || 1;
     const stems = [];
     for (const k of ORDER.filter((x) => tracks[x])) {
+      await stop();
       const ext = Encode.FORMATS[format].ext;
       const file = `${title} – ${NAMES[k]}.${ext}`;
       // Le tracce di lavoro restano sempre anche in WAV (per riaprirle e mescolarle); il formato scelto è la copia «bella»
@@ -435,6 +519,7 @@
       stems.push({ key: k, name: NAMES[k], file: work, export: file, share: k === "instrumental" ? null : m[k].energy / total,
         peakDB: m[k].peak > 0 ? +(20 * Math.log10(m[k].peak * gain)).toFixed(1) : -120, peaks: m[k].peaks });
     }
+    await stop();
     const meta = { version: 1, title, created: new Date().toISOString(), quality: info.quality, duration: info.seconds, took: info.took,
       engine: (info.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore") + (info.mode ? ` · modalità ${info.mode}` : ""), gainDB: +(20 * Math.log10(gain)).toFixed(2),
       source: info.source, analysis: info.analysis, stems };

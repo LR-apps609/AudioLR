@@ -7,10 +7,12 @@
 mod nativo;
 
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
@@ -248,26 +250,140 @@ fn bring_to_front(app: AppHandle) {
 
 // ── Modelli ──
 
-fn fetch(url: &str) -> Result<ureq::Response, String> {
-    ureq::get(url).call().map_err(|e| format!("non riesco a scaricare (serve internet la prima volta): {e}"))
+/// Le connessioni verso GitHub: 15 s per collegarsi, e se per 30 s non arriva niente la lettura si ferma
+/// (prima uno scaricamento poteva restare fermo per sempre senza dire niente).
+fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout_read(Duration::from_secs(30))
+        .user_agent("IsoLR")
+        .build()
+}
+
+/// Un file piccolo (descrizione del modello, codice di controllo): fino a 3 tentativi, con attesa crescente.
+fn fetch_text(url: &str) -> Result<String, String> {
+    let mut last = String::new();
+    for attempt in 0..3u32 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_secs(2u64 << attempt));
+        }
+        match agent().get(url).call() {
+            Ok(r) => return r.into_string().map_err(|e| format!("scaricamento interrotto: {e}")),
+            Err(e) => last = e.to_string(),
+        }
+    }
+    Err(format!("non riesco a scaricare il modello: GitHub non risponde ({last}). Serve internet solo la prima volta: controlla la connessione e premi di nuovo Separa"))
+}
+
+/// «Annulla»: ogni scaricamento di modelli partito prima di questo numero si ferma (il pezzo già arrivato resta,
+/// e la volta dopo si riprende da lì).
+static DOWNLOAD_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Uno scaricamento alla volta per modello: se lo stesso modello è già in arrivo, si aspetta quello.
+fn model_lock(name: &str) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    LOCKS.get_or_init(Default::default).lock().unwrap().entry(name.to_string()).or_default().clone()
+}
+
+enum Stop {
+    Cancelled,
+    Failed(String),
 }
 
 /// Scarica `url` in `dest` con la barra (evento `event`) e, se c'è, il codice di controllo SHA-256.
-fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &str, name: &str) -> Result<(), String> {
-    let resp = fetch(url)?;
-    let total: u64 = resp.header("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+/// Il file arriva in «.parziale»: se la connessione cade si riprova fino a 3 volte (attesa crescente) e si
+/// riprende da dove si era fermato (Range); il codice di controllo è sempre quello del file intero.
+/// `epoch`: con un «Annulla» (DOWNLOAD_EPOCH cambiato) si ferma subito; None = non si annulla (aggiornamenti).
+fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &str, name: &str, epoch: Option<u64>) -> Result<(), String> {
     let tmp = dest.with_extension("parziale");
-    let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-    let mut reader = resp.into_reader();
+    let cancelled = || epoch.map(|e| DOWNLOAD_EPOCH.load(Ordering::SeqCst) != e).unwrap_or(false);
+    let say = |status: String| {
+        let _ = app.emit(event, serde_json::json!({ "name": name, "status": status }));
+    };
+    let mut last = String::new();
+    for attempt in 1..=3u32 {
+        if attempt > 1 {
+            say(format!("la connessione si è interrotta, riprovo tra pochi secondi (tentativo {attempt} di 3)"));
+            // Attesa crescente (2 s, poi 4 s), ma «Annulla» non aspetta
+            for _ in 0..(10u32 << (attempt - 2)) {
+                if cancelled() {
+                    return Err("annullato".into());
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        match download_once(app, url, &tmp, event, name, &cancelled, &say) {
+            Ok(digest) => {
+                if let Some(expected) = sha {
+                    if !expected.is_empty() && digest != expected {
+                        let _ = std::fs::remove_file(&tmp);
+                        last = "il modello scaricato non corrisponde al suo codice di controllo".into();
+                        continue;
+                    }
+                }
+                return std::fs::rename(&tmp, dest).map_err(|e| e.to_string());
+            }
+            Err(Stop::Cancelled) => return Err("annullato".into()),
+            Err(Stop::Failed(e)) => last = e,
+        }
+    }
+    Err(format!("non riesco a scaricare il modello: tre tentativi non sono andati a buon fine ({last}). Controlla la connessione e premi di nuovo Separa: lo scaricamento riprende da dove si è fermato"))
+}
+
+/// Un tentativo: riprende da `tmp` se c'è già un pezzo. Torna il codice SHA-256 del file intero.
+fn download_once(app: &AppHandle, url: &str, tmp: &Path, event: &str, name: &str, cancelled: &dyn Fn() -> bool, say: &dyn Fn(String)) -> Result<String, Stop> {
+    let failed = |e: String| Stop::Failed(e);
+    let have = std::fs::metadata(tmp).map(|m| m.len()).unwrap_or(0);
+    let mut req = agent().get(url);
+    if have > 0 {
+        req = req.set("Range", &format!("bytes={have}-"));
+    }
+    let resp = match req.call() {
+        Ok(r) => r,
+        // Il pezzo salvato non va più bene (file cambiato o già completo): si riparte da zero
+        Err(ureq::Error::Status(416, _)) => {
+            let _ = std::fs::remove_file(tmp);
+            return Err(failed("il pezzo già scaricato non vale più, riparto da capo".into()));
+        }
+        Err(e) => return Err(failed(e.to_string())),
+    };
+    // 206 = il server riprende da dove eravamo; 200 = manda tutto il file, e si riparte da zero
+    let resume = have > 0 && resp.status() == 206;
+    let length: u64 = resp.header("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut hasher = Sha256::new();
+    let mut file = if resume {
+        // Il codice di controllo comprende anche il pezzo già arrivato
+        let mut old = std::fs::File::open(tmp).map_err(|e| failed(e.to_string()))?;
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = old.read(&mut buf).map_err(|e| failed(e.to_string()))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+            if cancelled() {
+                return Err(Stop::Cancelled);
+            }
+        }
+        say(format!("riprendo da {} MB già scaricati", have / 1_048_576));
+        std::fs::OpenOptions::new().append(true).open(tmp).map_err(|e| failed(e.to_string()))?
+    } else {
+        std::fs::File::create(tmp).map_err(|e| failed(e.to_string()))?
+    };
+    let start = if resume { have } else { 0 };
+    let total = if length > 0 { start + length } else { 0 };
+    let mut reader = resp.into_reader();
     let mut buf = vec![0u8; 1 << 20];
-    let (mut done, mut last) = (0u64, 0.0f64);
+    let (mut done, mut last) = (start, 0.0f64);
     loop {
-        let n = reader.read(&mut buf).map_err(|e| format!("scaricamento interrotto: {e}"))?;
+        if cancelled() {
+            return Err(Stop::Cancelled);
+        }
+        let n = reader.read(&mut buf).map_err(|e| failed(format!("scaricamento interrotto: {e}")))?;
         if n == 0 {
             break;
         }
-        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        file.write_all(&buf[..n]).map_err(|e| failed(e.to_string()))?;
         hasher.update(&buf[..n]);
         done += n as u64;
         if total > 0 {
@@ -278,15 +394,11 @@ fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &
             }
         }
     }
-    drop(file);
-    if let Some(expected) = sha {
-        let got = format!("{:x}", hasher.finalize());
-        if !expected.is_empty() && got != expected {
-            let _ = std::fs::remove_file(&tmp);
-            return Err("il file scaricato è rovinato, riprova".into());
-        }
+    if total > 0 && done < total {
+        return Err(failed("la connessione si è chiusa prima della fine del file".into()));
     }
-    std::fs::rename(&tmp, dest).map_err(|e| e.to_string())
+    file.flush().map_err(|e| failed(e.to_string()))?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// Il modello pronto sul disco: se manca si scarica (con la barra) e si verifica con il suo codice di controllo.
@@ -295,26 +407,38 @@ async fn prepare_model(app: AppHandle, name: String) -> Result<(), String> {
     if !MODELS.contains(&name.as_str()) {
         return Err("modello sconosciuto".into());
     }
+    let epoch = DOWNLOAD_EPOCH.load(Ordering::SeqCst);
     tauri::async_runtime::spawn_blocking(move || {
+        let lock = model_lock(&name);
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if DOWNLOAD_EPOCH.load(Ordering::SeqCst) != epoch {
+            return Err("annullato".into());
+        }
         let dir = models_dir(&app)?;
         let onnx = dir.join(format!("{name}.onnx"));
         let json = dir.join(format!("{name}.json"));
         if onnx.exists() && json.exists() {
             return Ok(());
         }
-        let expected = fetch(&format!("{BASE}{name}.onnx.sha256"))?
-            .into_string()
-            .map_err(|e| e.to_string())?
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_lowercase();
-        download(&app, &format!("{BASE}{name}.onnx"), &onnx, Some(&expected), "model-download", &name)?;
-        let cfg = fetch(&format!("{BASE}{name}.json"))?.into_string().map_err(|e| e.to_string())?;
+        if !onnx.exists() {
+            let expected = fetch_text(&format!("{BASE}{name}.onnx.sha256"))?
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_lowercase();
+            download(&app, &format!("{BASE}{name}.onnx"), &onnx, Some(&expected), "model-download", &name, Some(epoch))?;
+        }
+        let cfg = fetch_text(&format!("{BASE}{name}.json"))?;
         std::fs::write(&json, cfg).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// «Annulla»: ferma gli scaricamenti di modelli in corso (il pezzo arrivato resta per la volta dopo).
+#[tauri::command]
+fn cancel_downloads() {
+    DOWNLOAD_EPOCH.fetch_add(1, Ordering::SeqCst);
 }
 
 /// Il modello (o la sua descrizione) come byte, per ONNX Runtime nella finestra.
@@ -391,6 +515,97 @@ async fn native_release(name: String) {
     nativo::release(&name);
 }
 
+/// «Annulla»: il pezzo in calcolo si ferma a metà e tutti i modelli aperti fuori dalla finestra si chiudono.
+#[tauri::command]
+async fn native_cancel() {
+    nativo::cancel_all();
+}
+
+// ── Tempi in locale: una riga per separazione, solo su questo computer (mai inviata da sola) ──
+
+fn timings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("tempi.jsonl"))
+}
+
+/// Aggiunge una riga (JSON) al registro dei tempi; il file non supera le 500 righe.
+#[tauri::command]
+fn timing_add(app: AppHandle, line: String) -> Result<(), String> {
+    let path = timings_path(&app)?;
+    let one = line.replace(['\n', '\r'], " ");
+    let mut lines: Vec<String> = std::fs::read_to_string(&path).unwrap_or_default().lines().map(String::from).collect();
+    lines.push(one);
+    let keep = lines.len().saturating_sub(500);
+    std::fs::write(&path, lines[keep..].join("\n") + "\n").map_err(|e| e.to_string())
+}
+
+/// Le ultime `n` righe del registro dei tempi (per «Segnala», solo se l'utente manda la segnalazione).
+#[tauri::command]
+fn timing_last(app: AppHandle, n: usize) -> Vec<String> {
+    let Ok(path) = timings_path(&app) else { return vec![] };
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let lines: Vec<String> = text.lines().filter(|l| !l.trim().is_empty()).map(String::from).collect();
+    lines[lines.len().saturating_sub(n)..].to_vec()
+}
+
+/// Memoria massima usata finora (MB): IsoLR e i suoi processi WebView2 (la finestra e i lavoratori).
+#[tauri::command]
+fn peak_memory() -> Option<u64> {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
+        use windows_sys::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        // I processi figli (e i figli dei figli) di IsoLR
+        let me = std::process::id();
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut pairs = vec![];
+        let mut e: PROCESSENTRY32W = std::mem::zeroed();
+        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        if Process32FirstW(snap, &mut e) != 0 {
+            loop {
+                pairs.push((e.th32ProcessID, e.th32ParentProcessID));
+                if Process32NextW(snap, &mut e) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+        let mut ours = vec![me];
+        let mut i = 0;
+        while i < ours.len() {
+            let parent = ours[i];
+            for &(pid, pp) in &pairs {
+                if pp == parent && pid != parent && !ours.contains(&pid) {
+                    ours.push(pid);
+                }
+            }
+            i += 1;
+        }
+        let mut total: u64 = 0;
+        for pid in ours {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                continue;
+            }
+            let mut c: PROCESS_MEMORY_COUNTERS = std::mem::zeroed();
+            c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+            if GetProcessMemoryInfo(h, &mut c, c.cb) != 0 {
+                total += c.PeakWorkingSetSize as u64;
+            }
+            CloseHandle(h);
+        }
+        Some(total / 1_048_576)
+    }
+    #[cfg(not(windows))]
+    None
+}
+
 /// Perché la scheda grafica non ha aperto un modello (se è successo).
 #[tauri::command]
 async fn native_gpu_error() -> Option<String> {
@@ -426,8 +641,8 @@ fn newer(a: &str, b: &str) -> bool {
 async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     let current = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let list: serde_json::Value = ureq::get(&format!("https://api.github.com/repos/{REPO}/releases?per_page=30"))
-            .set("User-Agent", "IsoLR")
+        let list: serde_json::Value = agent()
+            .get(&format!("https://api.github.com/repos/{REPO}/releases?per_page=30"))
             .call()
             .map_err(|e| e.to_string())?
             .into_json()
@@ -462,7 +677,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     let a = app.clone();
     let exe = tauri::async_runtime::spawn_blocking(move || -> Result<PathBuf, String> {
         let dest = std::env::temp_dir().join("IsoLR-aggiornamento.exe");
-        download(&a, &url, &dest, None, "update-download", "update")?;
+        download(&a, &url, &dest, None, "update-download", "update", None)?;
         Ok(dest)
     })
     .await
@@ -528,7 +743,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
-            prepare_model, read_model, models_ready, check_update, install_update,
+            prepare_model, cancel_downloads, read_model, models_ready, check_update, install_update,
+            native_cancel, timing_add, timing_last, peak_memory,
             native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade, take_opened
         ])
         .run(tauri::generate_context!())

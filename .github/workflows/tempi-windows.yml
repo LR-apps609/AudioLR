@@ -1,0 +1,211 @@
+# Tempi di IsoLR per Windows, prima e dopo: la stessa canzone (musica vera: estratti di MUSDB18 in fila)
+# separata dall'app vera installata, sulla versione di riferimento (PRIMA) e su quella di questo ramo.
+# Il Windows di GitHub non ha scheda grafica: DirectML ricade sul processore (il motore usato è nel risultato).
+# Alla fine il confronto numerico delle tracce (dopo contro prima) e la tabella nel riepilogo.
+# Niente esce dal computer di prova: i risultati sono un artifact di questa esecuzione.
+name: Tempi Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [prestazioni-windows]
+    paths: [windows/**, site/app/**, Tools/win-dist.sh, .github/workflows/tempi-windows.yml]
+
+env:
+  PRIMA: 297599d
+
+permissions:
+  contents: read
+
+jobs:
+  canzone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Cinque estratti veri di MUSDB18 in fila (35 s)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q musdb soundfile numpy
+          python - <<'PY'
+          import musdb, numpy as np, soundfile as sf
+          db = musdb.DB(root="musdb", download=True, subsets="test")
+          parts = [t.audio.astype(np.float32) for t in db.tracks[:5]]
+          x = np.concatenate(parts)
+          sf.write("canzone.wav", x, 44100, subtype="PCM_16")
+          print("canzone:", x.shape[0] / 44100, "s da", [t.name for t in db.tracks[:5]])
+          PY
+      - uses: actions/upload-artifact@v6
+        with:
+          name: canzone
+          path: canzone.wav
+
+  misura:
+    needs: canzone
+    runs-on: windows-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        versione: [prima, dopo]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: La versione da misurare
+        shell: bash
+        run: |
+          # Il banco resta quello di questo ramo; l'app è quella della versione scelta
+          cp windows/ui/test/banco.js "$RUNNER_TEMP/banco.js"
+          if [ "${{ matrix.versione }}" = prima ]; then git checkout -q "$PRIMA"; fi
+          echo "Misuro $(git log --oneline -1)"
+          # Solo per il banco, uguale per le due versioni: la finestra apre la porta di debug di WebView2 (da qui
+          # la guida Playwright). Tauri passa già i suoi argomenti a WebView2, quindi la variabile d'ambiente
+          # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS non basta: si aggiungono agli argomenti predefiniti di Tauri.
+          python - <<'PY'
+          import json
+          p = "windows/src-tauri/tauri.conf.json"
+          c = json.load(open(p, encoding="utf-8"))
+          c["app"]["windows"][0]["additionalBrowserArgs"] = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9333"
+          json.dump(c, open(p, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+          PY
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Pagine, ONNX Runtime Web, Signalsmith e modello Veloce
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: Tools/win-dist.sh > /dev/null
+      - name: ONNX Runtime con DirectML
+        shell: bash
+        run: |
+          mkdir -p windows/src-tauri/libs nuget
+          curl -sSLf -o nuget/ort.zip https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1
+          curl -sSLf -o nuget/dml.zip https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.2
+          (cd nuget && unzip -q -o ort.zip -d ort && unzip -q -o dml.zip -d dml)
+          cp nuget/ort/runtimes/win-x64/native/onnxruntime.dll windows/src-tauri/libs/
+          cp nuget/dml/bin/x64-win/DirectML.dll windows/src-tauri/libs/
+      - name: Compilazione e installazione
+        shell: bash
+        run: |
+          cd windows
+          npm install --silent
+          npx tauri icon ../Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png > /dev/null
+          npx tauri build 2> build.err > /dev/null || { tail -n 25 build.err; exit 1; }
+          cp src-tauri/target/release/bundle/nsis/*.exe ../installer.exe
+      - name: Installa
+        shell: pwsh
+        run: |
+          Start-Process -FilePath ".\installer.exe" -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA\IsoLR" -Filter "isolr.exe" -Recurse | Select-Object -First 1
+          "ISOLR_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $inst = (Get-Item .\installer.exe).Length
+          $dir = (Get-ChildItem "$env:LOCALAPPDATA\IsoLR" -Recurse -File | Measure-Object Length -Sum).Sum
+          "{`"installerMB`": $([math]::Round($inst / 1MB, 1)), `"installedMB`": $([math]::Round($dir / 1MB, 1))}" | Out-File peso.json -Encoding ascii
+          Get-Content peso.json
+      - name: Modelli di Massima e Studio (come dopo il primo scaricamento)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          M="$APPDATA/it.ledion.audiolr/Modelli"; B="$RUNNER_TEMP/modelli"
+          mkdir -p "$M" "$B"
+          for n in StrumentiSW.onnx StrumentiSW.json VoceRevive.onnx VoceRevive.json; do
+            id=$(gh api repos/${{ github.repository }}/releases/tags/modelli-windows --jq ".assets[] | select(.name==\"$n\") | .id")
+            gh api -H "Accept: application/octet-stream" repos/${{ github.repository }}/releases/assets/$id > "$B/$n"
+            cp "$B/$n" "$M/$n"
+          done
+          ls -la "$M"
+          echo "MODELLI=$M" >> $GITHUB_ENV
+          echo "COPIA=$B" >> $GITHUB_ENV
+      - uses: actions/download-artifact@v6
+        with:
+          name: canzone
+      - name: Misura (app vera, guidata da fuori)
+        shell: bash
+        run: |
+          npm i --prefix "$RUNNER_TEMP/pw" playwright@1.47.2 --silent
+          mkdir -p risultati
+          PW="$RUNNER_TEMP/pw/node_modules/playwright" node "$RUNNER_TEMP/banco.js" "$ISOLR_EXE" canzone.wav risultati "$MODELLI" "$COPIA"
+          cp peso.json risultati/
+          git log --oneline -1 > risultati/versione.txt
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: tempi-${{ matrix.versione }}
+          path: risultati
+
+  confronto:
+    needs: misura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: tempi-*
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Tabella e confronto delle tracce
+        run: |
+          pip install -q soundfile numpy
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os, glob, math
+          import numpy as np, soundfile as sf
+          def load(v):
+              try: return json.load(open(f"tempi-{v}/tempi.json"))
+              except Exception: return {"runs": [], "cancel": None}
+          def peso(v):
+              try: return json.load(open(f"tempi-{v}/peso.json", encoding="utf-8-sig"))
+              except Exception: return {}
+          A, B = load("prima"), load("dopo")
+          name = {"fast": "Rapida", "best": "Massima", "studio": "Studio"}
+          print("## Tempi di IsoLR per Windows (Windows di GitHub, senza scheda grafica)\n")
+          for v in ("prima", "dopo"):
+              try: print(f"- {v}: `{open(f'tempi-{v}/versione.txt').read().strip()}`")
+              except Exception: pass
+          print("\n| Qualità | Canzone | Separazione prima → dopo | Motore | Avvio | Memoria massima | Blocchi > 50 ms (più lungo) | Salti fotogrammi |")
+          print("|---|---|---|---|---|---|---|---|")
+          out = {"prima": A, "dopo": B, "peso": {"prima": peso("prima"), "dopo": peso("dopo")}, "qualita": {}}
+          for ra in A["runs"]:
+              rb = next((r for r in B["runs"] if r["quality"] == ra["quality"]), {})
+              f = lambda r, k, fmt="{:.1f}": (fmt.format(r[k]) if r.get(k) is not None else "–")
+              fl = lambda r: f"{r['fluidity']['longTasks']} ({r['fluidity']['longestTask']} ms)" if r.get("fluidity") else "–"
+              fg = lambda r: f"{r['fluidity']['frameGaps']} (max {r['fluidity']['worstFrameGap']} ms)" if r.get("fluidity") else "–"
+              mem = lambda r: f"{r['memory']['totalMB']} MB" if r.get("memory") else "–"
+              print(f"| {name[ra['quality']]} | {ra['seconds']} s | {f(ra,'wall')} → {f(rb,'wall')} s | {ra.get('backend') or '–'} | {f(ra,'startup')} → {f(rb,'startup')} s | {mem(ra)} → {mem(rb)} | {fl(ra)} → {fl(rb)} | {fg(ra)} → {fg(rb)} |")
+          pa, pb = out["peso"]["prima"], out["peso"]["dopo"]
+          print(f"\nPeso: installer {pa.get('installerMB')} → {pb.get('installerMB')} MB · installata {pa.get('installedMB')} → {pb.get('installedMB')} MB\n")
+          pt = lambda R: " · ".join(f"{name[r['quality']]} {r['pageTiming']['domReadyMs']} ms ({r['pageTiming']['scripts']} script, {r['pageTiming']['scriptKB']} KB)" for r in R["runs"] if r.get("pageTiming"))
+          print(f"Pagina pronta (DOMContentLoaded, dentro l'avvio): prima {pt(A) or '–'} · dopo {pt(B) or '–'}\n")
+          ic = lambda R: " · ".join(f"{name[r['quality']]} {r['idleCpu']} s" for r in R["runs"] if r.get("idleCpu") is not None)
+          print(f"A riposo (processore usato in 10 s, finestra aperta senza lavoro): prima {ic(A) or '–'} · dopo {ic(B) or '–'}\n")
+          ca, cb = A.get("cancel") or {}, B.get("cancel") or {}
+          g = lambda c, a, b: (c.get(a) or {}).get(b, "–")
+          print("| «Annulla» | Prima | Dopo |\n|---|---|---|")
+          print(f"| Nel calcolo nativo di Studio, risposta (ms) | {ca.get('responseMs', '–')} | {cb.get('responseMs', '–')} |")
+          print(f"| Processore ancora usato nei 8 s dopo (s) | {ca.get('cpuSecondsIn8s', '–')} | {cb.get('cpuSecondsIn8s', '–')} |")
+          print(f"| Separazione nuova subito dopo | {g(ca,'next','ok')} | {g(cb,'next','ok')} |")
+          print("\n### Tracce: dopo contro prima (SDR, dB; ≥ 60 = uguali all'orecchio, ∞ = identiche)\n")
+          print("| Qualità | Traccia | SDR | Differenza massima |\n|---|---|---|---|")
+          for q in ("fast", "best", "studio"):
+              for fa in sorted(glob.glob(f"tempi-prima/tracce/{q}/*.wav")):
+                  fb = fa.replace("tempi-prima", "tempi-dopo")
+                  if not os.path.exists(fb):
+                      print(f"| {name[q]} | {os.path.basename(fa)[:-4]} | manca dopo | |"); continue
+                  a, _ = sf.read(fa, dtype="float64"); b, _ = sf.read(fb, dtype="float64")
+                  n = min(len(a), len(b)); a, b = a[:n], b[:n]
+                  e = np.sum((a - b) ** 2); s = 10 * math.log10(np.sum(a ** 2) / e) if e > 0 else float("inf")
+                  out["qualita"][f"{q}/{os.path.basename(fa)[:-4]}"] = {"sdr": s, "maxdiff": float(np.max(np.abs(a - b)))}
+                  print(f"| {name[q]} | {os.path.basename(fa)[:-4]} | {'∞' if s == float('inf') else f'{s:.1f}'} | {np.max(np.abs(a - b)):.2e} |")
+          worst = min([v["sdr"] for v in out["qualita"].values()] or [float("inf")])
+          print(f"\nEsito qualità: {'tutte uguali' if worst >= 60 else f'ATTENZIONE: la traccia peggiore è a {worst:.1f} dB'}")
+          json.dump(out, open("tempi-windows.json", "w"), indent=1, default=str)
+          PY
+          cat "$GITHUB_STEP_SUMMARY" | tail -n 40
+      - uses: actions/upload-artifact@v6
+        with:
+          name: tempi-windows
+          path: tempi-windows.json
