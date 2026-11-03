@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p m && cd m
-          get() { gh release download "$1" -R ${{ github.repository }} -p "$2" || curl -sSfL -o "$2" "https://github.com/${{ github.repository }}/releases/download/$1/$2"; }
+          get() { for i in 1 2 3 4 5 6; do gh release download "$1" -R ${{ github.repository }} -p "$2" --clobber && return 0; curl -sSfL --retry 5 -o "$2" "https://github.com/${{ github.repository }}/releases/download/$1/$2" && return 0; sleep $((i * 20)); done; return 1; }
           get modelli-windows StrumentiSW.onnx
           get modelli-windows StrumentiSW.json
           get modelli-1 StrumentiSW2.mlpackage.zip
