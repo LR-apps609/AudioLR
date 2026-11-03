@@ -32,9 +32,17 @@ function clip(seconds) {
   return Buffer.concat([head, body]);
 }
 
+/** Chiude IsoLR e i suoi processi WebView2, e aspetta che siano spariti davvero (altrimenti la copia nuova
+ *  troverebbe la vecchia ancora aperta e si chiuderebbe subito: si misurerebbe la finestra di prima). */
 function kill() {
-  try { cp.execSync("taskkill /F /T /IM isolr.exe", { stdio: "ignore" }); } catch {}
-  try { cp.execSync("taskkill /F /IM msedgewebview2.exe", { stdio: "ignore" }); } catch {}
+  for (let i = 0; i < 40; i++) {
+    let left = "";
+    try { left = ps("Get-Process isolr,msedgewebview2 -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }"); } catch {}
+    if (!left) return;
+    try { ps("Get-Process isolr,msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"); } catch {}
+    cp.execSync("powershell -NoProfile -Command Start-Sleep -Milliseconds 500");
+  }
+  console.log("::warning::IsoLR non si chiude del tutto");
 }
 
 /** Memoria massima (picco del working set) in MB: isolr.exe e i processi WebView2, separati e insieme. */
@@ -62,13 +70,16 @@ async function launch() {
   let page = null;
   while (Date.now() - t0 < 120000) {
     for (const c of browser.contexts()) for (const p of c.pages()) {
-      try { if (await p.evaluate(() => typeof IsoApp === "object" && document.readyState === "complete")) page = p; } catch {}
+      // Solo una finestra nuova: quella di un avvio precedente ha il segno __bancoVisto
+      try { if (await p.evaluate(() => typeof IsoApp === "object" && document.readyState === "complete" && !window.__bancoVisto)) page = p; } catch {}
     }
     if (page) break;
     await sleep(50);
   }
   if (!page) throw new Error("l'interfaccia non è pronta dopo 2 minuti");
   const startup = (Date.now() - t0) / 1000;
+  await page.evaluate(() => { window.__bancoVisto = true; });
+  if (child.exitCode != null) console.log(`::warning::isolr.exe è uscita subito (codice ${child.exitCode}): c'era ancora la copia di prima?`);
   page.on("pageerror", (e) => console.log("::warning::Errore nella pagina: " + e.message));
   // Dentro l'avvio: quanto pesa la pagina (script letti ed eseguiti) rispetto al resto (processo, WebView2)
   const pageTiming = await page.evaluate(() => {
