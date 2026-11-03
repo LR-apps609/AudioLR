@@ -10,8 +10,12 @@ import Darwin
 @MainActor
 final class BenchTests: XCTestCase {
 
-    static let output = URL(fileURLWithPath: "/tmp/audiolr-banco.json")
-    static let tracks = URL(fileURLWithPath: "/tmp/audiolr-banco/tracce", isDirectory: true)
+    /// Dove scrivere (AUDIOLR_BANCO_USCITA, AUDIOLR_BANCO_TRACCE) e il prefisso delle prove (AUDIOLR_BANCO_GIRO):
+    /// il workflow alterna «prima» e «dopo» sullo stesso Mac e tiene i risultati separati.
+    static let env = ProcessInfo.processInfo.environment
+    static let output = URL(fileURLWithPath: env["AUDIOLR_BANCO_USCITA"] ?? "/tmp/audiolr-banco.json")
+    static let tracks = URL(fileURLWithPath: env["AUDIOLR_BANCO_TRACCE"] ?? "/tmp/audiolr-banco/tracce", isDirectory: true)
+    static let round = env["AUDIOLR_BANCO_GIRO"].map { $0 + "-" } ?? ""
 
     override func setUp() async throws {
         guard ProcessInfo.processInfo.environment["AUDIOLR_BANCO"] == "1" else { throw XCTSkip("solo per il banco dei tempi") }
@@ -36,7 +40,7 @@ final class BenchTests: XCTestCase {
             ModelStore.shared.release(name)
             out[name] = ["primaApertura": cold, "secondaApertura": warm]
         }
-        Self.record("apertura", out)
+        Self.record(Self.round + "apertura", out)
     }
 
     func test2Rapida() async throws {
@@ -78,7 +82,7 @@ final class BenchTests: XCTestCase {
         XCTAssertEqual(job.phase, .done)
 
         // Le tracce, per il confronto con la versione di prima
-        let dest = Self.tracks.appendingPathComponent(tag, isDirectory: true)
+        let dest = Self.tracks.appendingPathComponent(Self.round + tag, isDirectory: true)
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
         for stem in job.stems {
@@ -94,7 +98,7 @@ final class BenchTests: XCTestCase {
             "blocchiOltre50ms": s.stalls,
             "tracce": job.stems.map(\.key),
         ]
-        Self.record(tag, row)
+        Self.record(Self.round + tag, row)
         print(String(format: "Banco %@: %.1f s · memoria %.0f MB · ritardo massimo %.0f ms · blocchi %d",
                      tag, took, Double(s.peakFootprint) / 1_048_576, s.maxLag * 1000, s.stalls))
     }

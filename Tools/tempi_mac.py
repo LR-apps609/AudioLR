@@ -5,10 +5,11 @@
 #       l'altro, 35 secondi. Sempre la stessa: «prima» e «dopo» separano esattamente lo stesso audio.
 #
 #   python Tools/tempi_mac.py confronto <cartella> <riepilogo.md>
-#       <cartella>/banco-<macchina>-<versione>/ con audiolr-banco.json, avvio.json e tracce/<prova>/<traccia>.wav.
-#       Scrive la tabella prima/dopo e il confronto delle tracce: SDR del «dopo» rispetto al «prima»
-#       (identica, oppure almeno 60 dB: differenze che non si sentono, come tra due calcoli sulla grafica).
-import sys, os, json, math, glob, wave
+#       <cartella>/banco-<macchina>/ con banco-prima.json, banco-dopo.json, avvio-<versione>-*.json e
+#       tracce-<versione>/<prova>/<traccia>.wav: le due versioni misurate a turno sullo stesso Mac.
+#       Scrive la tabella prima/dopo (media dei giri) e il confronto delle tracce: SDR del «dopo» rispetto al
+#       «prima» (identica, oppure almeno 60 dB: differenze che non si sentono).
+import sys, os, re, json, math, glob, wave
 import numpy as np
 
 RATE = 44100
@@ -19,11 +20,9 @@ def song(out):
     db = musdb.DB(root=os.environ.get("MUSDB_ROOT", "musdb"), download=True, subsets="test")
     parts = []
     for t in sorted(db, key=lambda t: t.name)[:5]:
-        a = t.audio.astype(np.float32)
         assert t.rate == RATE
-        parts.append(a)
-    mix = np.concatenate(parts)
-    mix = np.clip(mix, -1, 1)
+        parts.append(t.audio.astype(np.float32))
+    mix = np.clip(np.concatenate(parts), -1, 1)
     pcm = (mix * 32767).astype("<i2")
     with wave.open(out, "wb") as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(RATE)
@@ -46,71 +45,91 @@ def sdr(ref, est):
     return 10 * math.log10((np.sum(ref ** 2) + 1e-12) / den)
 
 
-def load(folder):
-    def j(name):
-        p = os.path.join(folder, name)
-        return json.load(open(p)) if os.path.exists(p) else {}
-    return j("audiolr-banco.json"), j("avvio.json")
+def jload(p):
+    try:
+        return json.load(open(p))
+    except Exception:
+        return {}
 
 
-def fmt(x, unit="", d=1):
-    return "—" if x is None else f"{x:.{d}f}{unit}"
+def fmt(x, d=1):
+    return "—" if x is None else f"{x:.{d}f}"
+
+
+def mean(xs):
+    xs = [x for x in xs if x is not None]
+    return sum(xs) / len(xs) if xs else None
+
+
+def pct(a, b):
+    return "—" if a is None or b is None or a == 0 else f"{(b - a) / a * 100:+.0f}%"
 
 
 def compare(root, out):
-    lines = ["## Tempi Mac: prima e dopo", ""]
-    machines = sorted({os.path.basename(p).split("-", 1)[1].rsplit("-", 1)[0] for p in glob.glob(os.path.join(root, "banco-*"))})
+    lines = ["## Tempi Mac: prima e dopo, a turno sullo stesso Mac", ""]
     worst = []
-    for m in machines:
-        a_dir, b_dir = os.path.join(root, f"banco-{m}-prima"), os.path.join(root, f"banco-{m}-dopo")
-        (a, a_start), (b, b_start) = load(a_dir), load(b_dir)
-        info = (b or a).get("macchina", {})
-        lines += [f"### {m} · {info.get('processore', '?')} · {fmt(info.get('memoriaGB'), ' GB', 0)} · Neural Engine: {'sì' if info.get('neuralEngine') else 'no'}", ""]
-        lines += ["| Prova | Secondi prima | Secondi dopo | Memoria max prima (MB) | dopo | Ritardo finestra max prima (ms) | dopo | Blocchi >50 ms prima | dopo |",
-                  "|---|---|---|---|---|---|---|---|---|"]
-        ra, rb = a.get("prove", {}), b.get("prove", {})
-        for k in sorted(set(ra) | set(rb)):
-            if k == "apertura":
+    for mdir in sorted(glob.glob(os.path.join(root, "banco-*"))):
+        m = os.path.basename(mdir)[len("banco-"):]
+        runs = {v: jload(os.path.join(mdir, f"banco-{v}.json")) for v in ("prima", "dopo")}
+        info = runs["dopo"].get("macchina") or runs["prima"].get("macchina") or {}
+        lines += [f"### {m} · {info.get('processore', '?')} · {fmt(info.get('memoriaGB'), 0)} GB · "
+                  f"Neural Engine: {'sì' if info.get('neuralEngine') else 'no'}", ""]
+        # Le prove raggruppate per tipo (rapida-1, massima-2…), mediate sui giri
+        kinds = {}
+        for v in ("prima", "dopo"):
+            for key, r in runs[v].get("prove", {}).items():
+                kind = re.sub(r"^g\d+-", "", key)
+                kinds.setdefault(kind, {"prima": [], "dopo": []})[v].append(r)
+        lines += ["| Prova | giri | Secondi prima | dopo | diff | Memoria max prima (MB) | dopo | Ritardo finestra max prima (ms) | dopo | Blocchi >50 ms prima | dopo |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|"]
+        for kind in sorted(kinds):
+            if kind == "apertura":
                 continue
-            x, y = ra.get(k, {}), rb.get(k, {})
-            lines.append(f"| {k} | {fmt(x.get('secondi'))} | {fmt(y.get('secondi'))} | {fmt(x.get('memoriaMassimaMB'), d=0)} | {fmt(y.get('memoriaMassimaMB'), d=0)} | "
-                         f"{fmt(x.get('ritardoMassimoFinestraMs'), d=0)} | {fmt(y.get('ritardoMassimoFinestraMs'), d=0)} | {x.get('blocchiOltre50ms', '—')} | {y.get('blocchiOltre50ms', '—')} |")
-        for name in sorted(set(ra.get("apertura", {})) | set(rb.get("apertura", {}))):
-            x, y = ra.get("apertura", {}).get(name, {}), rb.get("apertura", {}).get(name, {})
-            lines.append(f"| apertura {name} (prima / seconda volta) | {fmt(x.get('primaApertura'))} / {fmt(x.get('secondaApertura'))} | "
-                         f"{fmt(y.get('primaApertura'))} / {fmt(y.get('secondaApertura'))} | | | | | | |")
-        lines.append(f"| avvio (prima finestra, mediana di 3) | {fmt(a_start.get('mediana'), d=2)} | {fmt(b_start.get('mediana'), d=2)} | | | | | | |")
+            a, b = kinds[kind]["prima"], kinds[kind]["dopo"]
+            g = lambda rs, k: mean([r.get(k) for r in rs])
+            sa, sb = g(a, "secondi"), g(b, "secondi")
+            lines.append(f"| {kind} | {len(a)}/{len(b)} | {fmt(sa)} | {fmt(sb)} | {pct(sa, sb)} | {fmt(g(a, 'memoriaMassimaMB'), 0)} | {fmt(g(b, 'memoriaMassimaMB'), 0)} | "
+                         f"{fmt(g(a, 'ritardoMassimoFinestraMs'), 0)} | {fmt(g(b, 'ritardoMassimoFinestraMs'), 0)} | {fmt(g(a, 'blocchiOltre50ms'), 0)} | {fmt(g(b, 'blocchiOltre50ms'), 0)} |")
+        for name in ("HTDemucs", "StrumentiSW2"):
+            a = [r.get(name, {}) for r in kinds.get("apertura", {}).get("prima", [])]
+            b = [r.get(name, {}) for r in kinds.get("apertura", {}).get("dopo", [])]
+            if a or b:
+                lines.append(f"| apertura {name}: prima volta / seconda | | {fmt(mean([x.get('primaApertura') for x in a]))} / {fmt(mean([x.get('secondaApertura') for x in a]))} | "
+                             f"{fmt(mean([x.get('primaApertura') for x in b]))} / {fmt(mean([x.get('secondaApertura') for x in b]))} | | | | | | | |")
+        starts = {}
+        for v in ("prima", "dopo"):
+            meds = [jload(p).get("mediana") for p in glob.glob(os.path.join(mdir, f"avvio-{v}-*.json"))]
+            starts[v] = mean([x for x in meds if x is not None and x >= 0])
+        lines.append(f"| avvio (prima finestra, mediana) | | {fmt(starts['prima'], 2)} | {fmt(starts['dopo'], 2)} | {pct(starts['prima'], starts['dopo'])} | | | | | | |")
         lines.append("")
-        # Passi della seconda separazione (modelli già aperti): dove va il tempo
-        for k in sorted(set(ra) | set(rb)):
-            if k == "apertura":
-                continue
-            for label, r in (("prima", ra), ("dopo", rb)):
-                steps = r.get(k, {}).get("passi", [])
-                if steps:
-                    lines.append(f"- {k} {label}: " + ", ".join(f"{s['nome']} {s['secondi']:.1f} s" for s in steps) + f" · {r[k].get('motore', '')}")
+        # Dove va il tempo, per ogni prova
+        for v in ("prima", "dopo"):
+            for key, r in sorted(runs[v].get("prove", {}).items()):
+                if "passi" in r:
+                    lines.append(f"- {v} {key}: " + ", ".join(f"{s['nome']} {s['secondi']:.1f} s" for s in r["passi"]) + f" · {r.get('motore', '')}")
         lines.append("")
-        # Le tracce: il «dopo» rispetto al «prima»
+        # Le tracce: il «dopo» rispetto al «prima», prova per prova
         rows = []
-        for tdir in sorted(glob.glob(os.path.join(a_dir, "tracce", "*", "*"))):
-            rel = os.path.relpath(tdir, os.path.join(a_dir, "tracce"))
-            other = os.path.join(b_dir, "tracce", rel)
-            if not os.path.exists(other):
-                rows.append((rel, None)); continue
-            v = sdr(read(tdir), read(other))
+        for tpath in sorted(glob.glob(os.path.join(mdir, "tracce-prima", "*", "*"))):
+            rel = os.path.relpath(tpath, os.path.join(mdir, "tracce-prima"))
+            other = os.path.join(mdir, "tracce-dopo", rel)
+            v = sdr(read(tpath), read(other)) if os.path.exists(other) else None
             rows.append((rel, v))
-            worst.append((m, rel, v))
+            if v is not None:
+                worst.append((m, rel, v))
         if rows:
-            lines.append("Tracce dopo rispetto a prima: " + ", ".join(f"{r} {'identica' if v == math.inf else ('mancante' if v is None else f'{v:.0f} dB')}" for r, v in rows))
+            same = sum(1 for _, v in rows if v == math.inf)
+            lines.append(f"Tracce dopo rispetto a prima: {same} identiche su {len(rows)}; " +
+                         ", ".join(f"{r} {'mancante' if v is None else f'{v:.0f} dB'}" for r, v in rows if v != math.inf))
             lines.append("")
-    bad = [(m, r, v) for m, r, v in worst if v is not None and v < 60]
+    bad = [(m, r, v) for m, r, v in worst if v < 60]
     lines.append("**Qualità: " + ("tutte le tracce identiche o oltre 60 dB rispetto a prima.**" if worst and not bad
                                   else "nessuna traccia da confrontare.**" if not worst
                                   else "ATTENZIONE: " + ", ".join(f"{m} {r} {v:.1f} dB" for m, r, v in bad) + "**"))
     text = "\n".join(lines) + "\n"
     open(out, "w").write(text)
     print(text)
-    json.dump({"tracce": [{"macchina": m, "traccia": r, "sdr": (None if v is None else ("identica" if v == math.inf else v))} for m, r, v in worst]},
+    json.dump({"tracce": [{"macchina": m, "traccia": r, "sdr": ("identica" if v == math.inf else v)} for m, r, v in worst]},
               open(os.path.join(root, "confronto.json"), "w"), indent=1)
     if bad:
         print("::warning::Tracce diverse da prima: " + ", ".join(f"{m} {r} {v:.1f} dB" for m, r, v in bad))
