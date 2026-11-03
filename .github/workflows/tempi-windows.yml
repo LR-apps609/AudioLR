@@ -180,6 +180,8 @@ jobs:
           print(f"\nPeso: installer {pa.get('installerMB')} → {pb.get('installerMB')} MB · installata {pa.get('installedMB')} → {pb.get('installedMB')} MB\n")
           pt = lambda R: " · ".join(f"{name[r['quality']]} {r['pageTiming']['domReadyMs']} ms ({r['pageTiming']['scripts']} script, {r['pageTiming']['scriptKB']} KB)" for r in R["runs"] if r.get("pageTiming"))
           print(f"Pagina pronta (DOMContentLoaded, dentro l'avvio): prima {pt(A) or '–'} · dopo {pt(B) or '–'}\n")
+          ic = lambda R: " · ".join(f"{name[r['quality']]} {r['idleCpu']} s" for r in R["runs"] if r.get("idleCpu") is not None)
+          print(f"A riposo (processore usato in 10 s, finestra aperta senza lavoro): prima {ic(A) or '–'} · dopo {ic(B) or '–'}\n")
           ca, cb = A.get("cancel") or {}, B.get("cancel") or {}
           g = lambda c, a, b: (c.get(a) or {}).get(b, "–")
           print("| «Annulla» | Prima | Dopo |\n|---|---|---|")

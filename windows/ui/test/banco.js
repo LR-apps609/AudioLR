@@ -135,6 +135,8 @@ const until = async (page, fn, ms, every = 500) => {
 async function separate(quality, seconds) {
   const { browser, page, startup, pageTiming } = await launch();
   await sleep(3000);                             // l'avvio si assesta (controllo aggiornamenti, libreria)
+  // A riposo (finestra aperta, niente in corso, prima dei misuratori): processore usato da IsoLR in 10 s
+  const idleCpu = await cpuAfter(10000);
   await meters(page);
   await addSong(page, clip(seconds), `Banco ${quality}.wav`, quality);
   const t0 = Date.now();
@@ -156,9 +158,9 @@ async function separate(quality, seconds) {
   }
   await browser.close().catch(() => {});
   kill();
-  const res = { quality, seconds, ok: ok && r.phase === "done", error: r.error, wall, took: r.meta && r.meta.took, backend: r.meta && r.meta.backend,
+  const res = { quality, seconds, idleCpu, ok: ok && r.phase === "done", error: r.error, wall, took: r.meta && r.meta.took, backend: r.meta && r.meta.backend,
     startup, pageTiming, memory: mem, fluidity: { longTasks: m.longTasks, longestTask: m.longestTask, longTotal: m.longTotal, frameGaps: m.frameGaps, worstFrameGap: m.worstFrameGap, byStage: m.byStage }, steps: m.steps };
-  console.log(`::notice::${quality} ${seconds} s: ${wall.toFixed(1)} s (${res.backend || "?"}) · avvio ${startup.toFixed(1)} s · memoria ${mem.totalMB} MB · blocchi ${m.longTasks} (max ${m.longestTask} ms) per fase ${JSON.stringify(m.byStage)} ${r.error || ""}`);
+  console.log(`::notice::${quality} ${seconds} s: ${wall.toFixed(1)} s (${res.backend || "?"}) · avvio ${startup.toFixed(1)} s · a riposo ${idleCpu} s di processore in 10 s · memoria ${mem.totalMB} MB · blocchi ${m.longTasks} (max ${m.longestTask} ms) per fase ${JSON.stringify(m.byStage)} ${r.error || ""}`);
   return res;
 }
 
