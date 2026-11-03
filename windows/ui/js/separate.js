@@ -521,10 +521,18 @@
     }
     await stop();
     const meta = { version: 1, title, created: new Date().toISOString(), quality: info.quality, duration: info.seconds, took: info.took,
-      engine: (info.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore") + (info.mode ? ` · modalità ${info.mode}` : ""), gainDB: +(20 * Math.log10(gain)).toFixed(2),
+      engine: engineName(info.backend) + (info.mode ? ` · modalità ${info.mode}` : ""), gainDB: +(20 * Math.log10(gain)).toFixed(2),
       source: info.source, analysis: info.analysis, stems };
     await Bridge.writeText(`${folder}/isolr.json`, JSON.stringify(meta));
     return { folder, meta };
+  }
+
+  /** Il nome del motore per la scheda della canzone. Il calcolo nativo dice già dove ha lavorato
+   *  («Scheda grafica (DirectML)», «Processore»…): prima si guardava solo WebGPU e risultava sempre «Processore». */
+  function engineName(backend) {
+    if (backend === "webgpu") return "Scheda grafica (WebGPU)";
+    if (typeof backend === "string" && /scheda|processore/i.test(backend)) return backend;
+    return "Processore";
   }
 
   /** Una versione nuova di una canzone già separata (a tempo, rimontata): stesse tracce e dati, cartella nuova. */
