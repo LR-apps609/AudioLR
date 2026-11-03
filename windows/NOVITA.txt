@@ -1,3 +1,11 @@
+Novità di IsoLR per Windows 0.15.0 «Più svelta e più solida»:
+• «Annulla» ferma subito in ogni fase: calcolo sulla scheda grafica, scaricamento, analisi e salvataggio (le tracce a metà vanno nel Cestino). Una nuova separazione può partire subito
+• Scaricamento dei modelli più robusto: se la connessione cade, IsoLR riprova da solo e riprende da dove si era fermato, e controlla che il file sia integro. Mentre scarica dice cosa succede e, se non ci riesce, perché e cosa fare
+• Finestra più leggera: l'avanzamento si aggiorna al massimo 10 volte al secondo e le animazioni si fermano quando la musica non suona
+• Nella scheda della canzone c'è il motore vero (scheda grafica o processore): prima risultava sempre «Processore»
+• Tempi delle separazioni salvati solo sul tuo PC: «Segnala» allega le ultime 20 righe solo se mandi tu la segnalazione
+• Le tracce restano identiche a quelle di prima
+
 Novità di IsoLR per Windows 0.14.0 «Voce pulita», come sul Mac:
 • Pulisci la voce (Ctrl+Maiusc+P): dopo una separazione togli il rumore di fondo e la coda del riverbero dalla voce, tutto sul tuo PC e senza scaricare niente. La «Voce pulita» prende il posto della voce nel mixer e si scarica come le altre. Una voce già pulita non cambia
 • Clic destro su un file audio in Esplora file › «Separa con IsoLR» (su Windows 11 sotto «Mostra altre opzioni»)

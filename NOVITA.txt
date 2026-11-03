@@ -1,3 +1,10 @@
+Novità della 0.40.0 «Più svelta e più solida»:
+• Scaricamento dei modelli più robusto: se la connessione cade, IsoLR riprova da solo e riprende da dove si era fermato, senza ricominciare da zero. Mentre scarica dice cosa succede e, se non ci riesce, perché e cosa fare
+• Il modello si apre mentre IsoLR legge la canzone: si parte prima
+• Un doppio clic non prepara due anteprime, e la libreria non si ridisegna a ogni passo della separazione
+• Tempi delle separazioni salvati solo sul tuo Mac: «Segnala» allega le ultime 20 righe solo se mandi tu la segnalazione. Nessun dato esce da solo
+• Le tracce restano identiche a quelle di prima
+
 Novità della 0.39.0 «Voce pulita»:
 • Pulisci la voce (⇧⌘P): dopo una separazione togli il rumore di fondo e la coda del riverbero dalla voce, tutto sul tuo Mac e senza scaricare niente. La «Voce pulita» prende il posto della voce nel mixer e si scarica come le altre. Una voce già pulita non cambia
 • Clic destro su un file audio nel Finder › Azioni rapide (o Servizi) › «Separa con IsoLR». Se non lo vedi, attivalo in Impostazioni di Sistema › Tastiera › Scorciatoie da tastiera › Servizi
