@@ -167,54 +167,33 @@ const state = (page) => page.evaluate(() => ({ phase: IsoApp.job.phase, stage: I
 
 async function cpuAfter(ms) { const a = memory().cpu; await sleep(ms); return +(memory().cpu - a).toFixed(1); }
 
-/** «Annulla» durante lo scaricamento di un modello e durante il calcolo nativo di Studio; poi si riparte. */
+/** «Annulla» durante il calcolo nativo di Studio (modelli già sul disco): quanto risponde, quanto processore
+ *  consuma ancora dopo, e se una separazione nuova parte subito. Lo scaricamento sul Windows di GitHub è troppo
+ *  veloce (600 MB in pochi secondi) per annullarlo a metà: quella prova si fa a mano. */
 async function cancelTest() {
   const out = {};
-  const model = "VoceRevive.onnx";
-  // Il modello voce di Studio sparisce: l'app lo deve riscaricare (610 MB)
-  for (const f of fs.readdirSync(modelsDir)) if (f.startsWith("VoceRevive")) fs.rmSync(path.join(modelsDir, f));
   const { browser, page } = await launch();
   await sleep(3000);
-  await addSong(page, clip(5), "Banco annulla.wav", "studio");
+  await addSong(page, clip(10), "Banco annulla.wav", "studio");
   await page.evaluate(() => IsoApp.job.start("studio"));
-  const sawDownload = await until(page, () => /Scarico/.test(IsoApp.job.step || "") && IsoApp.job.progress > 0.02, 5 * 60 * 1000, 100);
-  await sleep(1500);
-  const st0 = await state(page);
-  let c0 = Date.now();
+  out.reached = await until(page, () => IsoApp.job.stage === "separating" && IsoApp.job.progress > 0.02, 20 * 60 * 1000, 200);
+  await sleep(3000);
+  out.before = await state(page);
+  const c0 = Date.now();
   await page.evaluate(() => IsoApp.job.cancel());
-  await until(page, () => IsoApp.job.phase !== "working", 15 * 60 * 1000, 50);
-  const st1 = await state(page);
-  out.download = { sawDownload, before: st0, after: st1, responseMs: Date.now() - c0, partial: fs.readdirSync(modelsDir).filter((f) => f.startsWith("VoceRevive")) };
-  // Si riparte subito: il modello deve finire di scaricarsi (ripreso, se possibile) e poi si annulla nel calcolo
-  const steps = [];
-  const t1 = Date.now();
-  await page.evaluate(() => IsoApp.job.start("studio"));
-  const end = Date.now() + 20 * 60 * 1000;
-  while (Date.now() < end) {
-    const s = await page.evaluate(() => ({ stage: IsoApp.job.stage, step: IsoApp.job.step, p: IsoApp.job.progress, phase: IsoApp.job.phase }));
-    if (!steps.length || steps[steps.length - 1].step !== s.step) steps.push({ t: (Date.now() - t1) / 1000, step: s.step });
-    if (s.phase !== "working" || (s.stage === "separating" && s.p > 0.03)) break;
-    await sleep(200);
-  }
-  out.restart = { downloadSeconds: (Date.now() - t1) / 1000, steps: steps.filter((s) => /Scarico|riprend|riprovo|connessione/i.test(s.step || "")).slice(0, 6).concat(steps.slice(-2)) };
-  await sleep(2000);
-  const st2 = await state(page);
-  c0 = Date.now();
-  await page.evaluate(() => IsoApp.job.cancel());
-  await until(page, () => IsoApp.job.phase !== "working", 5 * 60 * 1000, 50);
-  out.native = { before: st2, responseMs: Date.now() - c0, after: await state(page), cpuSecondsIn8s: await cpuAfter(8000) };
-  // Dopo Annulla una nuova separazione parte e arriva in fondo (Rapida, 5 s)
+  await until(page, () => IsoApp.job.phase !== "working", 10 * 60 * 1000, 50);
+  out.responseMs = Date.now() - c0;
+  out.after = await state(page);
+  out.cpuSecondsIn8s = await cpuAfter(8000);
+  // Una separazione nuova subito dopo (Rapida, 10 s): parte e arriva in fondo
   const t2 = Date.now();
   await page.evaluate(() => { IsoApp.job.start("fast"); });
-  const ok = await until(page, () => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, 10 * 60 * 1000, 500);
-  out.after = { ok: ok && (await page.evaluate(() => IsoApp.job.phase)) === "done", seconds: (Date.now() - t2) / 1000 };
+  const ok = await until(page, () => ["done", "failed"].includes(IsoApp.job.phase) && !IsoApp.job.busy, 15 * 60 * 1000, 500);
+  out.next = { ok: ok && (await page.evaluate(() => IsoApp.job.phase)) === "done", seconds: (Date.now() - t2) / 1000 };
   await browser.close().catch(() => {});
   kill();
-  // Il modello torna com'era (per le misure successive)
-  for (const f of fs.readdirSync(modelsBackup)) if (f.startsWith("VoceRevive")) fs.copyFileSync(path.join(modelsBackup, f), path.join(modelsDir, f));
-  for (const f of fs.readdirSync(modelsDir)) if (/\.parziale$/.test(f)) fs.rmSync(path.join(modelsDir, f));
   console.log("Annulla, dettagli: " + JSON.stringify(out));
-  console.log(`::notice::Annulla: durante lo scaricamento ${out.download.responseMs} ms · nel calcolo nativo ${out.native.responseMs} ms, processore dopo ${out.native.cpuSecondsIn8s} s in 8 s · nuova separazione ${out.after.ok ? "ok" : "NO"}`);
+  console.log(`::notice::Annulla nel calcolo nativo: risposta ${out.responseMs} ms, processore ancora usato ${out.cpuSecondsIn8s} s nei 8 s dopo, separazione nuova ${out.next.ok ? "ok" : "NO"} (${out.reached ? "annullata durante la separazione" : "ATTENZIONE: non arrivata alla separazione"})`);
   return out;
 }
 

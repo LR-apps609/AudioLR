@@ -47,8 +47,22 @@
     return { left: buf.getChannelData(0).slice(), right: buf.getChannelData(1).slice(), seconds: buf.duration };
   }
 
-  /** Energia, picco e forma d'onda di una traccia (js/stems.js, lo stesso calcolo del lavoratore dei file). */
-  const measure = (ch, points) => window.Stems.measure(ch, points);
+  /** Energia, picco e forma d'onda di una traccia (Stem.measure e i picchi per il disegno). */
+  function measure(ch, points = 600) {
+    let e = 0, peak = 0;
+    const n = ch[0].length, peaks = new Float32Array(points), step = Math.max(1, Math.floor(n / points));
+    for (let p = 0; p < points; p++) {
+      let m = 0;
+      for (let i = p * step, end = Math.min(n, i + step); i < end; i++) {
+        const v = Math.max(Math.abs(ch[0][i]), Math.abs(ch[1][i]));
+        if (v > m) m = v;
+      }
+      peaks[p] = m;
+    }
+    for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) { const v = ch[c][i]; e += v * v; if (Math.abs(v) > peak) peak = Math.abs(v); }
+    let top = 0; for (const v of peaks) top = Math.max(top, v);
+    return { energy: e, peak, peaks: Array.from(peaks, (v) => +(v / (top || 1)).toFixed(3)) };
+  }
 
   class Job extends EventTarget {
     constructor() {
@@ -487,48 +501,25 @@
       throw new Error("annullato");
     };
     const format = Prefs.get("outputFormat", "wav24");
-    const order = ORDER.filter((x) => tracks[x]);
-    // Misure, livello comune e codifica nel lavoratore dei file (save-worker.js); qui si scrivono e basta
-    const files = encodeOutside(tracks, order, format);
-    try {
-      const { gain, m } = await files.next();
-      const total = Object.keys(m).filter((k) => k !== "instrumental").reduce((s, k) => s + m[k].energy, 0) || 1;
-      const stems = [];
-      for (const k of order) {
-        await stop();
-        const ext = Encode.FORMATS[format].ext;
-        const file = `${title} – ${NAMES[k]}.${ext}`;
-        const out = await files.next();
-        // Le tracce di lavoro restano sempre anche in WAV (per riaprirle e mescolarle); il formato scelto è la copia «bella»
-        await Bridge.writeFile(`${folder}/${file}`, out.bytes);
-        let work = file;
-        if (format !== "wav24") { work = `.lavoro/${k}.wav`; await Bridge.writeFile(`${folder}/${work}`, out.work); }
-        stems.push({ key: k, name: NAMES[k], file: work, export: file, share: k === "instrumental" ? null : m[k].energy / total,
-          peakDB: m[k].peak > 0 ? +(20 * Math.log10(m[k].peak * gain)).toFixed(1) : -120, peaks: m[k].peaks });
-      }
+    // Se anche una sola traccia supera il massimo, tutte si abbassano dello stesso tanto (Stem.safeGain)
+    let top = 0;
+    const m = {};
+    for (const k of Object.keys(tracks)) { m[k] = measure(tracks[k]); top = Math.max(top, m[k].peak); }
+    const gain = top > 0.98 ? 0.98 / top : 1;
+    const total = Object.keys(tracks).filter((k) => k !== "instrumental").reduce((s, k) => s + m[k].energy, 0) || 1;
+    const stems = [];
+    for (const k of ORDER.filter((x) => tracks[x])) {
       await stop();
-      return await writeMeta(folder, title, info, gain, stems);
-    } finally { files.close(); }
-  }
-
-  /** Le tracce passano al lavoratore dei file (senza copie: la memoria passa a lui). `next()` dà prima
-   *  { gain, m } (misure), poi una traccia alla volta { bytes, work } nell'ordine di `order`. */
-  function encodeOutside(tracks, order, format) {
-    const w = new Worker("js/save-worker.js"), queue = [], waiting = [];
-    let failed = null;
-    const deliver = () => { while (waiting.length && (queue.length || failed)) { const p = waiting.shift(); if (queue.length) p.resolve(queue.shift()); else p.reject(failed); } };
-    w.onmessage = (e) => { const d = e.data; if (d.type === "error") failed = new Error("non riesco a preparare i file delle tracce: " + d.message); else queue.push(d); deliver(); };
-    w.onerror = (e) => { failed = new Error("non riesco a preparare i file delle tracce (" + (e.message || "memoria insufficiente?") + ")"); deliver(); };
-    const sendable = {}, transfer = [];
-    for (const k of Object.keys(tracks)) { sendable[k] = tracks[k]; for (const c of tracks[k]) if (!transfer.includes(c.buffer)) transfer.push(c.buffer); }
-    w.postMessage({ tracks: sendable, order, format }, transfer);
-    return {
-      next: () => new Promise((resolve, reject) => { waiting.push({ resolve, reject }); deliver(); }),
-      close: () => w.terminate(),
-    };
-  }
-
-  async function writeMeta(folder, title, info, gain, stems) {
+      const ext = Encode.FORMATS[format].ext;
+      const file = `${title} – ${NAMES[k]}.${ext}`;
+      // Le tracce di lavoro restano sempre anche in WAV (per riaprirle e mescolarle); il formato scelto è la copia «bella»
+      await Bridge.writeFile(`${folder}/${file}`, await Encode.encode(tracks[k], format, gain));
+      let work = file;
+      if (format !== "wav24") { work = `.lavoro/${k}.wav`; await Bridge.writeFile(`${folder}/${work}`, Encode.wav(tracks[k], 24, gain)); }
+      stems.push({ key: k, name: NAMES[k], file: work, export: file, share: k === "instrumental" ? null : m[k].energy / total,
+        peakDB: m[k].peak > 0 ? +(20 * Math.log10(m[k].peak * gain)).toFixed(1) : -120, peaks: m[k].peaks });
+    }
+    await stop();
     const meta = { version: 1, title, created: new Date().toISOString(), quality: info.quality, duration: info.seconds, took: info.took,
       engine: (info.backend === "webgpu" ? "Scheda grafica (WebGPU)" : "Processore") + (info.mode ? ` · modalità ${info.mode}` : ""), gainDB: +(20 * Math.log10(gain)).toFixed(2),
       source: info.source, analysis: info.analysis, stems };

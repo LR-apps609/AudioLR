@@ -183,11 +183,9 @@ jobs:
           ca, cb = A.get("cancel") or {}, B.get("cancel") or {}
           g = lambda c, a, b: (c.get(a) or {}).get(b, "–")
           print("| «Annulla» | Prima | Dopo |\n|---|---|---|")
-          print(f"| Durante lo scaricamento del modello (ms) | {g(ca,'download','responseMs')} | {g(cb,'download','responseMs')} |")
-          print(f"| Riscaricamento dopo Annulla (s) | {g(ca,'restart','downloadSeconds')} | {g(cb,'restart','downloadSeconds')} |")
-          print(f"| Nel calcolo nativo (ms) | {g(ca,'native','responseMs')} | {g(cb,'native','responseMs')} |")
-          print(f"| Processore ancora usato nei 8 s dopo (s) | {g(ca,'native','cpuSecondsIn8s')} | {g(cb,'native','cpuSecondsIn8s')} |")
-          print(f"| Nuova separazione subito dopo | {g(ca,'after','ok')} | {g(cb,'after','ok')} |")
+          print(f"| Nel calcolo nativo di Studio, risposta (ms) | {ca.get('responseMs', '–')} | {cb.get('responseMs', '–')} |")
+          print(f"| Processore ancora usato nei 8 s dopo (s) | {ca.get('cpuSecondsIn8s', '–')} | {cb.get('cpuSecondsIn8s', '–')} |")
+          print(f"| Separazione nuova subito dopo | {g(ca,'next','ok')} | {g(cb,'next','ok')} |")
           print("\n### Tracce: dopo contro prima (SDR, dB; ≥ 60 = uguali all'orecchio, ∞ = identiche)\n")
           print("| Qualità | Traccia | SDR | Differenza massima |\n|---|---|---|---|")
           for q in ("fast", "best", "studio"):
