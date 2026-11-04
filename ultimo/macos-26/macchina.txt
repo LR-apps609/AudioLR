@@ -1,0 +1,7 @@
+macchina: macos-26
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+chip: Apple M1 (Virtual)
+architettura: arm64
+memoria: 7 GB

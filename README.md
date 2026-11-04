@@ -1,10 +1,11 @@
 # Prove sui dispositivi
 
-Commit 03913e127f00c12bb2431126e04a2a746e7313ae · [corsa](https://github.com/LR-apps609/AudioLR/actions/runs/41911657839)
+Commit c550728bf8fbe3f841c42a4b8c41bf7a6689050e · [corsa](https://github.com/LR-apps609/AudioLR/actions/runs/41925883153)
 
 | Combinazione | Sistema | Schermo | Esito | Foto |
 |---|---|---|---|---|
 | macos-15-intel | 15.7.9 Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz | Resolution: 1920 x 1080 (1080p FHD - Full High Definition) | ⚠️ nessuna foto |  |
+| macos-26 | 26.6.2 Apple M1 (Virtual) |  | ✅ | [dopo-chiusura-brusca](ultimo/macos-26/dopo-chiusura-brusca.png) [primo-avvio](ultimo/macos-26/primo-avvio.png) |
 | windows-11-arm-it-IT | Microsoft Windows 11 Enterprise 10.0.26200 | 1024x768 (utile 1024x720) | ⚠️ nessuna foto |  |
 | windows-2022-it-IT | Microsoft Windows Server 2022 Datacenter 10.0.20348 | 1024x768 (utile 1024x728) | ❌ percorso: ascolto: page.evaluate: TypeError: Failed to execute 'start' on 'AudioBufferSourceNode': The provided double value is non-finite.
     at Player.playPlain (http://tauri.localhost/js/player.js:171:13)
