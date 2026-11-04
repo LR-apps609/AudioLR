@@ -1,0 +1,3 @@
+Error: la finestra di IsoLR non risponde al collegamento di prova (WebView2 senza debug?)
+    at connect (C:\a\AudioLR\AudioLR\windows\ui\test\app-vera.js:22:9)
+    at async C:\a\AudioLR\AudioLR\windows\ui\test\app-vera.js:42:23

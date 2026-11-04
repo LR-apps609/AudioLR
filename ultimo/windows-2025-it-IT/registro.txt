@@ -1,0 +1,15 @@
+20:59:30 UTC  IsoLR 0.15.0 avviata
+21:00:34 UTC  IsoLR chiusa
+21:00:35 UTC  IsoLR 0.15.0 avviata
+21:01:48 UTC  IsoLR chiusa
+21:01:48 UTC  IsoLR 0.15.0 avviata
+21:03:00 UTC  IsoLR chiusa
+21:03:01 UTC  IsoLR 0.15.0 avviata
+21:04:13 UTC  IsoLR chiusa
+21:04:13 UTC  IsoLR 0.15.0 avviata
+21:05:26 UTC  IsoLR chiusa
+21:05:45 UTC  IsoLR 0.15.0 avviata
+21:06:55 UTC  IsoLR chiusa
+21:06:55 UTC  IsoLR 0.15.0 avviata
+21:07:07 UTC  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era la 0.15.0
+21:07:07 UTC  IsoLR 0.15.0 avviata
