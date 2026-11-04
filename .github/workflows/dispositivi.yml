@@ -235,7 +235,8 @@ jobs:
           pkill -x AudioLR || true
       - name: Avviso sui limiti
         if: ${{ steps.avvio.outcome == 'failure' && matrix.macchina == 'macos-15-intel' }}
-        run: echo "::warning::Mac Intel di GitHub: virtuale e senza Metal, l'interfaccia può non aprirsi. Provato solo lipo; l'interfaccia va provata a mano"
+        run: |
+          echo "::warning::Mac Intel di GitHub: virtuale e senza Metal, l'interfaccia può non aprirsi. Provato solo lipo; l'interfaccia va provata a mano"
       - name: Registro e rapporti di arresto
         if: always()
         run: |
