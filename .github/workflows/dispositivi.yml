@@ -134,7 +134,14 @@ jobs:
           $env:PW = $PW
           $fail = 0
           function Avvia($scala, $extra) {
-            $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222 --force-device-scale-factor=$scala"
+            # Solo per la prova: apre la porta di debug di WebView2 senza toccare l'app pubblicata.
+            # Tauri passa già i suoi argomenti, e la sola variabile d'ambiente non basta (04/11, quinto giro):
+            # si usa anche la regola di Windows per WebView2, che vale per il nome del programma.
+            $arg = "--remote-debugging-port=9222 --force-device-scale-factor=$scala"
+            $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $arg
+            $k = "HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+            New-Item -Path $k -Force | Out-Null
+            New-ItemProperty -Path $k -Name (Split-Path $env:APP -Leaf) -Value $arg -PropertyType String -Force | Out-Null
             $a = @{ FilePath = $env:APP; PassThru = $true }
             if ($extra) { $a.ArgumentList = "`"$extra`"" }
             return Start-Process @a
@@ -147,6 +154,13 @@ jobs:
             $p = Avvia $s $null
             Start-Sleep -Seconds 12
             if ($p.HasExited) { Write-Output "::error::Alla scala $s IsoLR si è chiusa da sola (codice $($p.ExitCode))"; $fail = 1; continue }
+            if ($s -eq "1") {
+              # Cosa riceve davvero WebView2, per capire se la porta di prova è aperta
+              $porta = Get-NetTCPConnection -LocalPort 9222 -State Listen -ErrorAction SilentlyContinue
+              Write-Output "::notice::Porta di prova 9222 aperta: $([bool]$porta)"
+              Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -notmatch "--type=" } |
+                ForEach-Object { Write-Output "::notice::WebView2 avviato con: $($_.CommandLine -replace '.*msedgewebview2.exe\"?\s*','')" }
+            }
             node windows/ui/test/app-vera.js foto risultati "scala-$s"
             if ($LASTEXITCODE -ne 0) { Write-Output "::error::Alla scala $s qualcosa non sta nella finestra (vedi risultati/scala-$s.json)"; $fail = 1 }
             Chiudi $p
