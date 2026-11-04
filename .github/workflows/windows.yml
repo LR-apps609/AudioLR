@@ -194,6 +194,43 @@ jobs:
           $bmp.Save("win-avvio-vero.png", [System.Drawing.Imaging.ImageFormat]::Png)
           Stop-Process -Id $p.Id -Force
           Write-Output "::notice::IsoLR per Windows si installa, si avvia e resta aperta"
+      - name: Windows pulito (senza i componenti Visual C++)
+        # Un PC appena comprato può non avere Visual C++ 2015–2022, che i server di GitHub hanno sempre.
+        # Si tolgono qui (macchina usa e getta) e si carica il motore come fa IsoLR: deve dire cosa manca,
+        # mai bloccarsi; con i componenti accanto a onnxruntime.dll deve partire.
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe | Where-Object { $_.FullName -like "*Hostx64\x64*" } | Select-Object -First 1
+          $app = Get-ChildItem windows\src-tauri\target\release -Filter *.exe | Select-Object -First 1
+          foreach ($d in "windows\src-tauri\libs\onnxruntime.dll", "windows\src-tauri\libs\DirectML.dll", $app.FullName) {
+            $deps = (& $dumpbin.FullName /dependents $d) | Where-Object { $_ -match "^\s+\S+\.dll\s*$" } | ForEach-Object { $_.Trim() }
+            Write-Output "::notice::$(Split-Path $d -Leaf) usa: $($deps -join ', ')"
+          }
+          cd windows\src-tauri
+          cargo build --release --example prova_pulito 2> ..\..\pulito.err; if ($LASTEXITCODE -ne 0) { Get-Content ..\..\pulito.err -Tail 20; exit 1 }
+          $vc = "msvcp140.dll", "msvcp140_1.dll", "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll"
+          New-Item -ItemType Directory -Force -Path C:\vc-tolti | Out-Null
+          foreach ($f in $vc) {
+            $p = "C:\Windows\System32\$f"
+            if (Test-Path $p) { takeown /f $p | Out-Null; icacls $p /grant "*S-1-5-32-544:F" | Out-Null; Move-Item $p "C:\vc-tolti\$f" -Force }
+          }
+          $motore = New-Item -ItemType Directory -Force -Path "$env:TEMP\Nicolò De Santis\motore"
+          Copy-Item libs\onnxruntime.dll, libs\DirectML.dll $motore
+          $exe = "target\release\examples\prova_pulito.exe"
+          $out = & $exe "$motore\onnxruntime.dll" 2>&1 | Out-String
+          Write-Output "Senza Visual C++: $out (codice $LASTEXITCODE)"
+          if ($LASTEXITCODE -eq -1073741515) { Write-Output "::warning::La prova stessa non parte senza Visual C++ (le manca una DLL): risultato non valido" }
+          elseif ($LASTEXITCODE -ne 0 -or $out -notmatch "MOTORE") { Write-Output "::error::Senza Visual C++ il motore si interrompe invece di dire cosa manca: $out"; $fail = 1 }
+          elseif ($out -match "MOTORE OK") { Write-Output "::notice::Il motore parte anche senza Visual C++ (onnxruntime.dll non ne ha bisogno)" }
+          else { Write-Output "::warning::Senza Visual C++ il motore non parte: $($out.Trim())" }
+          # Con i componenti accanto al motore (come si possono mettere nell'installer)
+          foreach ($f in $vc) { if (Test-Path "C:\vc-tolti\$f") { Copy-Item "C:\vc-tolti\$f" $motore } }
+          $out2 = & $exe "$motore\onnxruntime.dll" 2>&1 | Out-String
+          Write-Output "Con Visual C++ accanto: $out2"
+          if ($out2 -match "MOTORE OK") { Write-Output "::notice::Con i componenti Visual C++ accanto a onnxruntime.dll il motore parte" } else { Write-Output "::warning::Anche con i componenti accanto il motore non parte: $($out2.Trim())" }
+          foreach ($f in $vc) { if (Test-Path "C:\vc-tolti\$f") { Move-Item "C:\vc-tolti\$f" "C:\Windows\System32\$f" -Force } }
+          exit $fail
       - name: Schermata
         if: always()
         shell: bash

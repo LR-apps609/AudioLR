@@ -153,7 +153,10 @@
       if (!Bridge.desktop || !/roformer/i.test(cfg.kind || "")) return null;
       try {
         // Si parte dal gradino che ha funzionato l'ultima volta per questo modello (0 = scheda grafica al massimo)
-        const backend = await Bridge.nativeLoad(name, this.onCpu, Prefs.get(`nativeLevel.${name}`, 0));
+        // Mai un'attesa infinita: se il motore non risponde in 10 minuti si continua senza (e lo si scrive nel registro)
+        let timer;
+        const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("il motore non ha risposto in 10 minuti")), 600000); });
+        const backend = await Promise.race([Bridge.nativeLoad(name, this.onCpu, Prefs.get(`nativeLevel.${name}`, 0)), limit]).finally(() => clearTimeout(timer));
         Job.log(`${name}: ${backend}`);
         if (backend === "Processore" && !this.onCpu) { const why = await Bridge.nativeGpuError(); if (why) Job.log(`DirectML non ha aperto il modello: ${why.slice(0, 300)}`); }
         return backend;
