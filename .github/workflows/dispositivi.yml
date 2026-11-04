@@ -92,7 +92,22 @@ jobs:
         run: |
           # Nessuna preferenza e nessun modello rimasto: primo avvio vero
           Remove-Item -Recurse -Force "$env:APPDATA\it.ledion.audiolr", "$env:LOCALAPPDATA\it.ledion.audiolr" -ErrorAction SilentlyContinue
-          $p = Start-Process -FilePath $env:INSTALLER -ArgumentList "/S" -Wait -PassThru
+          # Al massimo 5 minuti: se l'installer resta fermo (per esempio su un avviso di sicurezza per il file
+          # «scaricato da internet»), fotografo lo schermo, scrivo i titoli delle finestre aperte e mi fermo,
+          # invece di aspettare in silenzio fino al limite di 90 minuti.
+          New-Item -ItemType Directory -Force -Path risultati | Out-Null
+          $p = Start-Process -FilePath $env:INSTALLER -ArgumentList "/S" -PassThru
+          if (-not $p.WaitForExit(300000)) {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("risultati\installer-fermo.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $fin = Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): «$($_.MainWindowTitle)»" }
+            Write-Output "::error::L'installer è fermo da 5 minuti. Finestre aperte: $($fin -join ' · ')"
+            $p | Stop-Process -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
           if ($p.ExitCode -ne 0) { Write-Output "::error::L'installer è finito con il codice $($p.ExitCode)"; exit 1 }
           $exe = Get-ChildItem -Path "$env:LOCALAPPDATA\IsoLR", "$env:LOCALAPPDATA\Programs\IsoLR" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "uninstall*" } | Select-Object -First 1
           if (-not $exe) { Write-Output "::error::IsoLR non risulta installata"; exit 1 }
