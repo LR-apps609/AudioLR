@@ -75,7 +75,21 @@ jobs:
           # Le macchine di GitHub partono a 1024×768: a 150–200% la finestra sarebbe più piccola di qualunque schermo
           # vero. 1920×1080 è lo schermo più comune; a 175% dà 1097×617, come un 2K a 175% un po' più stretto.
           try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop }
-          catch { Write-Output "::warning::Non riesco a mettere lo schermo a 1920×1080 ($($_.Exception.Message)): le scale alte si provano su 1024×768" }
+          catch {
+            # Windows 11 non ha Set-DisplayResolution: la stessa cosa con ChangeDisplaySettings
+            Add-Type -Namespace Prova -Name Schermo -MemberDefinition @'
+          [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)] public struct DEVMODE {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName; public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+            public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput; public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName; public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+            public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight; }
+          [DllImport("user32.dll")] public static extern bool EnumDisplaySettings(string d, int m, ref DEVMODE dm);
+          [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DEVMODE dm, int f);
+          public static int Metti(int w, int h) { var dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(dm); EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000; return ChangeDisplaySettings(ref dm, 0); }
+          '@
+            $r = [Prova.Schermo]::Metti(1920, 1080)
+            if ($r -ne 0) { Write-Output "::warning::Non riesco a mettere lo schermo a 1920×1080 (codice $r): le scale si provano su questo schermo, solo quelle che Windows offre" }
+          }
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen
           $info = [ordered]@{
@@ -165,10 +179,24 @@ jobs:
             # Chiusura normale (come la X della finestra): la prossima volta niente «qualcosa è andato storto»
             [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(15000)) { Write-Output "::warning::IsoLR non si chiude con la X: chiusa a forza"; Stop-Process -Id $p.Id -Force }
           }
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -Namespace Prova -Name Fin -MemberDefinition '[DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool r);'
+          $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+          $sch = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           foreach ($s in "1", "1.25", "1.5", "1.75", "2") {
+            $f = [double]::Parse($s, [Globalization.CultureInfo]::InvariantCulture)
+            # Windows offre una scala solo se lo schermo resta alto almeno 600 punti (1920×1080: fino a 175%)
+            if ($sch.Height / $f -lt 600) { Write-Output "::notice::Scala $s saltata: su uno schermo $($sch.Width)×$($sch.Height) Windows non la offre"; continue }
             $p = Avvia $s $null
             Start-Sleep -Seconds 12
             if ($p.HasExited) { Write-Output "::error::Alla scala $s IsoLR si è chiusa da sola (codice $($p.ExitCode))"; $fail = 1; continue }
+            # La scala qui è solo dentro WebView2: la finestra va messa alla misura che avrebbe con Windows davvero
+            # a quella scala (1280×820 punti, poi stretta nello spazio utile come fa fit_window nell'app)
+            $p.Refresh(); $h = $p.MainWindowHandle
+            if ($h -ne [IntPtr]::Zero -and $f -ne 1) {
+              $w = [math]::Min([int](1280 * $f) + 16, $wa.Width); $ht = [math]::Min([int](820 * $f) + 39, $wa.Height)
+              [void][Prova.Fin]::MoveWindow($h, $wa.X, $wa.Y, $w, $ht, $true); Start-Sleep -Seconds 2
+            }
             if ($s -eq "1") {
               # Cosa riceve davvero WebView2, per capire se la porta di prova è aperta
               $porta = Get-NetTCPConnection -LocalPort 9222 -State Listen -ErrorAction SilentlyContinue
