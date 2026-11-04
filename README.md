@@ -16,5 +16,5 @@ Il repository si chiama ancora **AudioLR**, il nome di prima di IsoLR.
 Le app si aggiornano da sole.
 
 ## Per chi ci lavora
-Stato, decisioni, link e cronologia stanno in un solo posto: il [documento della verità](https://claude.ai/artifact/6aZCs1qRo1i8VEd8ZiJNu4).
+Stato, decisioni, link e cronologia stanno in un solo posto: il [documento della verità](https://claude.ai/artifact/M3yMXLFG2ZQ4ci98GEyCZU).
 Le regole di lavoro sono in [CLAUDE.md](CLAUDE.md). Le novità per gli utenti sono in `NOVITA.txt` e `windows/NOVITA.txt`.

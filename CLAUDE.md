@@ -1,6 +1,11 @@
 # IsoLR (repository AudioLR) · regole per Claude
 
-**Documento della verità:** https://claude.ai/artifact/6aZCs1qRo1i8VEd8ZiJNu4 («IsoLR · Documento della verità», Claude Docs).
+**Documento della verità:** https://claude.ai/artifact/M3yMXLFG2ZQ4ci98GEyCZU («IsoLR · Documento della verità», pagina privata su claude.ai).
+I dati (stato, test, diario, link, decisioni) stanno nel database della pagina: si aggiornano con lo strumento ArtifactData (collezioni meta, attese, test, link, stato, diario, decisioni, comefare, archivio, cambiamenti). La pagina si ripubblica solo quando cambia l'aspetto.
+- Prima di ogni aggiornamento rileggi i dati dal database, non dalla memoria. Se una scrittura non riesce, dillo.
+- Date e ore sempre in ora italiana (TZ=Europe/Rome date o i commit), mai a memoria: ogni riga ha creata e modificata; a ogni scrittura aggiungi una riga in «cambiamenti» e aggiorna meta.aggiornata e meta.schede.
+- Ogni cambiamento da verificare crea il suo test (collezione test) insieme alla voce del Diario; un test fallito diventa un bug in Stato.
+- La pagina è privata: non condividerla senza l'ok dell'utente.
 
 - Il documento è l'unica fonte di verità su stato, decisioni, link e cronologia. Se un altro file o pagina dice altro, vale il documento. Se il codice dice altro, verifica e correggi uno dei due.
 - All'inizio di ogni lavoro: leggi «Inizia qui» e «Diario», confronta il Diario con gli ultimi commit e aggiungi quello che manca.
