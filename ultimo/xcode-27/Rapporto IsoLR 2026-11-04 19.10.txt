@@ -1,0 +1,29 @@
+RAPPORTO DI ISOLR (Mac) · 2026-11-04 19:10:09 +0000
+
+Cosa è andato storto:
+• 2026-11-04 19:09:54 +0000 · L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-04 19:09:37 +0000
+
+Cosa stava facendo IsoLR: niente (in attesa)
+Installazione: già usata
+
+IsoLR 0.40.0 (31)
+macOS Version 27.0.1 (Build 26A434)
+Mac: VirtualMac2,1 · Apple M1 (Virtual)
+Memoria: 7 GB · processori: 3
+Qualità: Massima qualità · formato: WAV 24 bit
+Registro (ultimi passi):
+2026-11-04 19:09:54  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-04 19:09:37 +0000
+2026-11-04 19:10:00  PROBLEMA: La finestra non risponde da 5 secondi (stava facendo: niente)
+
+Architettura: Intel
+Scheda grafica: Apple Paravirtual device
+Schermi (1): schermo 1: 1024×768 punti, scala 1×, spazio utile 1024×677
+Finestra: 1180×674
+Lingua: en-US · formato en_US, decimali «.»
+Spazio libero: 38.5 GB
+Cartella delle tracce: /Users/***/Music/IsoLR
+Riduci movimento: sì · contrasto alto: no
+
+Registro (ultime 150 righe):
+2026-11-04 19:09:54  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-04 19:09:37 +0000
+2026-11-04 19:10:00  PROBLEMA: La finestra non risponde da 5 secondi (stava facendo: niente)

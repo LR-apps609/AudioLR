@@ -1,0 +1,10 @@
+macchina: macos-15-intel
+ProductName:		macOS
+ProductVersion:		15.7.9
+BuildVersion:		24G830
+chip: Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz
+architettura: x86_64
+memoria: 14 GB
+      Chipset Model: Apple Paravirtualized Graphics Device
+      Metal Support: Metal 2
+          Resolution: 1920 x 1080 (1080p FHD - Full High Definition)

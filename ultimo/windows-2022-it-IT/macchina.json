@@ -2,7 +2,7 @@
   "macchina": "windows-2022",
   "lingua": "it-IT",
   "sistema": "Microsoft Windows Server 2022 Datacenter 10.0.20348",
-  "processore": "AMD EPYC 7763 64-Core Processor                ",
+  "processore": "AMD EPYC 9V74 80-Core Processor                ",
   "architettura": "AMD64",
   "memoria_gb": 16.0,
   "scheda_video": "Microsoft Hyper-V Video",
