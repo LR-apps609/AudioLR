@@ -174,6 +174,8 @@ enum EngineChoice {
                     ? String(format: "Neural Engine e grafica (verificato: %.0f dB)", agreement)
                     : "Grafica e processore"
             }
+            if agreement == EngineChoice.fasterCPU { return "Processore (su questo Mac è più veloce della grafica)" }
+            if agreement == EngineChoice.fasterGPU { return "Grafica (su questo Mac è più veloce del processore)" }
             if units == .cpuOnly { return "Solo processore (Neural Engine e grafica qui non riescono a calcolare)" }
             if agreement > 0 { return String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement) }
             if agreement == EngineChoice.chosenGPU { return "Grafica (scelta nelle Impostazioni)" }
@@ -191,6 +193,19 @@ enum EngineChoice {
     static let lowMemoryGPU = -3.0
     /// Mac senza Neural Engine (Intel): non c'è niente da confrontare, il modello lavora su grafica e processore
     static let noANE = -4.0
+    /// Mac Intel, dopo la gara del motore: un pezzo cronometrato sul processore e uno sulla grafica.
+    /// Misurato sul Mac Intel di GitHub (i7, grafica senza accelerazione vera): il processore da solo 48 s a pezzo,
+    /// «tutti i motori» 161 s, con le stesse tracce. Con una Radeon la grafica può invece vincere.
+    static let fasterCPU = -5.0
+    static let fasterGPU = -6.0
+    /// Mac Intel, modelli Demucs (Rapida): restano su grafica e processore, senza gara.
+    static let intelDemucs = -7.0
+
+    /// La grafica vince solo se è davvero più veloce (10%): a parità si resta sul processore, che non scalda la grafica.
+    static func decideSpeed(cpu: Double, gpu: Double?) -> Decision {
+        if let g = gpu, g < cpu * 0.9 { return Decision(units: .cpuAndGPU, agreement: fasterGPU) }
+        return Decision(units: .cpuOnly, agreement: fasterCPU)
+    }
 
     /// La scelta da usare adesso per un modello: quella delle Impostazioni («Solo grafica»), o quella ricordata.
     static func current(_ model: String) -> Decision? {
@@ -211,6 +226,8 @@ enum EngineChoice {
               let raw = d["units"] as? Int, let units = MLComputeUnits(rawValue: raw),
               let agreement = d["agreement"] as? Double else { return nil }
         // La scelta si rifà con la soglia attuale; 0 vuol dire «il Neural Engine ha sbagliato davvero»: resta la grafica
+        // Mac Intel con la scelta delle versioni fino alla 0.40 («tutti i motori», spesso la grafica lenta): si rifà la gara
+        if agreement == noANE { return nil }
         return agreement > 0 ? decide(agreement: agreement) : Decision(units: units, agreement: agreement)
     }
 

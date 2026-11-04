@@ -221,6 +221,15 @@ final class ModelStore: @unchecked Sendable {
         }
     }
 
+    /// Libera una sola copia di un modello (es. quella che ha perso la gara del motore sui Mac Intel).
+    func release(_ name: String, units: MLComputeUnits) {
+        let key = "\(name)#\(units.rawValue)"
+        lock.withLock {
+            cores[key] = nil
+            models[key] = nil
+        }
+    }
+
     /// Si smette di aspettare l'apertura di un modello su queste unità.
     func abandon(_ name: String, units: MLComputeUnits) {
         _ = lock.withLock { abandoned.insert("\(name)#\(units.rawValue)") }
