@@ -1,20 +1,22 @@
-22:52:27 UTC  IsoLR 0.15.0 avviata
-22:52:29 UTC  IsoLR chiusa
-22:52:31 UTC  IsoLR 0.15.0 avviata
-22:52:45 UTC  IsoLR chiusa
-22:52:48 UTC  IsoLR 0.15.0 avviata
-22:53:01 UTC  IsoLR chiusa
-22:53:11 UTC  IsoLR 0.15.0 avviata
-22:53:25 UTC  IsoLR chiusa
-22:53:27 UTC  IsoLR 0.15.0 avviata
-22:53:41 UTC  IsoLR chiusa
-22:53:46 UTC  IsoLR 0.15.0 avviata
-22:53:59 UTC  Apro la canzone…
-22:53:59 UTC  Separazione
-22:56:01 UTC  Tempo, tonalità e accordi
-22:56:02 UTC  Salvo le tracce
-22:56:16 UTC  IsoLR chiusa
-22:56:17 UTC  IsoLR 0.15.0 avviata
-22:56:29 UTC  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era la 0.15.0
-22:56:29 UTC  IsoLR 0.15.0 avviata
-22:56:36 UTC  IsoLR chiusa
+23:17:13 UTC  IsoLR 0.15.0 avviata
+23:17:15 UTC  IsoLR chiusa
+23:17:19 UTC  IsoLR 0.15.0 avviata
+23:17:33 UTC  IsoLR chiusa
+23:17:36 UTC  IsoLR 0.15.0 avviata
+23:17:50 UTC  IsoLR chiusa
+23:17:54 UTC  IsoLR 0.15.0 avviata
+23:18:08 UTC  IsoLR chiusa
+23:18:11 UTC  IsoLR 0.15.0 avviata
+23:18:25 UTC  IsoLR chiusa
+23:18:38 UTC  IsoLR 0.15.0 avviata
+23:18:51 UTC  Apro la canzone…
+23:18:54 UTC  PROBLEMA: La finestra non risponde da 5 secondi (stava facendo: niente)
+23:18:55 UTC  Separazione
+23:18:55 UTC  La finestra risponde di nuovo
+23:20:35 UTC  Tempo, tonalità e accordi
+23:20:35 UTC  Salvo le tracce
+23:20:52 UTC  IsoLR chiusa
+23:20:53 UTC  IsoLR 0.15.0 avviata
+23:21:05 UTC  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era la 0.15.0
+23:21:05 UTC  IsoLR 0.15.0 avviata
+23:21:12 UTC  IsoLR chiusa

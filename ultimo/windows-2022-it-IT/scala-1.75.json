@@ -1,13 +1,12 @@
 {
  "ok": false,
  "problemi": [
-  "la pagina scorre in orizzontale (752 > 576)",
-  "«Segnala un problema o un'idea (Ctrl+Alt+» fuori dalla finestra",
+  "la pagina scorre in orizzontale (752 > 732)",
   "«Impostazioni» fuori dalla finestra"
  ],
- "finestra": "576×394",
+ "finestra": "732×469",
  "scala": 1.75,
- "schermo": "586×439",
- "utile": "586×417",
+ "schermo": "1098×618",
+ "utile": "1098×595",
  "domandaRapporto": false
 }
