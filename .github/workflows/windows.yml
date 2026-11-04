@@ -8,7 +8,7 @@ name: Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, windows, win-motore, win-app]
+    branches: [main, windows, win-motore, win-app, prove-dispositivi]
     paths: [windows/**, site/app/**, Tools/win-dist.sh, .github/workflows/windows.yml]
 
 permissions:
@@ -110,6 +110,10 @@ jobs:
           FS=$(python -c "import json;c=json.load(open('../../prova-nativo/VoceRevive.json'));print(len(c['freq_indices'])*2, c['frames'])")
           set -- $FS
           target/release/examples/prova_nativo.exe "$PWD/target/release/examples/onnxruntime.dll" ../../prova-nativo/VoceRevive.onnx $2 $1
+      - name: Prove del codice Rust (finestra dentro lo schermo)
+        working-directory: windows/src-tauri
+        shell: bash
+        run: rustc --edition 2021 --test src/finestra.rs -o finestra-prove.exe && ./finestra-prove.exe
       - name: Compilazione (Rust + installer NSIS)
         working-directory: windows
         shell: bash
@@ -146,6 +150,22 @@ jobs:
           $p = Start-Process -FilePath $exe.FullName -PassThru
           Start-Sleep -Seconds 20
           if ($p.HasExited) { Write-Output "::error::IsoLR si è chiusa da sola dopo l'avvio (codice $($p.ExitCode))"; exit 1 }
+          # La finestra deve stare tutta dentro lo spazio utile dello schermo (senza la barra delle applicazioni).
+          # Lo schermo di GitHub è piccolo: la finestra di partenza (1280×820 + barra del titolo) senza la correzione non ci sta
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type @'
+          using System; using System.Runtime.InteropServices;
+          public static class Fin { [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Ri, B; }
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r); }
+          '@
+          $p.Refresh(); $h = $p.MainWindowHandle
+          $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+          $r = New-Object Fin+R; [void][Fin]::GetWindowRect($h, [ref]$r)
+          Write-Output "::notice::Schermo $([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Size) · spazio utile $($wa.Width)x$($wa.Height) · finestra $($r.Ri - $r.L)x$($r.B - $r.T) in ($($r.L),$($r.T))"
+          # 8 pixel di tolleranza: i bordi invisibili di Windows 10/11 attorno alla finestra
+          if ($h -eq 0 -or $r.L -lt $wa.Left - 8 -or $r.T -lt $wa.Top - 8 -or $r.Ri -gt $wa.Right + 8 -or $r.B -gt $wa.Bottom + 8) {
+            Write-Output "::error::La finestra esce dallo spazio utile dello schermo (parte bassa sotto la barra delle applicazioni o fuori)"; exit 1
+          }
           # Clic destro «Separa con IsoLR»: la voce nel registro, e una seconda copia passa la canzone a quella aperta
           $cmd = (Get-ItemProperty "HKCU:\Software\Classes\SystemFileAssociations\audio\shell\IsoLR\command" -ErrorAction SilentlyContinue).'(default)'
           if (-not $cmd -or $cmd -notlike "*$($exe.Name)*") { Write-Output "::error::Manca la voce del clic destro (trovato: $cmd)"; exit 1 }

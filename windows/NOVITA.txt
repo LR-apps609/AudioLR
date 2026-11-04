@@ -1,3 +1,6 @@
+Novità di IsoLR per Windows 0.16.0 (in preparazione):
+• Corretto: sugli schermi con la scala alta (2560×1440 al 175% e al 200%, 1920×1080 al 125% e al 150%) e sui portatili 1366×768 la finestra si apriva più alta dello schermo e la parte bassa finiva sotto la barra delle applicazioni. Ora si apre dentro lo spazio libero, anche quando la sposti su un altro schermo con un'altra scala
+
 Novità di IsoLR per Windows 0.15.0 «Più svelta e più solida»:
 • «Annulla» ferma subito in ogni fase: calcolo sulla scheda grafica, scaricamento, analisi e salvataggio (le tracce a metà vanno nel Cestino). Una nuova separazione può partire subito
 • Scaricamento dei modelli più robusto: se la connessione cade, IsoLR riprova da solo e riprende da dove si era fermato, e controlla che il file sia integro. Mentre scarica dice cosa succede e, se non ci riesce, perché e cosa fare

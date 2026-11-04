@@ -4,6 +4,7 @@
 // La canzone non lascia mai il computer: l'unico indirizzo raggiungibile è la pagina dei rilasci su GitHub.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod finestra;
 mod nativo;
 
 use sha2::{Digest, Sha256};
@@ -238,6 +239,25 @@ fn sleep_now() {
 #[tauri::command]
 fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
     app.notification().builder().title(title).body(body).show().map_err(|e| e.to_string())
+}
+
+/// La finestra dentro lo spazio utile dello schermo (senza la barra delle applicazioni): a 2560×1440 al 175–200%,
+/// a 1920×1080 al 125–150% e a 1366×768 la misura di partenza (1280×820 più la barra del titolo) non ci sta.
+fn fit_window(w: &tauri::Window) {
+    let (Ok(Some(m)), Ok(inner), Ok(outer), Ok(pos)) = (w.current_monitor(), w.inner_size(), w.outer_size(), w.outer_position()) else {
+        return;
+    };
+    let wa = m.work_area();
+    let work = finestra::Rect { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height };
+    let scale = m.scale_factor().max(0.5);
+    let chrome = ((outer.width.saturating_sub(inner.width)) as f64 / scale, (outer.height.saturating_sub(inner.height)) as f64 / scale);
+    let (mw, mh) = finestra::min_size((930.0, 640.0), (work.w as f64 / scale, work.h as f64 / scale), chrome);
+    let _ = w.set_min_size(Some(tauri::LogicalSize::new(mw, mh)));
+    let outer = finestra::Rect { x: pos.x, y: pos.y, w: outer.width, h: outer.height };
+    if let Some((iw, ih, x, y)) = finestra::fit((inner.width, inner.height), outer, work) {
+        let _ = w.set_size(tauri::PhysicalSize::new(iw, ih));
+        let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+    }
 }
 
 #[tauri::command]
@@ -740,6 +760,18 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(Allowed::default())
+        .setup(|app| {
+            if let Some(w) = app.get_webview_window("main") {
+                fit_window(&w.as_ref().window());
+            }
+            Ok(())
+        })
+        // Spostata su uno schermo con un'altra scala (o cambiata la scala): si rimette dentro lo spazio utile
+        .on_window_event(|w, e| {
+            if let tauri::WindowEvent::ScaleFactorChanged { .. } = e {
+                fit_window(w);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
