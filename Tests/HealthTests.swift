@@ -1,5 +1,4 @@
 import XCTest
-@testable import AudioLR
 
 /// La sorveglianza (Health): blocchi della finestra, lavori fermi e rapporto senza nome utente.
 final class HealthTests: XCTestCase {
