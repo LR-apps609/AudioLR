@@ -99,7 +99,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path risultati | Out-Null
           # Start-Process stesso può restare bloccato (nel giro delle 18:30 il limite non è mai scattato):
           # lo lancio in un processo a parte e aspetto quello, così il limite vale davvero.
-          $job = Start-Job -ScriptBlock { param($f) $p = Start-Process -FilePath $f -ArgumentList "/S" -PassThru -Wait; $p.ExitCode } -ArgumentList $env:INSTALLER
+          # Giro delle 20:03: la finestra ferma era «Open File - Security Warning», l'avviso di Windows per i file
+          # scaricati da internet (sul PC di una persona compare SmartScreen, «Windows ha protetto il PC», e la
+          # persona preme «Esegui comunque»). Qui nessuno può premere: avvio l'installer senza la shell di Windows
+          # (UseShellExecute = false), così l'avviso non compare ma il file resta marcato «da internet».
+          $job = Start-Job -ScriptBlock {
+            param($f)
+            $psi = New-Object System.Diagnostics.ProcessStartInfo -ArgumentList $f, "/S"
+            $psi.UseShellExecute = $false
+            $p = [System.Diagnostics.Process]::Start($psi); $p.WaitForExit(); $p.ExitCode
+          } -ArgumentList $env:INSTALLER
           if (-not (Wait-Job $job -Timeout 300)) {
             Add-Type -AssemblyName System.Windows.Forms, System.Drawing
             $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
