@@ -1,0 +1,41 @@
+# Mac Intel: Core ML (come oggi) contro ONNX Runtime sul processore, un pezzo del modello strumenti.
+# Solo misura: nessuna modifica all'app. Il Mac Intel di GitHub non ha grafica vera: si misura il processore.
+name: Banco Mac Intel
+
+on:
+  push:
+    branches: [veloce-intel]
+    paths: ["Tools/banco_intel.py", ".github/workflows/banco-intel.yml"]
+  workflow_dispatch:
+
+jobs:
+  misura:
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Strumenti di misura
+        run: |
+          python -m pip install -q numpy onnx coremltools
+          for v in "" "==1.20.1" "==1.19.2" "==1.18.1"; do
+            python -m pip install -q "onnxruntime$v" && break
+          done
+          python -c "import onnxruntime as o, coremltools as c; print('onnxruntime', o.__version__, 'coremltools', c.__version__)"
+          sysctl -n machdep.cpu.brand_string; sysctl -n hw.physicalcpu hw.memsize
+      - name: Modelli (gli stessi dell'app)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p m && cd m
+          get() { for i in 1 2 3 4 5 6; do gh release download "$1" -R ${{ github.repository }} -p "$2" --clobber && return 0; curl -sSfL --retry 5 -o "$2" "https://github.com/${{ github.repository }}/releases/download/$1/$2" && return 0; sleep $((i * 20)); done; return 1; }
+          get modelli-windows StrumentiSW.onnx
+          get modelli-windows StrumentiSW.json
+          get modelli-1 StrumentiSW2.mlpackage.zip
+          get modelli-1 StrumentiSW2-prova.f32
+          unzip -q StrumentiSW2.mlpackage.zip && rm StrumentiSW2.mlpackage.zip
+          ls -la
+      - name: Misura
+        run: python -u Tools/banco_intel.py m

@@ -1024,8 +1024,15 @@ final class SeparationJob: ObservableObject {
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
     nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]], label: String = "",
                                          say: @escaping (String) async -> Void = { _ in }) async throws -> EngineChoice.Decision {
-        if !hasNeuralEngine { return EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE) }
         let what = label.isEmpty ? "il modello" : "il modello \(label)"
+        if !hasNeuralEngine {
+            let chunk = try await ModelStore.shared.roformer(name, units: .cpuOnly) { _ in }.config.chunk
+            let start = max(0, (mix[0].count - chunk) / 2)
+            let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
+            return try await race(name, what: what, say: say,
+                                  open: { u in _ = try await ModelStore.shared.roformer(name, units: u) { _ in } },
+                                  run: { u in _ = try await ModelStore.shared.roformer(name, units: u) { _ in }.runChunkAll(piece) })
+        }
         // La stessa copia che poi lavorerà sul Neural Engine (con i due motori insieme): una copia in meno in memoria
         let aneUnits: MLComputeUnits = useDual ? .cpuAndNeuralEngine : .all
         await say(hasNeuralEngine
@@ -1094,10 +1101,46 @@ final class SeparationJob: ObservableObject {
         return (keys, out)
     }
 
+    /// Mac Intel: la gara del motore, una volta per modello. Lo stesso pezzo cronometrato sul processore e poi
+    /// sulla grafica; la grafica ha al massimo il doppio del tempo del processore (al primo giro prepara i suoi
+    /// programmi) e, se è vicina, un secondo giro. Vince il più veloce: le tracce sono le stesse (55 dB di accordo).
+    /// Se la grafica non ce la fa in tempo il suo calcolo finisce da solo in sottofondo e la sua copia si libera.
+    nonisolated static func race(_ name: String, what: String, say: @escaping (String) async -> Void,
+                                 open: @escaping (MLComputeUnits) async throws -> Void,
+                                 run: @escaping (MLComputeUnits) async throws -> Void) async throws -> EngineChoice.Decision {
+        await say("Prova del motore: \(what) sul processore…")
+        try await open(.cpuOnly)
+        let c0 = Date()
+        try await run(.cpuOnly)
+        let cpu = Date().timeIntervalSince(c0)
+        var gpu: Double?
+        await say("Prova del motore: \(what) sulla grafica (al massimo \(Int(2 * cpu + 0.5)) secondi)…")
+        if (try? await withTimeout(aneLimit, { try await open(.cpuAndGPU) })) != nil {
+            let g0 = Date()
+            if (try? await withTimeout(max(2 * cpu, 5), { try await run(.cpuAndGPU) })) != nil {
+                let first = Date().timeIntervalSince(g0)
+                if first < cpu * 0.9 {
+                    gpu = first
+                } else {
+                    let g1 = Date()
+                    if (try? await withTimeout(cpu, { try await run(.cpuAndGPU) })) != nil { gpu = Date().timeIntervalSince(g1) }
+                }
+            }
+        } else {
+            ModelStore.shared.abandon(name, units: .cpuAndGPU)
+        }
+        let d = EngineChoice.decideSpeed(cpu: cpu, gpu: gpu)
+        AppLog.write(String(format: "Gara del motore %@: processore %.1f s, grafica %@ → %@", name, cpu,
+                            gpu.map { String(format: "%.1f s", $0) } ?? "troppo lenta", d.text))
+        ModelStore.shared.release(name, units: d.units == .cpuOnly ? .cpuAndGPU : .cpuOnly)
+        return d
+    }
+
     /// Prova Neural Engine e grafica sul pezzo centrale della canzone e decide dove lavorare.
     nonisolated static func tune(_ name: String, mix: [[Float]]) async throws -> EngineChoice.Decision {
-        // Senza Neural Engine il confronto metterebbe a confronto la grafica con sé stessa (sui Mac Intel, decine di minuti)
-        if !hasNeuralEngine { return EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE) }
+        // Senza Neural Engine (Mac Intel): i Demucs restano su grafica e processore. Sul solo processore Intel
+        // possono sbagliare con i numeri a 16 bit (vedi Separator), quindi niente gara per loro: la fanno i RoFormer
+        if !hasNeuralEngine { return EngineChoice.Decision(units: .all, agreement: EngineChoice.intelDemucs) }
         let ane = try await ModelStore.shared.load(name, units: .all) { _ in }
         let gpu = try await ModelStore.shared.load(name, units: .cpuAndGPU) { _ in }
         let norm = Separator.normalized(mix).norm

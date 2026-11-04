@@ -8,6 +8,10 @@ name: Banco severo
 
 on:
   workflow_dispatch:
+    inputs:
+      overlap:
+        description: "Quante volte ogni punto passa nei RoFormer (l'app: 2). Con un valore diverso i risultati vanno in severo_overlapN, senza toccare quelli buoni"
+        default: "2"
 
 permissions:
   contents: write
@@ -15,6 +19,7 @@ permissions:
 env:
   PARTI: "40"
   PROVA: ""            # "1" = solo la canzone più corta, per misurare i tempi
+  OVERLAP: ${{ inputs.overlap || '2' }}
 
 jobs:
   misura:
@@ -76,7 +81,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          if [ -n "$PROVA" ]; then
+          if [ "$OVERLAP" != "2" ]; then
+            cp severo.md severo_overlap$OVERLAP.md; cp severo.json severo_overlap$OVERLAP.json
+            gh release upload banco-di-prova severo_overlap$OVERLAP.md severo_overlap$OVERLAP.json --clobber
+          elif [ -n "$PROVA" ]; then
             cp severo.md severo_prova.md; cp severo.json severo_prova.json
             gh release upload banco-di-prova severo_prova.md severo_prova.json --clobber
           elif [ "$(python -c "import json; print(len(json.load(open('severo.json'))['canzoni']))")" -lt 50 ]; then

@@ -560,11 +560,27 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(SeparationJob.average([base, onMix]), [[2, 2, 2], [3, 3, 3]])
     }
 
-    func testNoNeuralEngineChoiceIsKept() {
-        // Mac Intel: nessuna prova del motore, il modello resta su grafica e processore anche dopo il riavvio
+    func testIntelChoiceFromOldVersionsIsRedone() {
+        // Mac Intel: la scelta delle versioni fino alla 0.40 («tutti i motori») si dimentica, così si fa la gara del motore
         let d = UserDefaults(suiteName: "intel-\(UUID().uuidString)")!
         EngineChoice.store(EngineChoice.Decision(units: .all, agreement: EngineChoice.noANE), for: "VoceRevive", defaults: d)
-        XCTAssertEqual(EngineChoice.stored("VoceRevive", defaults: d)?.units, .all)
+        XCTAssertNil(EngineChoice.stored("VoceRevive", defaults: d))
+        // Dopo la gara la scelta resta, anche dopo il riavvio
+        let won = EngineChoice.decideSpeed(cpu: 48, gpu: nil)
+        EngineChoice.store(won, for: "VoceRevive", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("VoceRevive", defaults: d), won)
+        // I Demucs dei Mac Intel restano su grafica e processore
+        EngineChoice.store(EngineChoice.Decision(units: .all, agreement: EngineChoice.intelDemucs), for: "HTDemucs", defaults: d)
+        XCTAssertEqual(EngineChoice.stored("HTDemucs", defaults: d)?.units, .all)
+    }
+
+    func testIntelSpeedRace() {
+        // La grafica vince solo se è davvero più veloce (almeno il 10%)
+        XCTAssertEqual(EngineChoice.decideSpeed(cpu: 48, gpu: 161).units, .cpuOnly)
+        XCTAssertEqual(EngineChoice.decideSpeed(cpu: 48, gpu: nil).units, .cpuOnly)
+        XCTAssertEqual(EngineChoice.decideSpeed(cpu: 48, gpu: 45).units, .cpuOnly)
+        XCTAssertEqual(EngineChoice.decideSpeed(cpu: 48, gpu: 20).units, .cpuAndGPU)
+        XCTAssertTrue(EngineChoice.decideSpeed(cpu: 48, gpu: nil).text.hasPrefix("Processore"))
     }
 
     func testProcessorOnlyChoiceIsRemembered() {

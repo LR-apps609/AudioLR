@@ -33,7 +33,12 @@ final class DownloadTests: XCTestCase {
             if Stub.breakFirst {
                 Stub.breakFirst = false
                 client?.urlProtocol(self, didLoad: Stub.body.prefix(400_000))
-                client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+                // La connessione cade poco dopo: se l'errore arriva insieme ai dati, URLSession a volte
+                // non consegna i dati (succedeva 1 volta su qualche decina: prova instabile, non l'app)
+                let client = client
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+                    client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+                }
             } else {
                 client?.urlProtocol(self, didLoad: Stub.body)
                 client?.urlProtocolDidFinishLoading(self)

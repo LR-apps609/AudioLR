@@ -9,12 +9,12 @@ name: Tempi Mac
 
 on:
   push:
-    branches: [prestazioni-mac]
+    branches: [prestazioni-mac, veloce-intel]
     paths: ["Sources/**", "Tests/**", "project.yml", ".github/workflows/tempi-mac.yml", "Tools/tempi_*"]
   workflow_dispatch:
 
 env:
-  PRIMA: 297599dc00904ecbd239ccfb8fc0869d63cc41c9   # Mac 0.39: il punto di partenza (checkout vuole il codice intero)
+  PRIMA: 683da71ef3656d80a85f7ac304b44757b00b5b86   # Mac 0.40: il punto di partenza (checkout vuole il codice intero)
 
 jobs:
   canzone:
@@ -40,12 +40,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Sul Mac Apple Silicon di GitHub (macchina virtuale) Rapida non riesce, né prima né dopo: si salta
-          - macchina: macos-15
-            prove: "test1Apertura test3Massima test4Studio test3Massima"
-          # Sul Mac Intel Studio dura 35 minuti a giro: si misura Rapida
+          # La gara del motore riguarda solo i Mac Intel: Massima, prima (0.40) e dopo, a turno
           - macchina: macos-15-intel
-            prove: "test1Apertura test3Massima test2Rapida test3Massima"
+            prove: "test3Massima test3Massima"
     runs-on: ${{ matrix.macchina }}
     timeout-minutes: 345
     steps:
