@@ -239,6 +239,7 @@ final class VoiceRoFormer {
                 lock.unlock()
                 if isCancelled() { lock.withLock { failure = failure ?? CancellationError() }; return }
                 let start = starts[n]
+                let began = Date()
                 let len = min(chunk, length - start)
                 var piece = [[Float]](repeating: [Float](repeating: 0, count: chunk), count: 2)
                 for c in 0..<2 { for i in 0..<len { piece[c][i] = mix[c][start + i] } }
@@ -256,6 +257,8 @@ final class VoiceRoFormer {
                 done += 1
                 let d = done
                 lock.unlock()
+                // Nel registro ogni pezzo con il suo tempo: in un rapporto si vede dove e quanto si è fermato
+                AppLog.write(String(format: "Pezzo %d di %d in %.1f s", d, starts.count, Date().timeIntervalSince(began)))
                 progress(Double(d) / Double(starts.count))
             }
         }

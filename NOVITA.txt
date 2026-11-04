@@ -1,3 +1,9 @@
+Novità della 0.41.0 (in preparazione):
+• Mac Intel: la prima volta IsoLR cronometra lo stesso pezzo di canzone sul processore e sulla grafica e usa il più veloce. Prima su molti Mac Intel lavorava sulla grafica lenta (misurato: 161 secondi a pezzo invece di 48). Le tracce sono le stesse
+• Durante la separazione, accanto al tempo che manca si vede sempre il tempo che scorre: sui Mac lenti un pezzo della canzone dura minuti e la finestra sembrava ferma
+• Corretto: con una canzone che stava solo su iCloud la finestra poteva bloccarsi (rotellina) prima di cominciare
+• Se qualcosa va storto (finestra che non risponde, lavoro fermo, chiusura improvvisa) IsoLR lo scrive nel registro e al riavvio chiede se vuoi salvare il rapporto sulla Scrivania, da mandare su WhatsApp o per email. Niente nome utente, niente canzoni. Anche «Segnala» non mette più il nome utente nei percorsi
+
 Novità della 0.40.0 «Più svelta e più solida»:
 • Scaricamento dei modelli più robusto: se la connessione cade, IsoLR riprova da solo e riprende da dove si era fermato, senza ricominciare da zero. Mentre scarica dice cosa succede e, se non ci riesce, perché e cosa fare
 • Il modello si apre mentre IsoLR legge la canzone: si parte prima

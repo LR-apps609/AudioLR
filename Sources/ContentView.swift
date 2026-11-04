@@ -1236,7 +1236,9 @@ struct ContentView: View {
             if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
             return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica."
         case .separating(let p):
-            if let r = job.remaining, p > 0 { return Self.timeLeft(r) }
+            // Con la stima resta anche il tempo che scorre: sui Mac lenti (Intel) un pezzo della canzone dura
+            // minuti, e con la sola stima la finestra sembrava ferma
+            if let r = job.remaining, p > 0 { return Self.timeLeft(r) + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
             if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
             return "Calcolo il tempo che manca…"
         case .saving: return "\(Prefs.format.title) in \(Prefs.displayName(of: Prefs.folder))"

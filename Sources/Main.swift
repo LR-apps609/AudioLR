@@ -180,6 +180,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // La sorveglianza: blocchi, lavori fermi, chiusure brusche; al riavvio propone il rapporto
+        Health.start(version: UpdateCheck.current)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { Health.offerReportIfNeeded() }
         UpdateCheck.autoCheckSoon()          // all'avvio e ogni 3 ore, in silenzio: tasto in alto a destra
         Prefs.applyAppearance()
         // I modelli sostituiti da versioni nuove non servono più: spazio libero sul disco
@@ -207,6 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SeparationJob.shared.prepare(files)
         }
     }
+
+    func applicationWillTerminate(_ notification: Notification) { Health.cleanExit() }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !Updater.shared.busy }
 }

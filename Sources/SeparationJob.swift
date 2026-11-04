@@ -89,7 +89,20 @@ final class SeparationJob: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var phase: Phase = .idle {
+        // La sorveglianza (Health) sa se un lavoro avanza: fermo per 15 minuti finisce nel rapporto
+        didSet {
+            switch phase {
+            case .downloading(let p): Health.progressed("scarica i modelli (\(Int(p * 100))%) per «\(title)», qualità \(quality.title)")
+            case .reading: Health.progressed("legge «\(title)»")
+            case .tuning: Health.progressed("prova del motore per «\(title)»")
+            case .separating(let p): Health.progressed("separa «\(title)» in \(quality.title) (\(Int(p * 100))%)")
+            case .saving: Health.progressed("salva le tracce di «\(title)»")
+            case .failed(let m): Health.idle(); AppLog.write("Separazione non riuscita: \(m)")
+            case .idle, .done: Health.idle()
+            }
+        }
+    }
     @Published private(set) var song: URL?
     /// Il titolo della canzone (anche quando si riapre una separazione dalla cronologia).
     @Published private(set) var title = ""
@@ -452,7 +465,16 @@ final class SeparationJob: ObservableObject {
         stepDetail = nil
         analysis = nil
         timings = []
-        sourceInfo = AudioIO.describe(url)
+        // Fuori dalla finestra: un file che sta solo su iCloud («Ottimizza spazio») si scarica mentre lo si legge,
+        // e su una rete lenta la finestra restava bloccata (rotellina) prima ancora di cominciare
+        sourceInfo = nil
+        let described = url
+        Task.detached(priority: .utility) { [weak self] in
+            let info = AudioIO.describe(described)
+            await MainActor.run {
+                if self?.title == described.deletingPathExtension().lastPathComponent { self?.sourceInfo = info }
+            }
+        }
         self.quality = quality
         // L'anteprima si salva in una cartella provvisoria, mai nella libreria
         let root = preview == nil ? Prefs.folder : Self.previewFolder

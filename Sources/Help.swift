@@ -278,7 +278,8 @@ struct BugReport {
         // Gli ultimi passi del registro: dicono dove si è fermata una separazione
         let log = AppLog.tail(20)
         if !log.isEmpty { lines.append("Registro (ultimi passi):\n" + log) }
-        return lines.joined(separator: "\n")
+        // Va su GitHub, dove è pubblica: niente nome utente nei percorsi
+        return Health.redact(lines.joined(separator: "\n"))
     }
 
     private static func sysctl(_ name: String) -> String {
