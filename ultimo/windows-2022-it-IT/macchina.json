@@ -1,0 +1,12 @@
+{
+  "macchina": "windows-2022",
+  "lingua": "it-IT",
+  "sistema": "Microsoft Windows Server 2022 Datacenter 10.0.20348",
+  "processore": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "architettura": "AMD64",
+  "memoria_gb": 16.0,
+  "scheda_video": "Microsoft Hyper-V Video",
+  "schermo": "1024x768",
+  "spazio_utile": "1024x728",
+  "visual_cpp": true
+}

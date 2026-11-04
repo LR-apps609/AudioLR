@@ -1,7 +1,0 @@
-macchina: xcode-27
-ProductName:		macOS
-ProductVersion:		27.0.1
-BuildVersion:		26A434
-chip: Apple M1 (Virtual)
-architettura: arm64
-memoria: 7 GB
