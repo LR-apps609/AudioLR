@@ -1,0 +1,295 @@
+# Prove di IsoLR sui «computer degli altri» (PROVE-DISPOSITIVI.md): installazione da utente nuovo, primo avvio,
+# foto della finestra, percorso principale, registro e rapporti di arresto, su ogni macchina di GitHub utile.
+# Bloccano: l'app non si installa, non parte, si chiude, o il percorso principale fallisce.
+# Solo avvisi: i limiti delle macchine di GitHub (Mac Intel senza Metal, nessuna scheda grafica, Windows Server).
+# I risultati (foto, registri, un file per macchina con sistema, chip, schermo e scala) vanno sul ramo
+# «risultati-dispositivi», con un riepilogo: una riga per combinazione.
+name: Dispositivi
+
+on:
+  workflow_dispatch:
+  # Dopo ogni compilazione di Windows riuscita (installer nella versione di prova o nel rilascio)
+  workflow_run:
+    workflows: [Windows]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dispositivi-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - macchina: windows-2025
+            lingua: it-IT
+          - macchina: windows-2025
+            lingua: en-US
+          - macchina: windows-2022
+            lingua: it-IT
+          - macchina: windows-11-arm
+            lingua: it-IT
+    runs-on: ${{ matrix.macchina }}
+    timeout-minutes: 90
+    env:
+      NOME: ${{ matrix.macchina }}-${{ matrix.lingua }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Playwright (solo il collegamento, il browser è la finestra di IsoLR)
+        shell: bash
+        run: npm i --prefix "$RUNNER_TEMP/pw" playwright-core@1.47.2 --silent
+      - name: L'installer, scaricato «da internet» in una cartella con accenti e spazi
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = "${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          $v = (Get-Content windows/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $tag = if ($branch -eq "main") { "win-v$v" } else { "windows-prova" }
+          $id = gh api "repos/${{ github.repository }}/releases/tags/$tag" --jq ".assets[] | select(.name==\`"IsoLR-Windows-$v.exe\`") | .id"
+          if (-not $id) { Write-Output "::error::Installer IsoLR-Windows-$v.exe non trovato in $tag"; exit 1 }
+          $dir = New-Item -ItemType Directory -Force -Path "C:\Prove IsoLR\Nicolò De Santis\Download"
+          $exe = Join-Path $dir "IsoLR-Windows-$v.exe"
+          gh api -H "Accept: application/octet-stream" "repos/${{ github.repository }}/releases/assets/$id" > $exe
+          # Il segno «scaricato da internet» (Mark of the Web), come per chi lo scarica dal sito
+          Set-Content -Path $exe -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=https://github.com/"
+          "INSTALLER=$exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Lingua, formati e schermo
+        shell: pwsh
+        run: |
+          Set-Culture ${{ matrix.lingua }}
+          Add-Type -AssemblyName System.Windows.Forms
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen
+          $info = [ordered]@{
+            macchina = "${{ matrix.macchina }}"; lingua = "${{ matrix.lingua }}"
+            sistema = (Get-CimInstance Win32_OperatingSystem).Caption + " " + (Get-CimInstance Win32_OperatingSystem).Version
+            processore = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
+            architettura = $env:PROCESSOR_ARCHITECTURE
+            memoria_gb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+            scheda_video = ((Get-CimInstance Win32_VideoController) | ForEach-Object { $_.Name }) -join ", "
+            schermo = "$($b.Bounds.Width)x$($b.Bounds.Height)"; spazio_utile = "$($b.WorkingArea.Width)x$($b.WorkingArea.Height)"
+            visual_cpp = [bool](Test-Path C:\Windows\System32\msvcp140.dll)
+          }
+          New-Item -ItemType Directory -Force -Path risultati | Out-Null
+          $info | ConvertTo-Json | Out-File -Encoding utf8 risultati\macchina.json
+          $info | Format-List | Out-String | Write-Output
+      - name: Installa come un utente nuovo e apri
+        shell: pwsh
+        run: |
+          # Nessuna preferenza e nessun modello rimasto: primo avvio vero
+          Remove-Item -Recurse -Force "$env:APPDATA\it.ledion.audiolr", "$env:LOCALAPPDATA\it.ledion.audiolr" -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath $env:INSTALLER -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Output "::error::L'installer è finito con il codice $($p.ExitCode)"; exit 1 }
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA\IsoLR", "$env:LOCALAPPDATA\Programs\IsoLR" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "uninstall*" } | Select-Object -First 1
+          if (-not $exe) { Write-Output "::error::IsoLR non risulta installata"; exit 1 }
+          "APP=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Foto della finestra alle scale 100–200% e percorso principale
+        shell: pwsh
+        run: |
+          $PW = "$env:RUNNER_TEMP\pw\node_modules\playwright-core"
+          $env:PW = $PW
+          $fail = 0
+          function Avvia($scala, $extra) {
+            $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222 --force-device-scale-factor=$scala"
+            $a = @{ FilePath = $env:APP; PassThru = $true }
+            if ($extra) { $a.ArgumentList = "`"$extra`"" }
+            return Start-Process @a
+          }
+          function Chiudi($p) {
+            # Chiusura normale (come la X della finestra): la prossima volta niente «qualcosa è andato storto»
+            [void]$p.CloseMainWindow(); if (-not $p.WaitForExit(15000)) { Write-Output "::warning::IsoLR non si chiude con la X: chiusa a forza"; Stop-Process -Id $p.Id -Force }
+          }
+          foreach ($s in "1", "1.25", "1.5", "1.75", "2") {
+            $p = Avvia $s $null
+            Start-Sleep -Seconds 12
+            if ($p.HasExited) { Write-Output "::error::Alla scala $s IsoLR si è chiusa da sola (codice $($p.ExitCode))"; $fail = 1; continue }
+            node windows/ui/test/app-vera.js foto risultati "scala-$s"
+            if ($LASTEXITCODE -ne 0) { Write-Output "::error::Alla scala $s qualcosa non sta nella finestra (vedi risultati/scala-$s.json)"; $fail = 1 }
+            Chiudi $p
+          }
+          # Il percorso principale: una canzone con accenti, apostrofo ed emoji nel nome, dal clic destro, separata in Rapida
+          $song = "C:\Prove IsoLR\Nicolò De Santis\Musica\L'ultima canzone è qui 🎸.wav"
+          New-Item -ItemType Directory -Force -Path (Split-Path $song) | Out-Null
+          python -c "import wave,struct,math,sys; w=wave.open(sys.argv[1],'wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); fr=bytearray(); [fr.extend(struct.pack('<hh',int(6000*math.sin(2*math.pi*220*i/44100)+3000*math.sin(2*math.pi*(55 if (i//11025)%2 else 82)*i/44100)),int(6000*math.sin(2*math.pi*330*i/44100)))) for i in range(44100*20)]; w.writeframes(bytes(fr)); w.close()" "$song"
+          $p = Avvia "1" $null
+          Start-Sleep -Seconds 10
+          $p2 = Avvia "1" $song
+          [void]$p2.WaitForExit(15000)
+          node windows/ui/test/app-vera.js percorso risultati
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::Il percorso principale non riesce (vedi risultati/percorso.json)"; $fail = 1 }
+          $out = Join-Path ([Environment]::GetFolderPath("MyMusic")) "IsoLR"
+          $wavs = Get-ChildItem $out -Recurse -Filter *.wav -ErrorAction SilentlyContinue
+          Write-Output "::notice::Tracce salvate in Musica › IsoLR: $($wavs.Count)"
+          if ($wavs.Count -lt 4) { Write-Output "::error::Le tracce non sono state salvate (trovate $($wavs.Count))"; $fail = 1 }
+          Chiudi $p
+          # Chiusura brusca: al riavvio deve comparire «L'ultima volta qualcosa è andato storto»
+          $p = Avvia "1" $null
+          Start-Sleep -Seconds 10
+          Stop-Process -Id $p.Id -Force
+          Start-Sleep -Seconds 2
+          $p = Avvia "1" $null
+          Start-Sleep -Seconds 6
+          node windows/ui/test/app-vera.js foto risultati "dopo-chiusura-brusca"
+          $q = Get-Content risultati\dopo-chiusura-brusca.json | ConvertFrom-Json
+          if (-not $q.domandaRapporto) { Write-Output "::error::Dopo una chiusura brusca la domanda del rapporto non compare"; $fail = 1 }
+          Chiudi $p
+          exit $fail
+      - name: Disinstalla (niente voci rotte nel clic destro, niente file in giro)
+        if: always()
+        shell: pwsh
+        run: |
+          $un = Get-ChildItem -Path "$env:LOCALAPPDATA\IsoLR", "$env:LOCALAPPDATA\Programs\IsoLR" -Filter "uninstall*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $un) { Write-Output "::warning::Disinstallatore non trovato"; exit 0 }
+          Start-Process -FilePath $un.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+          $fail = 0
+          if (Test-Path "HKCU:\Software\Classes\SystemFileAssociations\audio\shell\IsoLR") { Write-Output "::error::Dopo la disinstallazione resta la voce «Separa con IsoLR» nel clic destro"; $fail = 1 }
+          $left = Get-ChildItem -Path "$env:LOCALAPPDATA\IsoLR", "$env:LOCALAPPDATA\Programs\IsoLR" -Recurse -ErrorAction SilentlyContinue
+          if ($left) { Write-Output "::warning::Dopo la disinstallazione restano $($left.Count) file del programma" }
+          exit $fail
+      - name: Registro e rapporti di arresto
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path risultati | Out-Null
+          Copy-Item "$env:APPDATA\it.ledion.audiolr\registro\*.txt" risultati\ -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:LOCALAPPDATA\CrashDumps" -Filter "IsoLR*" -ErrorAction SilentlyContinue | Copy-Item -Destination risultati\
+          Get-WinEvent -FilterHashtable @{ LogName = "Application"; ProviderName = "Application Error", "Windows Error Reporting" } -MaxEvents 20 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match "IsoLR|msedgewebview2" } | Format-List TimeCreated, Message | Out-File -Encoding utf8 risultati\arresti.txt
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: dispositivi-${{ env.NOME }}
+          path: risultati
+
+  mac:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        macchina: [macos-15, macos-26, xcode-27, macos-15-intel]
+    runs-on: ${{ matrix.macchina }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Xcode e sistema
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          mkdir -p risultati
+          { echo "macchina: ${{ matrix.macchina }}"; sw_vers; echo "chip: $(sysctl -n machdep.cpu.brand_string)"; echo "architettura: $(uname -m)";
+            echo "memoria: $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"; system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Chipset|Resolution|Metal" ; } | tee risultati/macchina.txt
+      - name: Compila (Release, Intel e Apple Silicon)
+        run: |
+          brew install xcodegen >/dev/null && xcodegen generate
+          xcodebuild -project AudioLR.xcodeproj -scheme AudioLR -configuration Release -derivedDataPath build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build > build.log 2>&1 \
+            || { grep -E "error:" build.log | head -n 20; exit 1; }
+      - name: Ogni eseguibile ha la parte Intel e quella Apple Silicon (lipo)
+        run: |
+          APP=build/Build/Products/Release/AudioLR.app
+          fail=0
+          while IFS= read -r f; do
+            if file "$f" | grep -q "Mach-O"; then
+              a=$(lipo -archs "$f" 2>/dev/null)
+              echo "$f: $a"
+              case "$a" in *x86_64*arm64*|*arm64*x86_64*) ;; *) echo "::error::$f ha solo: $a"; fail=1 ;; esac
+            fi
+          done < <(find "$APP" -type f -perm -111)
+          exit $fail
+      - name: Primo avvio vero (nessuna preferenza, nessun modello), foto, chiusura
+        id: avvio
+        continue-on-error: ${{ matrix.macchina == 'macos-15-intel' }}
+        run: |
+          APP=build/Build/Products/Release/AudioLR.app
+          defaults delete it.ledion.AudioLR 2>/dev/null || true
+          rm -rf ~/Library/Application\ Support/AudioLR ~/Library/Logs/AudioLR
+          open -n "$APP"
+          sleep 25
+          if ! pgrep -x AudioLR >/dev/null; then echo "::error::IsoLR non è partita o si è chiusa da sola"; exit 1; fi
+          screencapture -x risultati/primo-avvio.png || echo "::warning::foto dello schermo non riuscita"
+          osascript -e 'tell application "System Events" to get size of window 1 of process "AudioLR"' > risultati/finestra.txt 2>&1 || true
+          # Chiusura normale, poi chiusura brusca: al riavvio la domanda del rapporto
+          osascript -e 'quit app "AudioLR"'; sleep 5
+          open -n "$APP"; sleep 15; pkill -9 -x AudioLR; sleep 2
+          open -n "$APP"; sleep 15
+          screencapture -x risultati/dopo-chiusura-brusca.png || true
+          osascript -e 'tell application "System Events" to get name of every button of window 1 of process "AudioLR"' > risultati/domanda.txt 2>&1 || true
+          cat risultati/domanda.txt
+          grep -q "Salva il rapporto" risultati/domanda.txt || echo "::warning::Dopo una chiusura brusca la domanda del rapporto non si vede (o la finestra non è accessibile qui)"
+          osascript -e 'tell application "System Events" to click button "Salva il rapporto sulla Scrivania" of window 1 of process "AudioLR"' 2>/dev/null || true
+          sleep 3; ls ~/Desktop/Rapporto\ IsoLR* 2>/dev/null && cp ~/Desktop/Rapporto\ IsoLR*.txt risultati/ || true
+          pkill -x AudioLR || true
+      - name: Avviso sui limiti
+        if: ${{ steps.avvio.outcome == 'failure' && matrix.macchina == 'macos-15-intel' }}
+        run: echo "::warning::Mac Intel di GitHub: virtuale e senza Metal, l'interfaccia può non aprirsi. Provato solo lipo; l'interfaccia va provata a mano"
+      - name: Registro e rapporti di arresto
+        if: always()
+        run: |
+          cp ~/Library/Logs/AudioLR/*.log ~/Library/Logs/AudioLR/*.txt risultati/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/AudioLR* risultati/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: dispositivi-${{ matrix.macchina }}
+          path: risultati
+
+  riepilogo:
+    needs: [windows, mac]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: dispositivi-*
+          path: tutti
+      - name: Riepilogo e ramo «risultati-dispositivi»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_id }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, glob
+          rows = ["| Combinazione | Sistema | Schermo | Esito | Foto |", "|---|---|---|---|---|"]
+          for d in sorted(glob.glob("tutti/dispositivi-*")):
+              name = d.split("dispositivi-", 1)[1]
+              info, esito, foto = "", [], []
+              if os.path.exists(f"{d}/macchina.json"):
+                  m = json.load(open(f"{d}/macchina.json", encoding="utf-8-sig"))
+                  info, screen = m.get("sistema", ""), f"{m.get('schermo', '')} (utile {m.get('spazio_utile', '')})"
+              else:
+                  t = open(f"{d}/macchina.txt").read() if os.path.exists(f"{d}/macchina.txt") else ""
+                  info = " ".join(l.split(":", 1)[1].strip() for l in t.splitlines() if l.startswith(("ProductVersion", "chip")))
+                  screen = " ".join(l.strip() for l in t.splitlines() if "Resolution" in l)
+              for j in sorted(glob.glob(f"{d}/*.json")):
+                  if j.endswith("macchina.json"): continue
+                  r = json.load(open(j, encoding="utf-8"))
+                  if not r.get("ok", True): esito.append(f"{os.path.basename(j)[:-5]}: " + "; ".join(r.get("problemi", []))[:200])
+              foto = [os.path.basename(p) for p in sorted(glob.glob(f"{d}/*.png"))]
+              links = " ".join(f"[{p[:-4]}]({name}/{p})" for p in foto)
+              rows.append(f"| {name} | {info} | {screen} | {'❌ ' + '<br>'.join(esito) if esito else ('✅' if foto else '⚠️ nessuna foto')} | {links} |")
+          open("riepilogo.md", "w").write("\n".join(rows) + "\n")
+          PY
+          cat riepilogo.md >> "$GITHUB_STEP_SUMMARY"
+          git clone -q --depth 1 --branch risultati-dispositivi "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" ramo 2>/dev/null \
+            || { git init -q ramo && git -C ramo checkout -q -b risultati-dispositivi && git -C ramo remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"; }
+          rm -rf ramo/ultimo && mkdir -p ramo/ultimo
+          for d in tutti/dispositivi-*; do cp -r "$d" "ramo/ultimo/${d#tutti/dispositivi-}"; done
+          { echo "# Prove sui dispositivi"; echo; echo "Commit $SHA · [corsa]($GITHUB_SERVER_URL/${{ github.repository }}/actions/runs/$RUN)"; echo; cat riepilogo.md; } > ramo/ultimo/README.md
+          cp ramo/ultimo/README.md ramo/README.md
+          sed -i 's#](\([^h]\)#](ultimo/\1#g' ramo/README.md
+          cd ramo && git add -A && git -c user.name=github-actions -c user.email=actions@github.com commit -q -m "Prove sui dispositivi: $SHA" && git push -q origin risultati-dispositivi
