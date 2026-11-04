@@ -173,8 +173,17 @@ final class AppTests: XCTestCase {
         let version = try String(contentsOf: root.appendingPathComponent("version.txt"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let news = try String(contentsOf: root.appendingPathComponent("NOVITA.txt"), encoding: .utf8)
-        let first = news.split(separator: "\n").first.map(String.init) ?? ""
-        XCTAssertEqual(News.version(inHeader: first), version)
+        let headers = news.split(separator: "\n").map(String.init).filter { News.version(inHeader: $0) != nil }
+        let first = headers.first ?? ""
+        if first.contains("(in preparazione)") {
+            // Novità scritte prima del rilascio: versione più nuova di quella pubblicata, e sotto c'è
+            // il blocco della versione attuale. Al rilascio si toglie «(in preparazione)» e si alza version.txt
+            let next = News.version(inHeader: first) ?? ""
+            XCTAssertTrue(News.newer(next, than: version), "il blocco in preparazione deve essere più nuovo di \(version)")
+            XCTAssertEqual(headers.dropFirst().first.flatMap(News.version(inHeader:)), version)
+        } else {
+            XCTAssertEqual(News.version(inHeader: first), version)
+        }
         XCTAssertFalse(News.items(since: "", in: news).isEmpty)
     }
 

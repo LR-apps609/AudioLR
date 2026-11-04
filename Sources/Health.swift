@@ -152,7 +152,7 @@ enum Health {
                    s.frame.width, s.frame.height, s.backingScaleFactor, s.visibleFrame.width, s.visibleFrame.height)
         }
         lines.append("Schermi (\(NSScreen.screens.count)): " + screens.joined(separator: " · "))
-        if let w = NSApp.windows.first(where: { $0.isVisible }) {
+        if let w = NSApp?.windows.first(where: { $0.isVisible }) {  // NSApp è nil nei test
             lines.append(String(format: "Finestra: %.0f×%.0f", w.frame.width, w.frame.height))
         }
         lines.append("Lingua: \(Locale.preferredLanguages.prefix(3).joined(separator: ", ")) · formato \(Locale.current.identifier), decimali «\(Locale.current.decimalSeparator ?? "?")»")

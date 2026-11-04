@@ -57,7 +57,10 @@ jobs:
           $branch = "${{ github.event.workflow_run.head_branch || github.ref_name }}"
           $v = (Get-Content windows/src-tauri/tauri.conf.json | ConvertFrom-Json).version
           $tag = if ($branch -eq "main") { "win-v$v" } else { "windows-prova" }
-          $id = gh api "repos/${{ github.repository }}/releases/tags/$tag" --jq ".assets[] | select(.name==\`"IsoLR-Windows-$v.exe\`") | .id"
+          # Niente virgolette dentro --jq: PowerShell le toglie quando chiama gh, il filtro si fa qui
+          $want = "IsoLR-Windows-$v.exe"
+          $id = gh api "repos/${{ github.repository }}/releases/tags/$tag" --jq '.assets[] | [.name, .id] | @tsv' |
+            ForEach-Object { $n, $i = $_ -split "`t"; if ($n -eq $want) { $i } } | Select-Object -First 1
           if (-not $id) { Write-Output "::error::Installer IsoLR-Windows-$v.exe non trovato in $tag"; exit 1 }
           $dir = New-Item -ItemType Directory -Force -Path "C:\Prove IsoLR\Nicolò De Santis\Download"
           $exe = Join-Path $dir "IsoLR-Windows-$v.exe"
