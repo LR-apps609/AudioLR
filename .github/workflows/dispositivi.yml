@@ -72,6 +72,10 @@ jobs:
         shell: pwsh
         run: |
           Set-Culture ${{ matrix.lingua }}
+          # Le macchine di GitHub partono a 1024×768: a 150–200% la finestra sarebbe più piccola di qualunque schermo
+          # vero. 1920×1080 è lo schermo più comune; a 175% dà 1097×617, come un 2K a 175% un po' più stretto.
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop }
+          catch { Write-Output "::warning::Non riesco a mettere lo schermo a 1920×1080 ($($_.Exception.Message)): le scale alte si provano su 1024×768" }
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen
           $info = [ordered]@{

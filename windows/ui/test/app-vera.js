@@ -77,7 +77,7 @@ async function check(page) {
     if (res.fine?.error) res.problemi.push("errore: " + res.fine.error);
     if (stems.length < 4) res.problemi.push(`tracce ricevute: ${stems.length} (attese almeno 4)`);
     // Ascolto: Play per un secondo
-    try { await page.evaluate(() => IsoApp.player.play && IsoApp.player.play()); await page.waitForTimeout(1500); await page.evaluate(() => IsoApp.player.pause && IsoApp.player.pause()); } catch (e) { res.problemi.push("ascolto: " + e.message); }
+    try { await page.evaluate(() => IsoApp.player.play && IsoApp.player.play(0)); await page.waitForTimeout(1500); await page.evaluate(() => IsoApp.player.pause && IsoApp.player.pause()); } catch (e) { res.problemi.push("ascolto: " + e.message); }
     Object.assign(res, { layout: await check(page) });
     res.problemi.push(...res.layout.problemi);
   }
