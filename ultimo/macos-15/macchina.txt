@@ -1,0 +1,7 @@
+macchina: macos-15
+ProductName:		macOS
+ProductVersion:		15.8.2
+BuildVersion:		24H232
+chip: Apple M1 (Virtual)
+architettura: arm64
+memoria: 7 GB

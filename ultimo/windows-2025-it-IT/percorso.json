@@ -1,0 +1,28 @@
+{
+ "ok": false,
+ "problemi": [
+  "ascolto: page.evaluate: TypeError: Failed to execute 'start' on 'AudioBufferSourceNode': The provided double value is non-finite.\n    at Player.playPlain (http://tauri.localhost/js/player.js:171:13)\n    at Player.play (http://tauri.localhost/js/player.js:156:17)\n    at async <anonymous>:260:30"
+ ],
+ "fotoLavoro": true,
+ "fine": {
+  "phase": "done",
+  "p": 1,
+  "step": "Salvo le tracce",
+  "error": null
+ },
+ "secondi": 95,
+ "tracce": [
+  "vocals",
+  "drums",
+  "bass",
+  "other",
+  "instrumental"
+ ],
+ "layout": {
+  "problemi": [],
+  "finestra": "1008×681",
+  "scala": 1,
+  "schermo": "1024×768",
+  "utile": "1024×720"
+ }
+}
