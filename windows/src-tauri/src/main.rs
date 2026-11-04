@@ -5,6 +5,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod finestra;
+mod salute;
 mod nativo;
 
 use sha2::{Digest, Sha256};
@@ -258,6 +259,148 @@ fn fit_window(w: &tauri::Window) {
         let _ = w.set_size(tauri::PhysicalSize::new(iw, ih));
         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
     }
+}
+
+// ── Sorveglianza e rapporto senza «Segnala» (salute.rs) ──
+
+/// Il battito della finestra, ogni secondo: se smette per 5 s la finestra è bloccata.
+#[tauri::command]
+async fn heartbeat(doing: Option<String>, hidden: Option<bool>) {
+    salute::beat_now(doing, hidden.unwrap_or(false));
+}
+
+/// Una riga nel registro sul computer (i passi della separazione).
+#[tauri::command]
+async fn log_line(line: String) {
+    salute::log(&line);
+}
+
+/// I problemi notati dall'ultima volta (poi dimenticati).
+#[tauri::command]
+async fn take_problems() -> Vec<String> {
+    salute::take_problems()
+}
+
+fn user_hints() -> (String, String) {
+    (std::env::var("USERPROFILE").unwrap_or_default(), std::env::var("USERNAME").unwrap_or_default())
+}
+
+/// Toglie il nome utente da un testo (anche per «Segnala», che finisce su GitHub dove è pubblico).
+#[tauri::command]
+async fn redact_text(text: String) -> String {
+    let (profile, user) = user_hints();
+    salute::redact(&text, &profile, &user)
+}
+
+/// Un valore dal registro di Windows (reg query), senza aprire finestre nere.
+#[cfg(windows)]
+fn reg(key: &str, value: &str) -> String {
+    use std::os::windows::process::CommandExt;
+    let out = std::process::Command::new("reg").args(["query", key, "/v", value]).creation_flags(0x0800_0000).output();
+    let text = out.map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+    text.lines()
+        .find(|l| l.trim_start().starts_with(value))
+        .and_then(|l| l.split("REG_").nth(1))
+        .map(|r| r.splitn(2, char::is_whitespace).nth(1).unwrap_or("").trim().to_string())
+        .unwrap_or_else(|| "?".into())
+}
+
+/// Quello che la finestra non può sapere: Windows, PC, processore, memoria, disco, schermi, lingua, OneDrive.
+#[tauri::command]
+async fn system_facts(app: AppHandle) -> String {
+    let mut lines = vec![];
+    #[cfg(windows)]
+    {
+        let nt = r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+        let build: u32 = reg(nt, "CurrentBuild").parse().unwrap_or(0);
+        let name = reg(nt, "ProductName").replace("Windows 10", if build >= 22000 { "Windows 11" } else { "Windows 10" });
+        lines.push(format!("{name} {} (build {build}.{})", reg(nt, "DisplayVersion"), reg(nt, "UBR")));
+        let bios = r"HKLM\HARDWARE\DESCRIPTION\System\BIOS";
+        lines.push(format!("PC: {} {}", reg(bios, "SystemManufacturer"), reg(bios, "SystemProductName")));
+        lines.push(format!(
+            "Processore: {} · architettura {}",
+            reg(r"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString"),
+            std::env::var("PROCESSOR_ARCHITEW6432").or_else(|_| std::env::var("PROCESSOR_ARCHITECTURE")).unwrap_or_default()
+        ));
+        unsafe {
+            use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+            let mut m: MEMORYSTATUSEX = std::mem::zeroed();
+            m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+            if GlobalMemoryStatusEx(&mut m) != 0 {
+                lines.push(format!("Memoria: {:.1} GB, libera {:.1} GB", m.ullTotalPhys as f64 / 1e9, m.ullAvailPhys as f64 / 1e9));
+            }
+        }
+        if let Ok(dir) = app.path().app_data_dir() {
+            use std::os::windows::ffi::OsStrExt;
+            use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+            let w: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+            let mut free = 0u64;
+            if unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut()) } != 0 {
+                lines.push(format!("Spazio libero sul disco: {:.1} GB", free as f64 / 1e9));
+            }
+        }
+        let intl = r"HKCU\Control Panel\International";
+        lines.push(format!("Lingua e formato: {} · decimali «{}»", reg(intl, "LocaleName"), reg(intl, "sDecimal")));
+    }
+    if let Ok(ms) = app.available_monitors() {
+        let list: Vec<String> = ms
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let (s, wa) = (m.size(), m.work_area());
+                format!(
+                    "schermo {}: {}×{} al {:.0}%, spazio utile {}×{} punti",
+                    i + 1,
+                    s.width,
+                    s.height,
+                    m.scale_factor() * 100.0,
+                    (wa.size.width as f64 / m.scale_factor()).round(),
+                    (wa.size.height as f64 / m.scale_factor()).round()
+                )
+            })
+            .collect();
+        lines.push(format!("Schermi ({}): {}", list.len(), list.join(" · ")));
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        if let (Ok(o), Ok(f)) = (w.outer_position(), w.outer_size()) {
+            lines.push(format!("Finestra: {}×{} pixel in ({}, {})", f.width, f.height, o.x, o.y));
+        }
+    }
+    let onedrive = std::env::var("OneDrive").is_ok();
+    let out = output_root(&app).map(|p| p.display().to_string()).unwrap_or_default();
+    lines.push(format!(
+        "Cartella delle tracce: {out}{} · OneDrive {}",
+        if out.to_lowercase().contains("onedrive") { " (su OneDrive)" } else { "" },
+        if onedrive { "attivo" } else { "non attivo" }
+    ));
+    lines.push(format!("Cosa stava facendo: {}", salute::doing()));
+    lines.push(format!("Registro (ultime 150 righe):\n{}", salute::tail(150)));
+    let (profile, user) = user_hints();
+    salute::redact(&lines.join("\n"), &profile, &user)
+}
+
+/// Salva il rapporto sul Desktop (o in Download) e lo mostra in Esplora file. Torna il percorso.
+#[tauri::command]
+async fn save_report(app: AppHandle, text: String) -> Result<String, String> {
+    let (profile, user) = user_hints();
+    let text = salute::redact(&text, &profile, &user);
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let name = format!("Rapporto IsoLR {}.txt", secs);
+    for dir in [app.path().desktop_dir(), app.path().download_dir()].into_iter().flatten() {
+        let path = dir.join(&name);
+        // Il Blocco note di Windows legge bene l'UTF-8 con la firma iniziale
+        let mut data = vec![0xEF, 0xBB, 0xBF];
+        data.extend_from_slice(text.replace('\n', "\r\n").as_bytes());
+        if std::fs::write(&path, data).is_ok() {
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                let _ = std::process::Command::new("explorer").arg(format!("/select,{}", path.display())).creation_flags(0x0800_0000).spawn();
+            }
+            return Ok(path.display().to_string());
+        }
+    }
+    Err("non riesco a salvare il rapporto sul Desktop né in Download".into())
 }
 
 #[tauri::command]
@@ -761,6 +904,9 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .manage(Allowed::default())
         .setup(|app| {
+            if let Ok(dir) = app.path().app_data_dir() {
+                salute::start(dir.join("registro"), &app.package_info().version.to_string());
+            }
             if let Some(w) = app.get_webview_window("main") {
                 fit_window(&w.as_ref().window());
             }
@@ -777,8 +923,15 @@ fn main() {
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, cancel_downloads, read_model, models_ready, check_update, install_update,
             native_cancel, timing_add, timing_last, peak_memory,
-            native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade, take_opened
+            native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade, take_opened,
+            heartbeat, log_line, take_problems, system_facts, save_report, redact_text
         ])
-        .run(tauri::generate_context!())
-        .expect("IsoLR non è riuscita ad avviarsi");
+        .build(tauri::generate_context!())
+        .expect("IsoLR non è riuscita ad avviarsi")
+        .run(|_, e| {
+            // Chiusura normale: la prossima volta niente «qualcosa è andato storto»
+            if let tauri::RunEvent::Exit = e {
+                salute::clean_exit();
+            }
+        });
 }

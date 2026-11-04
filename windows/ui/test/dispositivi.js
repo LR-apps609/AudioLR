@@ -99,6 +99,29 @@ async function check(page) {
     results.push(row);
     console.log(`${name}: finestra ${row.finestra} · ${row.problemi.length ? row.problemi.length + " problemi" : "ok"}`);
   }
+  // Il rapporto senza «Segnala»: al riavvio dopo un problema la finestra lo propone e lo salva
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: 1.5 });
+    await page.addInitScript(() => { window.__problemi = ["La finestra non risponde da 7 secondi (stava facendo: separa «Prova» in Massima: Separazione 46%)"]; });
+    await page.goto(base);
+    await page.waitForTimeout(2200);
+    const row = { schermo: "rapporto (2560x1440-200)", effettivo: "", utile: "", finestra: "1280×640", problemi: [], foto: [] };
+    await page.screenshot({ path: path.join(out, "win-rapporto-1-domanda.png") }); row.foto.push("win-rapporto-1-domanda.png");
+    const asked = await page.evaluate(() => !!document.querySelector("#h-save"));
+    if (!asked) row.problemi.push("la domanda «Vuoi mandarmi il rapporto?» non compare");
+    else {
+      await page.click("#h-save");
+      await page.waitForTimeout(800);
+      await page.screenshot({ path: path.join(out, "win-rapporto-2-salvato.png") }); row.foto.push("win-rapporto-2-salvato.png");
+      const text = await page.evaluate(() => window.__rapporto || "");
+      fs.writeFileSync(path.join(out, "rapporto-di-prova.txt"), text);
+      for (const need of ["non risponde", "Installazione", "Finestra:", "scala 150%", "Lingua", "IsoLR per Windows"]) if (!text.includes(need)) row.problemi.push(`nel rapporto manca «${need}»`);
+    }
+    for (const p of row.problemi) failed = true;
+    results.push(row);
+    console.log(`rapporto: ${row.problemi.length ? row.problemi.join("; ") : "ok"}`);
+    await page.close();
+  }
   await browser.close();
   server.close();
   fs.writeFileSync(path.join(out, "risultati.json"), JSON.stringify(results, null, 1));

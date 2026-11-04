@@ -815,6 +815,23 @@
   async function checkUpdate() { try { ui.update = await Bridge.checkUpdate(); header(); } catch {} }
   render();
   refreshLibrary();
+  // La sorveglianza: un battito al secondo con quello che sta facendo (se smette, la finestra è bloccata)
+  setInterval(() => {
+    let doing = null;
+    if (job.busy) {
+      const q = (Separation.QUALITY[job.quality] || {}).title || job.quality || "";
+      doing = `separa «${job.title || "?"}» in ${q}: ${job.step || job.stage || ""} ${Math.round((job.progress || 0) * 100)}%`.trim();
+    }
+    Bridge.heartbeat(doing, document.visibilityState === "hidden");
+  }, 1000);
+  // La versione dell'avvio precedente (per il rapporto: primo avvio, aggiornamento o già usata)
+  window.__isoPrevVersion = Prefs.get("health.previousVersion", null);
+  Bridge.version().then((v) => Prefs.set("health.previousVersion", v));
+  // Al primo avvio dopo un problema: «Vuoi mandarmi il rapporto?»
+  setTimeout(async () => {
+    const problems = await Bridge.takeProblems();
+    if (problems.length) Sheets.problemOffer(problems, job);
+  }, 1500);
   setTimeout(checkUpdate, 3000);
   setInterval(checkUpdate, 3 * 3600 * 1000);
 

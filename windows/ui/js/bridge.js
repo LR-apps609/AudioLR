@@ -126,6 +126,18 @@
     async nativeBackend(name) { return DESKTOP ? invoke("native_backend", { name }) : null; },
     async nativeGpuError() { return DESKTOP ? invoke("native_gpu_error") : null; },
 
+    // ── Sorveglianza e rapporto senza «Segnala» (salute.rs) ──
+    /** Il battito della finestra (ogni secondo): cosa sta facendo, e se è nascosta (orologi rallentati). */
+    heartbeat(doing, hidden) { if (DESKTOP) invoke("heartbeat", { doing, hidden }).catch(() => {}); },
+    /** Una riga nel registro sul computer. */
+    logLine(line) { if (DESKTOP) invoke("log_line", { line }).catch(() => {}); },
+    async takeProblems() { return DESKTOP ? invoke("take_problems").catch(() => []) : (window.__problemi || []).splice(0); },
+    async systemFacts() { return DESKTOP ? invoke("system_facts").catch((e) => "Informazioni del PC non disponibili: " + e) : "PC di prova (nel browser)"; },
+    /** Salva il rapporto sul Desktop (o in Download) e lo mostra: torna il percorso. */
+    async saveReport(text) { if (DESKTOP) return invoke("save_report", { text }); window.__rapporto = text; return "C:\\Users\\***\\Desktop\\Rapporto IsoLR.txt"; },
+    /** Toglie il nome utente dai percorsi (C:\Users\***). */
+    async redact(text) { return DESKTOP ? invoke("redact_text", { text }).catch(() => text) : text.replace(/([A-Za-z]:[\\/]Users[\\/])[^\\/\n"']+/gi, "$1***"); },
+
     // ── Aggiornamenti ──
     async checkUpdate() { return DESKTOP ? invoke("check_update") : null; },
     async installUpdate(url, onProgress) {

@@ -166,8 +166,42 @@
     return lines.join("\n");
   }
 
+  /** Il rapporto completo per chi non usa «Segnala»: cosa è andato storto, il PC, gli schermi, il registro. */
+  async function fullReport(problems, job) {
+    const prev = window.__isoPrevVersion === undefined ? null : window.__isoPrevVersion, now = await Bridge.version();
+    const lines = [`RAPPORTO DI ISOLR (Windows) · ${new Date().toLocaleString("it-IT")}`, "", "Cosa è andato storto:",
+      ...(problems.length ? problems.map((p) => "• " + p) : ["—"]), "",
+      `Installazione: ${prev == null ? "primo avvio" : prev === now ? "già usata" : "aggiornata dalla " + prev}`,
+      `Finestra: ${innerWidth}×${innerHeight} punti · scala ${Math.round(devicePixelRatio * 100)}% · schermo ${screen.width}×${screen.height} punti (utile ${screen.availWidth}×${screen.availHeight})`,
+      `Tema: ${matchMedia("(prefers-color-scheme: dark)").matches ? "scuro" : "chiaro"} · contrasto elevato: ${matchMedia("(forced-colors: active)").matches ? "sì" : "no"} · riduci movimento: ${matchMedia("(prefers-reduced-motion: reduce)").matches ? "sì" : "no"}`,
+      `Lingua della finestra: ${navigator.languages.join(", ")} · numeri: ${(1234.5).toLocaleString()}`,
+      "", await systemInfo(job), "", await Bridge.systemFacts()];
+    return Bridge.redact(lines.join("\n"));
+  }
+
+  function problemOffer(problems, job) {
+    open(`<h2>L'ultima volta qualcosa è andato storto</h2>
+      <p>Vuoi mandarmi il rapporto? IsoLR lo salva in un file sul Desktop: puoi mandarlo su WhatsApp o per email.
+      Dentro ci sono solo le informazioni del computer e cosa stava facendo IsoLR: niente nome utente, niente canzoni.</p>
+      <p class="muted" id="h-done" hidden></p>
+      <div class="actions"><span style="flex:1"></span><button class="btn" data-close>Non ora</button><button class="btn prominent" id="h-save">Salva il rapporto sul Desktop</button></div>`, (sheet) => {
+      const btn = sheet.querySelector("#h-save"), done = sheet.querySelector("#h-done");
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const where = await Bridge.saveReport(await fullReport(problems, job));
+          done.textContent = `Salvato: ${where.split(/[\\/]/).pop()} (sul Desktop). Mandamelo come allegato.`;
+          btn.hidden = true;
+          sheet.querySelector("[data-close]").textContent = "Chiudi";
+        } catch (e) { done.textContent = "Non sono riuscito a salvarlo: " + (e.message || e); btn.disabled = false; }
+        done.hidden = false;
+      });
+    });
+  }
+
   async function report(job) {
-    const system = await systemInfo(job);
+    // Va su GitHub, dove è pubblica: niente nome utente nei percorsi
+    const system = await Bridge.redact(await systemInfo(job));
     open(`<div style="display:flex;gap:12px;align-items:center"><span class="bug-badge">${Icon("bug")}</span>
         <div><h2>Segnala un problema</h2><div class="muted">Più dettagli dai, più in fretta si sistema</div></div></div>
       <label class="setting"><span>Tipo</span><select class="pop" id="r-kind">${KINDS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
@@ -318,6 +352,6 @@
     });
   }
 
-  window.Sheets = { open, settings, details, help, report, history, compare, notes, transpose, applyAppearance };
+  window.Sheets = { open, settings, details, help, report, history, compare, notes, transpose, applyAppearance, problemOffer, fullReport };
   applyAppearance();
 })();

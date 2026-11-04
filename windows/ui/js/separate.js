@@ -104,6 +104,8 @@
     static log(line) {
       const t = new Date().toLocaleTimeString("it-IT");
       Job.lines.push(`${t} ${line.replace(/ \d+%$/, "")}`);
+      // Anche nel registro sul computer: dopo un blocco o una chiusura si sa dove si era fermata
+      Bridge.logLine(line.replace(/ \d+%$/, ""));
       if (Job.lines.length > 40) Job.lines.shift();
     }
     get busy() { return this.phase === "working"; }
