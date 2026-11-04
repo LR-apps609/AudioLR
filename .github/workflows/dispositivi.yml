@@ -134,14 +134,25 @@ jobs:
           $env:PW = $PW
           $fail = 0
           function Avvia($scala, $extra) {
-            # Solo per la prova: apre la porta di debug di WebView2 senza toccare l'app pubblicata.
-            # Tauri passa già i suoi argomenti, e la sola variabile d'ambiente non basta (04/11, quinto giro):
-            # si usa anche la regola di Windows per WebView2, che vale per il nome del programma.
+            # Solo per la prova: apre la porta di debug di WebView2. La variabile d'ambiente e la regola di Windows
+            # non bastano (04/11, quinto e sesto giro: WebView2 parte solo con gli argomenti di Tauri). Quindi nella
+            # copia installata si sostituisce la riga degli argomenti di Tauri, con la stessa lunghezza; ogni avvio
+            # riparte dall'eseguibile originale. L'installer resta quello vero.
             $arg = "--remote-debugging-port=9222 --force-device-scale-factor=$scala"
             $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $arg
-            $k = "HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
-            New-Item -Path $k -Force | Out-Null
-            New-ItemProperty -Path $k -Name (Split-Path $env:APP -Leaf) -Value $arg -PropertyType String -Force | Out-Null
+            # Con IsoLR già aperta (secondo avvio con la canzone) l'eseguibile è in uso e non cambia
+            if ($script:scalaPronta -ne $scala) {
+            $script:scalaPronta = $scala
+            Get-Process -Name isolr -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+            $orig = "$env:RUNNER_TEMP\isolr-originale.exe"
+            if (-not (Test-Path $orig)) { Copy-Item $env:APP $orig }
+            $lat = [Text.Encoding]::GetEncoding(28591)
+            $testo = $lat.GetString([IO.File]::ReadAllBytes($orig))
+            $cerca = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
+            $volte = ([regex]::Matches($testo, [regex]::Escape($cerca))).Count
+            if ($volte -ne 1) { Write-Output "::error::Riga degli argomenti di Tauri trovata $volte volte invece di 1: la prova non può aprire la porta"; exit 1 }
+            [IO.File]::WriteAllBytes($env:APP, $lat.GetBytes($testo.Replace($cerca, $arg.PadRight($cerca.Length))))
+            }
             $a = @{ FilePath = $env:APP; PassThru = $true }
             if ($extra) { $a.ArgumentList = "`"$extra`"" }
             return Start-Process @a
