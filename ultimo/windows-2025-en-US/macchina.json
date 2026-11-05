@@ -2,7 +2,7 @@
   "macchina": "windows-2025",
   "lingua": "en-US",
   "sistema": "Microsoft Windows Server 2025 Datacenter 10.0.26100",
-  "processore": "AMD EPYC 7763 64-Core Processor                ",
+  "processore": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
   "architettura": "AMD64",
   "memoria_gb": 16.0,
   "scheda_video": "Microsoft Hyper-V Video",

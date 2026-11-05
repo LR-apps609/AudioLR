@@ -2,7 +2,7 @@
   "macchina": "windows-2025",
   "lingua": "it-IT",
   "sistema": "Microsoft Windows Server 2025 Datacenter 10.0.26100",
-  "processore": "AMD EPYC 9V45 96-Core Processor                ",
+  "processore": "INTEL(R) XEON(R) PLATINUM 8573C",
   "architettura": "AMD64",
   "memoria_gb": 16.0,
   "scheda_video": "Microsoft Hyper-V Video",

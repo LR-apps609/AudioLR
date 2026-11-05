@@ -1,13 +1,14 @@
 {
  "ok": true,
  "problemi": [],
+ "fotoLavoro": true,
  "fine": {
   "phase": "done",
   "p": 1,
   "step": "Salvo le tracce",
   "error": null
  },
- "secondi": 64,
+ "secondi": 94,
  "tracce": [
   "vocals",
   "drums",

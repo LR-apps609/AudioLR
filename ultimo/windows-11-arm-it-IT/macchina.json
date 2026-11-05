@@ -6,7 +6,7 @@
   "architettura": "ARM64",
   "memoria_gb": 16.0,
   "scheda_video": "Microsoft Hyper-V Video",
-  "schermo": "1024x768",
-  "spazio_utile": "1024x720",
+  "schermo": "1920x1080",
+  "spazio_utile": "1920x1032",
   "visual_cpp": true
 }

@@ -1,10 +1,7 @@
 {
- "ok": false,
- "problemi": [
-  "la pagina scorre in orizzontale (752 > 732)",
-  "«Impostazioni» fuori dalla finestra"
- ],
- "finestra": "732×469",
+ "ok": true,
+ "problemi": [],
+ "finestra": "1088×572",
  "scala": 1.75,
  "schermo": "1098×618",
  "utile": "1098×595",
