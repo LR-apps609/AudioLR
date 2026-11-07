@@ -101,7 +101,8 @@
       // Signalsmith lavora alla frequenza del contesto: la registrazione si porta prima a 44,1 kHz
       const res = rate === RATE ? raw : await resample(raw, rate);
       await node.addBuffers(res);
-      node.schedule({ active: true, input: 0, output: 0, rate: 1 / speed, semitones: -semitones });
+      // Va aspettato, come in transpose.js: altrimenti a volte la registrazione riportata usciva muta
+      await node.schedule({ active: true, input: 0, output: 0, rate: 1 / speed, semitones: -semitones });
     }
     const r = await off.startRendering();
     // Signalsmith compensa da solo il suo ritardo; si tiene la lunghezza giusta

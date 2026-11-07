@@ -211,6 +211,20 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await p2.close();
   }
 
+  // ── Transpose: mai silenzio (prima circa una volta su tre il calcolo partiva prima del tono e usciva muto) ──
+  {
+    const page = await fresh(browser);
+    const peaks = await page.evaluate(async () => {
+      const n = 44100 * 2, a = [new Float32Array(n), new Float32Array(n)];
+      for (let i = 0; i < n; i++) { const v = 0.4 * Math.sin((2 * Math.PI * 440 * i) / 44100); a[0][i] = v; a[1][i] = v; }
+      const out = [];
+      for (let k = 0; k < 8; k++) { const up = await Transpose.apply(a, k % 2 ? 2 : -3); let m = 0; for (const v of up[0]) m = Math.max(m, Math.abs(v)); out.push(+m.toFixed(3)); }
+      return out;
+    });
+    check(peaks.every((m) => m > 0.1), `Transpose 8 volte di fila, mai silenzio (picchi ${peaks.join(", ")})`);
+    await page.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");

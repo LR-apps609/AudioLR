@@ -18,7 +18,9 @@
     const node = await SignalsmithStretch(off);
     node.connect(off.destination);
     await node.addBuffers([ch[0], ch[1] || ch[0]]);
-    node.schedule({ active: true, input: 0, output: 0, rate: 1, semitones });
+    // Va aspettato: il messaggio arriva al lavoratore audio dopo, e se il calcolo partiva prima usciva silenzio
+    // (circa una volta su tre, misurato il 07/11)
+    await node.schedule({ active: true, input: 0, output: 0, rate: 1, semitones });
     const r = await off.startRendering();
     // Signalsmith compensa da solo il suo ritardo: si tiene la lunghezza originale
     return [r.getChannelData(0).slice(0, n), r.getChannelData(1).slice(0, n)];
