@@ -134,6 +134,10 @@ jobs:
       - name: Prima e dopo
         run: |
           pip install -q numpy soundfile
+          # Se la misura non è partita (succede: GitHub non trova un Mac Intel libero) lo si dice chiaro
+          if ! ls banchi/*/banco-*.json >/dev/null 2>&1; then
+            echo "::error::Nessuna misura arrivata: il Mac della misura non è partito o non ha finito (vedi il job «misura»)"; exit 1
+          fi
           python Tools/tempi_mac.py confronto banchi riepilogo.md
           cat riepilogo.md >> $GITHUB_STEP_SUMMARY
           cp riepilogo.md banchi/
