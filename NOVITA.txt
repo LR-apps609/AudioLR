@@ -1,4 +1,6 @@
 Novità della 0.41.0 (in preparazione):
+• Testo sincronizzato: mentre Whisper ascolta la voce si vede il tempo che scorre e c'è «Annulla» (sui Mac Intel ci mette minuti e sembrava fermo)
+• Dopo «Annulla» una nuova separazione aspetta che quella di prima abbia davvero finito il suo pezzo, invece di lavorare insieme a lei (sui Mac Intel un pezzo dura fino a un minuto)
 • Le schede delle qualità dicono quanto ci mette davvero il tuo Mac: dopo la prima separazione il tempo viene da quella, e sui Mac Intel non promettono più «circa 3 minuti» per Massima (lì sono circa 15)
 • Studio circa due volte più veloce: ogni punto della canzone passa una volta per modello invece di due, perché i suoi tre passaggi si fanno già la media. Sulle 50 canzoni intere di prova le tracce cambiano al massimo di 0,07 dB (non si sente). Massima resta com'era
 • Mac Intel: la prima volta IsoLR cronometra lo stesso pezzo di canzone sul processore e sulla grafica e usa il più veloce. Prima su molti Mac Intel lavorava sulla grafica lenta (misurato: 161 secondi a pezzo invece di 48). Le tracce sono le stesse

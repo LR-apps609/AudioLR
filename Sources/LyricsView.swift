@@ -22,6 +22,10 @@ struct LyricsView: View {
     @State private var status = ""
     @State private var working = false
     @State private var progress: Double?
+    /// Quando è cominciata la trascrizione e il lavoro, per il tempo che scorre e per «Annulla» (bug b-9: sui Mac
+    /// Intel Whisper ci mette minuti e si vedeva solo una rotellina)
+    @State private var started = Date()
+    @State private var work: Task<Void, Never>?
     @State private var showVideo = false
     @AppStorage("lyricsLanguage") private var language = ""
 
@@ -77,8 +81,14 @@ struct LyricsView: View {
             Spacer()
             Image(systemName: "text.quote").font(.system(size: 34)).foregroundStyle(Theme.brass)
             if working {
-                Text(status).font(.system(size: 14, weight: .semibold))
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(status + " · " + formatTime(Date().timeIntervalSince(started))).font(.system(size: 14, weight: .semibold))
+                        .monospacedDigit()
+                }
                 if let p = progress { ProgressView(value: p).frame(width: 260) } else { ProgressView().controlSize(.small) }
+                Button("Annulla") { cancelTranscription() }
+                    .keyboardShortcut(.cancelAction)
+                    .help("Ferma la trascrizione: il testo che c'era resta com'era")
             } else {
                 Text(voice == nil ? "Questa canzone non ha la traccia della voce." : "Il testo non c'è ancora.")
                     .font(.system(size: 14, weight: .semibold))
@@ -218,13 +228,15 @@ struct LyricsView: View {
         progress = 0
         let lang = language.isEmpty ? nil : language
         let folder = job.folder
-        Task {
+        started = Date()
+        work = Task {
             do {
                 try await LyricsEngine.prepare { p in Task { @MainActor in progress = p } }
                 await MainActor.run { progress = nil }
                 let result = try await LyricsEngine.transcribe(voice: v.url, language: lang) { s in
                     Task { @MainActor in status = s }
                 }
+                if Task.isCancelled { return }
                 await MainActor.run {
                     lyrics = result
                     working = false
@@ -233,6 +245,7 @@ struct LyricsView: View {
                     AppLog.write("Testo: \(result.words.count) parole, lingua \(result.language ?? "?")")
                 }
             } catch {
+                if Task.isCancelled { return }
                 await MainActor.run {
                     working = false
                     progress = nil
@@ -241,6 +254,15 @@ struct LyricsView: View {
                 }
             }
         }
+    }
+
+    private func cancelTranscription() {
+        work?.cancel()
+        work = nil
+        working = false
+        progress = nil
+        status = "Trascrizione annullata"
+        AppLog.write("Testo: annullato dall'utente")
     }
 
     private func export(_ ext: String) {

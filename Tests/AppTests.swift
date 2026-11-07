@@ -167,6 +167,17 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(WhatsNew.pending(defaults: d, current: "0.3.0", text: Self.novita), [], "una volta sola")
     }
 
+    func testTranscriptionShowsTimeAndCanBeCancelled() throws {
+        // b-9: sui Mac Intel Whisper ci mette minuti; mentre lavora si vedono il tempo che scorre e «Annulla»,
+        // e un risultato che arriva dopo «Annulla» non sostituisce il testo
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let view = try String(contentsOf: root.appendingPathComponent("Sources/LyricsView.swift"), encoding: .utf8)
+        XCTAssertTrue(view.contains("Button(\"Annulla\") { cancelTranscription() }"))
+        XCTAssertTrue(view.contains("formatTime(Date().timeIntervalSince(started))"))
+        XCTAssertEqual(view.components(separatedBy: "if Task.isCancelled { return }").count - 1, 2,
+                       "né il risultato né l'errore di una trascrizione annullata devono arrivare nella finestra")
+    }
+
     func testBundledNewsHasCurrentVersion() throws {
         // NOVITA.txt deve cominciare con la versione di version.txt: è il testo che vede chi aggiorna
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -514,6 +525,20 @@ final class AppTests: XCTestCase {
     }
 
     // MARK: Qualità e motore
+
+    func testNewSeparationWaitsForTheCancelledOne() async {
+        // b-4: un lavoro annullato finisce il suo pezzo; il nuovo parte solo dopo, non insieme
+        let flag = Flag()
+        let old = Task<Void, Never>.detached { try? await Task.sleep(nanoseconds: 400_000_000); await flag.set() }
+        let waited = await SeparationJob.settle(old)
+        let done = await flag.value
+        XCTAssertTrue(done, "il lavoro di prima deve essere finito")
+        XCTAssertTrue(waited)
+        let none = await SeparationJob.settle(nil)
+        XCTAssertFalse(none)
+    }
+
+    actor Flag { var value = false; func set() { value = true } }
 
     func testCardTimeOnIntelAndFromHistory() {
         // b-3: sui Mac Intel la scheda non promette più i tempi del chip Apple

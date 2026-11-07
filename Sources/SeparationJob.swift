@@ -492,7 +492,12 @@ final class SeparationJob: ObservableObject {
         meter?.start()
         let cancel = Cancel()
         cancelled = cancel
+        // Un lavoro annullato finisce il pezzo che sta calcolando (Core ML non si interrompe a metà): sui Mac Intel
+        // fino a un minuto. La nuova separazione aspetta che finisca, invece di farlo andare insieme (bug b-4)
+        let before = task
         task = Task.detached(priority: .userInitiated) { [weak self] in
+            if await SeparationJob.settle(before) { await self?.note(cancel, "Fermo il lavoro di prima…") }
+            if cancel.isSet { return }
             // Cronometro delle fasi
             var times: [Timing] = []
             var clock = Date()
@@ -1308,6 +1313,14 @@ final class SeparationJob: ObservableObject {
 
     /// Annulla subito: la finestra torna libera all'istante, anche se in sottofondo un modello si sta ancora aprendo
     /// (il sistema non permette di interromperlo: quando finisce, il lavoro vede l'annullamento e si ferma da solo).
+    /// Aspetta che un lavoro di prima (annullato) sia finito davvero. Dice se ha dovuto aspettare.
+    nonisolated static func settle(_ previous: Task<Void, Never>?) async -> Bool {
+        guard let p = previous else { return false }
+        let t0 = Date()
+        await p.value
+        return Date().timeIntervalSince(t0) > 0.2
+    }
+
     func cancel() {
         cancelled.set()
         task?.cancel()
