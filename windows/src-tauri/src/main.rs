@@ -712,6 +712,22 @@ fn timing_last(app: AppHandle, n: usize) -> Vec<String> {
     lines[lines.len().saturating_sub(n)..].to_vec()
 }
 
+/// La memoria del PC in GB. Nella finestra navigator.deviceMemory si ferma a 8 («8 o più»): con 8 GB e Studio
+/// i modelli restavano aperti insieme (bug b-6). Come sul Mac: fino a 9 GB un modello alla volta.
+#[tauri::command]
+fn memory_gb() -> Option<f64> {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+        let mut m: MEMORYSTATUSEX = std::mem::zeroed();
+        m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        if GlobalMemoryStatusEx(&mut m) != 0 {
+            return Some(m.ullTotalPhys as f64 / (1024.0 * 1024.0 * 1024.0));
+        }
+    }
+    None
+}
+
 /// Memoria massima usata finora (MB): IsoLR e i suoi processi WebView2 (la finestra e i lavoratori).
 #[tauri::command]
 fn peak_memory() -> Option<u64> {
@@ -922,7 +938,7 @@ fn main() {
             app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, cancel_downloads, read_model, models_ready, check_update, install_update,
-            native_cancel, timing_add, timing_last, peak_memory,
+            native_cancel, timing_add, timing_last, peak_memory, memory_gb,
             native_load, native_run, native_release, native_backend, native_gpu_error, native_downgrade, take_opened,
             heartbeat, log_line, take_problems, system_facts, save_report, redact_text
         ])

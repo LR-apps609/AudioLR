@@ -1,4 +1,6 @@
 Novità di IsoLR per Windows 0.16.0 (in preparazione):
+• Sui PC con 8 GB di memoria Massima e Studio aprono un modello alla volta, come sul Mac: meno memoria occupata, stesse tracce
+• Le schede delle qualità dicono quanto ci mette davvero il tuo PC: dopo la prima separazione il tempo viene da quella, e Rapida senza scheda grafica adatta (WebGPU) non promette più «circa 30 secondi»
 • I componenti Visual C++ che servono al motore di Massima e Studio sono dentro IsoLR (circa 1 MB): anche su un PC appena comprato, senza niente installato, partono
 • Studio circa due volte più veloce: ogni punto della canzone passa una volta per modello invece di due, perché i suoi tre passaggi si fanno già la media. Sulle 50 canzoni intere di prova le tracce cambiano al massimo di 0,07 dB (non si sente). Massima resta com'era
 • Corretto: sugli schermi con la scala alta (2560×1440 al 175% e al 200%, 1920×1080 al 125% e al 150%) e sui portatili 1366×768 la finestra si apriva più alta dello schermo e la parte bassa finiva sotto la barra delle applicazioni. Ora si apre dentro lo spazio libero, anche quando la sposti su un altro schermo con un'altra scala

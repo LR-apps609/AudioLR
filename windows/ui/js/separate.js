@@ -21,16 +21,16 @@
   };
 
   /** Il computer (core/load.js): sui computer deboli i modelli si aprono uno alla volta. */
+  let realMemory = null;
+  Bridge.memoryGB().then((g) => { if (g) realMemory = g; });
   function loadInfo(fellBack = false) {
-    return { webgpu: "gpu" in navigator, forceCpu: Prefs.get("forceCpu", false), fellBack, memoryGB: navigator.deviceMemory };
+    return { webgpu: "gpu" in navigator, forceCpu: Prefs.get("forceCpu", false), fellBack, memoryGB: realMemory || navigator.deviceMemory };
   }
 
-  // «circa 3 minuti» per una canzone di 4 minuti, come le schede della qualità sul Mac
+  // Il tempo per una canzone di 4 minuti, dalla velocità vera di questo PC quando c'è (core/load.js)
   function estimate(q, seconds = 240) {
-    const s = (IsoLR.Load.perMinute(q) * seconds) / 60;
-    if (s < 50) return "circa 30 secondi";
-    const m = Math.max(1, Math.round(s / 60));
-    return `circa ${m} ${m === 1 ? "minuto" : "minuti"}`;
+    const lib = (window.IsoApp && IsoApp.ui && IsoApp.ui.library) || [];
+    return IsoLR.Load.estimate(q, { library: lib, webgpu: "gpu" in navigator, seconds });
   }
 
   /** Legge e decodifica un file audio in stereo a 44,1 kHz (come AudioIO.read). */

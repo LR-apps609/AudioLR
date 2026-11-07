@@ -8,7 +8,9 @@ const st = (a, b) => [Float32Array.from(a), Float32Array.from(b)];
 const arr = (x) => x.map((c) => Array.from(c));
 
 test("un modello alla volta sui computer deboli (non cambia il risultato)", () => {
-  assert.strictEqual(L.oneAtATime({ webgpu: true, memoryGB: 8 }), false);
+  // b-6: con 8 GB un modello alla volta, come sul Mac (fino a 9 GB)
+  assert.strictEqual(L.oneAtATime({ webgpu: true, memoryGB: 8 }), true);
+  assert.strictEqual(L.oneAtATime({ webgpu: true, memoryGB: 16 }), false);
   assert.strictEqual(L.oneAtATime({ webgpu: false }), true);
   assert.strictEqual(L.oneAtATime({ webgpu: true, forceCpu: true }), true);
   assert.strictEqual(L.oneAtATime({ webgpu: true, fellBack: true }), true);
@@ -40,4 +42,15 @@ test("Studio: voce e strumenti sono le medie giuste", () => {
   assert.deepStrictEqual(arr(a.guitar)[0], [3, 3, 3]);
   assert.deepStrictEqual(arr(a.piano)[0], [5, 5, 5]);
   assert.deepStrictEqual(arr(a.other)[0], [5, 5, 5]);
+});
+
+test("schede: tempo vero di questo PC, e Rapida senza WebGPU non promette 30 secondi (b-7)", () => {
+  assert.strictEqual(L.estimate("fast"), "circa 30 secondi");
+  assert.notStrictEqual(L.estimate("fast", { webgpu: false }), "circa 30 secondi");
+  assert.match(L.estimate("fast", { webgpu: false }), /minuti$/);
+  const lib = [{ meta: { quality: "best", duration: 240, took: 900 } }, { meta: { quality: "best", duration: 120, took: 450 } },
+    { meta: { quality: "best", duration: 300, took: 1100 } }, { meta: { quality: "fast", duration: 10, took: 99 } }];
+  assert.strictEqual(L.estimate("best", { library: lib }), "circa 15 minuti su questo PC");
+  // Le canzoni troppo corte non contano
+  assert.strictEqual(L.estimate("fast", { library: lib }), "circa 30 secondi");
 });

@@ -123,6 +123,8 @@
     },
     async timingLast(n) { return DESKTOP ? invoke("timing_last", { n }).catch(() => []) : (window.__tempi || []).slice(-n); },
     async peakMemory() { return DESKTOP ? invoke("peak_memory").catch(() => null) : null; },
+    /// La memoria vera del PC in GB (navigator.deviceMemory si ferma a 8); null nel browser.
+    async memoryGB() { return DESKTOP ? invoke("memory_gb").catch(() => null) : null; },
     async nativeBackend(name) { return DESKTOP ? invoke("native_backend", { name }) : null; },
     async nativeGpuError() { return DESKTOP ? invoke("native_gpu_error") : null; },
 
