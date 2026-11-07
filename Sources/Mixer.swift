@@ -313,8 +313,15 @@ final class MixPlayer: ObservableObject {
 
     /// Segna l'inizio (A) o la fine (B) del passaggio da ripetere nel punto attuale.
     func markLoopStart() {
-        loopA = position
-        if let b = loopB, b <= position + 0.25 { loopB = nil }
+        let p = position
+        loopA = p
+        // B tolto mentre suona: le tracce erano programmate fino al vecchio B e lì si fermavano. Si riparte da qui
+        // senza passaggio (lo stesso bug trovato su Windows dai tester il 07/11)
+        if let b = loopB, b <= p + 0.25 {
+            loopB = nil
+            ramp = false
+            if isPlaying { play(from: p, counting: false) }
+        }
     }
 
     func markLoopEnd() {

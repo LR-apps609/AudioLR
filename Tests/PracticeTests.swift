@@ -27,6 +27,16 @@ final class PracticeTests: XCTestCase {
         XCTAssertNil(m.loopA)
     }
 
+    /// Togliendo il passaggio (✕, o A segnato vicino a B) la rampa si spegne e la velocità torna normale.
+    func testClearingTheLoopStopsTheRamp() {
+        let m = MixPlayer()
+        m.ramp = true
+        XCTAssertEqual(m.rate, MixPlayer.rampStart)
+        m.clearLoop()
+        XCTAssertFalse(m.ramp)
+        XCTAssertEqual(m.rate, 1)
+    }
+
     /// Rampa di velocità: +5% a ogni giro del passaggio, fino al 100% e non oltre.
     func testRampSteps() {
         var r = MixPlayer.rampStart
