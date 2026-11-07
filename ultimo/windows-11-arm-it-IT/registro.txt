@@ -1,18 +1,18 @@
-23:45:06 UTC  IsoLR 0.15.0 avviata
-23:45:18 UTC  IsoLR chiusa
-23:45:38 UTC  IsoLR 0.15.0 avviata
-23:45:54 UTC  IsoLR chiusa
-23:46:14 UTC  IsoLR 0.15.0 avviata
-23:46:30 UTC  IsoLR chiusa
-23:46:50 UTC  IsoLR 0.15.0 avviata
-23:47:06 UTC  IsoLR chiusa
-23:47:27 UTC  IsoLR 0.15.0 avviata
-23:47:39 UTC  Apro la canzone…
-23:47:39 UTC  Separazione
-23:49:09 UTC  Tempo, tonalità e accordi
-23:49:09 UTC  Salvo le tracce
-23:49:25 UTC  IsoLR chiusa
-23:49:25 UTC  IsoLR 0.15.0 avviata
-23:49:37 UTC  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era la 0.15.0
-23:49:37 UTC  IsoLR 0.15.0 avviata
-23:49:45 UTC  IsoLR chiusa
+19:09:39 UTC  IsoLR 0.15.0 avviata
+19:09:53 UTC  IsoLR chiusa
+19:10:12 UTC  IsoLR 0.15.0 avviata
+19:10:29 UTC  IsoLR chiusa
+19:10:48 UTC  IsoLR 0.15.0 avviata
+19:11:04 UTC  IsoLR chiusa
+19:11:23 UTC  IsoLR 0.15.0 avviata
+19:11:39 UTC  IsoLR chiusa
+19:11:58 UTC  IsoLR 0.15.0 avviata
+19:12:10 UTC  Apro la canzone…
+19:12:10 UTC  Separazione
+19:13:40 UTC  Tempo, tonalità e accordi
+19:13:41 UTC  Salvo le tracce
+19:13:54 UTC  IsoLR chiusa
+19:13:55 UTC  IsoLR 0.15.0 avviata
+19:14:07 UTC  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era la 0.15.0
+19:14:07 UTC  IsoLR 0.15.0 avviata
+19:14:15 UTC  IsoLR chiusa

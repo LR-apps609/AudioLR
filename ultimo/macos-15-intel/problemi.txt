@@ -1,0 +1,1 @@
+2026-11-07 19:18:11 +0000 · L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-07 19:17:47 +0000

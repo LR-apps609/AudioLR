@@ -1,12 +1,12 @@
 # Prove sui dispositivi
 
-Commit ce5d8f149f0d568e3cccc37a8f7c9f8cc230a5f7 · [corsa](https://github.com/LR-apps609/AudioLR/actions/runs/41935957429)
+Commit db8a77edf8efef67ce974b629935be6c7c02fee7 · [corsa](https://github.com/LR-apps609/AudioLR/actions/runs/42404715318)
 
 | Combinazione | Sistema | Schermo | Esito | Foto |
 |---|---|---|---|---|
 | macos-15 | 15.8.2 Apple M1 (Virtual) |  | ✅ | [dopo-chiusura-brusca](macos-15/dopo-chiusura-brusca.png) [primo-avvio](macos-15/primo-avvio.png) |
 | macos-15-intel | 15.7.9 Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz | Resolution: 1920 x 1080 (1080p FHD - Full High Definition) | ⚠️ nessuna foto |  |
-| macos-26 | 26.6.2 Apple M1 (Virtual) |  | ✅ | [dopo-chiusura-brusca](macos-26/dopo-chiusura-brusca.png) [primo-avvio](macos-26/primo-avvio.png) |
+| macos-26 | 26.7.2 Apple M1 (Virtual) |  | ✅ | [dopo-chiusura-brusca](macos-26/dopo-chiusura-brusca.png) [primo-avvio](macos-26/primo-avvio.png) |
 | windows-11-arm-it-IT | Microsoft Windows 11 Enterprise 10.0.26200 | 1920x1080 (utile 1920x1032) | ✅ | [dopo-chiusura-brusca](windows-11-arm-it-IT/dopo-chiusura-brusca.png) [percorso-1-pronta](windows-11-arm-it-IT/percorso-1-pronta.png) [percorso-2-lavoro](windows-11-arm-it-IT/percorso-2-lavoro.png) [percorso-3-risultati](windows-11-arm-it-IT/percorso-3-risultati.png) [scala-1.25](windows-11-arm-it-IT/scala-1.25.png) [scala-1.5](windows-11-arm-it-IT/scala-1.5.png) [scala-1.75](windows-11-arm-it-IT/scala-1.75.png) [scala-1](windows-11-arm-it-IT/scala-1.png) |
 | windows-2022-it-IT | Microsoft Windows Server 2022 Datacenter 10.0.20348 | 1920x1080 (utile 1920x1040) | ✅ | [dopo-chiusura-brusca](windows-2022-it-IT/dopo-chiusura-brusca.png) [percorso-1-pronta](windows-2022-it-IT/percorso-1-pronta.png) [percorso-2-lavoro](windows-2022-it-IT/percorso-2-lavoro.png) [percorso-3-risultati](windows-2022-it-IT/percorso-3-risultati.png) [scala-1.25](windows-2022-it-IT/scala-1.25.png) [scala-1.5](windows-2022-it-IT/scala-1.5.png) [scala-1.75](windows-2022-it-IT/scala-1.75.png) [scala-1](windows-2022-it-IT/scala-1.png) |
 | windows-2025-en-US | Microsoft Windows Server 2025 Datacenter 10.0.26100 | 1920x1080 (utile 1920x1032) | ✅ | [dopo-chiusura-brusca](windows-2025-en-US/dopo-chiusura-brusca.png) [percorso-1-pronta](windows-2025-en-US/percorso-1-pronta.png) [percorso-2-lavoro](windows-2025-en-US/percorso-2-lavoro.png) [percorso-3-risultati](windows-2025-en-US/percorso-3-risultati.png) [scala-1.25](windows-2025-en-US/scala-1.25.png) [scala-1.5](windows-2025-en-US/scala-1.5.png) [scala-1.75](windows-2025-en-US/scala-1.75.png) [scala-1](windows-2025-en-US/scala-1.png) |

@@ -1,3 +1,3 @@
-2026-11-05 00:07:43  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-05 00:07:25 +0000
-2026-11-05 00:07:49  PROBLEMA: La finestra non risponde da 6 secondi (stava facendo: niente)
-2026-11-05 00:07:59  La finestra risponde di nuovo
+2026-11-07 19:13:47  PROBLEMA: L'ultima volta IsoLR non si è chiusa bene (arresto improvviso, o chiusa a forza mentre era bloccata). Era aperta da: 0.40.0 · 2026-11-07 19:13:29 +0000
+2026-11-07 19:13:54  PROBLEMA: La finestra non risponde da 5 secondi (stava facendo: niente)
+2026-11-07 19:14:03  La finestra risponde di nuovo
