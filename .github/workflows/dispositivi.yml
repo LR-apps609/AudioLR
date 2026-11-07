@@ -325,17 +325,35 @@ jobs:
             echo "--- uscita diretta"; tail -n 40 risultati/uscita-diretta.txt || true
             echo "--- registro dell'app"; tail -n 60 ~/Library/Logs/AudioLR/*.log 2>/dev/null || echo "(nessun registro)"
             echo "--- rapporti di arresto"; for f in ~/Library/Logs/DiagnosticReports/AudioLR* ~/Library/Logs/DiagnosticReports/*/AudioLR*; do [ -f "$f" ] && head -n 80 "$f"; done
-            # Controprova: un'app SwiftUI minima, senza il codice di IsoLR, con sfocatura e ombra (gli effetti che
-            # passano dal motore grafico di SwiftUI). Se va in crash anche lei, il problema è la macchina, non IsoLR.
-            mkdir -p /tmp/controprova
+            # Controprova: un'app SwiftUI vera (pacchetto .app aperto con open, come IsoLR) senza il codice di IsoLR, con gli
+            # stessi effetti che IsoLR usa all'avvio: Canvas animato (TimelineView), ombre colorate, sfumature lineari e
+            # radiali. Se va in crash anche lei, il problema è la macchina (grafica virtuale), non IsoLR.
+            P=/tmp/controprova/Prova.app/Contents; mkdir -p $P/MacOS
             cat > /tmp/controprova/main.swift <<'SWIFT'
           import SwiftUI
-          @main struct Prova: App { var body: some Scene { WindowGroup { Text("Controprova").padding(40).background(Color.orange.blur(radius: 8)).shadow(radius: 10).frame(width: 400, height: 300) } } }
+          struct Vista: View {
+              var body: some View {
+                  VStack(spacing: 20) {
+                      TimelineView(.animation) { t in
+                          Canvas { ctx, size in
+                              let x = t.date.timeIntervalSinceReferenceDate
+                              for i in 0..<40 { let h = 20 + 30 * abs(sin(x * 2 + Double(i) / 3)); ctx.fill(Path(CGRect(x: Double(i) * 9, y: 60 - h / 2, width: 5, height: h)), with: .color(.orange)) }
+                          }.frame(width: 360, height: 120)
+                      }
+                      Text("Controprova").font(.title).padding(24)
+                          .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient(colors: [.orange, .purple], startPoint: .top, endPoint: .bottom)))
+                          .shadow(color: .orange.opacity(0.45), radius: 12)
+                      Circle().fill(RadialGradient(colors: [.yellow, .clear], center: .center, startRadius: 2, endRadius: 60)).frame(width: 120, height: 120)
+                  }.padding(40)
+              }
+          }
+          @main struct Prova: App { var body: some Scene { WindowGroup { Vista() } } }
           SWIFT
-            if swiftc -parse-as-library -O /tmp/controprova/main.swift -o /tmp/controprova/Prova 2> /tmp/controprova/err.txt; then
-              /tmp/controprova/Prova > /tmp/controprova/uscita.txt 2>&1 & cp=$!; sleep 15
-              if kill -0 $cp 2>/dev/null; then echo "::notice::Controprova: l'app SwiftUI minima RESTA APERTA su questa macchina, quindi il crash è di IsoLR"; kill $cp
-              else wait $cp; echo "::notice::Controprova: anche l'app SwiftUI minima va in crash (codice $?): è la macchina"; tail -n 5 /tmp/controprova/uscita.txt; fi
+            printf '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Prova</string><key>CFBundleIdentifier</key><string>it.prova.controprova</string><key>CFBundlePackageType</key><string>APPL</string><key>NSPrincipalClass</key><string>NSApplication</string></dict></plist>' > $P/Info.plist
+            if swiftc -parse-as-library -O /tmp/controprova/main.swift -o $P/MacOS/Prova 2> /tmp/controprova/err.txt; then
+              open -n /tmp/controprova/Prova.app; sleep 20
+              if pgrep -x Prova >/dev/null; then echo "::notice::Controprova: l'app SwiftUI con gli stessi effetti RESTA APERTA su questa macchina, quindi il crash è di IsoLR"; screencapture -x risultati/controprova.png || true; pkill -x Prova
+              else echo "::notice::Controprova: anche l'app SwiftUI con gli stessi effetti va in crash: è la macchina (grafica virtuale)"; for f in ~/Library/Logs/DiagnosticReports/Prova*; do [ -f "$f" ] && grep -m3 -E "MTLLoader|abort|indicator" "$f"; done; fi
             else echo "::warning::Controprova non compilata"; tail -n 5 /tmp/controprova/err.txt; fi
             echo "--- messaggi di sistema"; log show --last 3m --style compact --predicate 'process == "AudioLR" OR eventMessage CONTAINS "AudioLR"' 2>/dev/null | grep -v -i "debug" | tail -n 60 || true
             exit 1
