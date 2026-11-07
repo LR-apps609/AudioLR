@@ -356,7 +356,8 @@ struct ContentView: View {
                     Text(q == .best ? "Massima" : q.title).font(.system(size: 14, weight: .semibold))
                 }
                 Text("\(tracks) tracce · \(q.cardLine)").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                Text(q.cardTime).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Text(q.cardTime(history: job.history, appleChip: SeparationJob.hasNeuralEngine)).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             .frame(width: 170, alignment: .leading)
             .padding(12)
@@ -368,7 +369,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .help(q.detail)
-        .accessibilityLabel("\(q.title): \(tracks) tracce, \(q.cardLine), \(q.cardTime)")
+        .accessibilityLabel("\(q.title): \(tracks) tracce, \(q.cardLine), \(q.cardTime(history: job.history, appleChip: SeparationJob.hasNeuralEngine))")
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 

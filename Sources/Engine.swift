@@ -124,7 +124,7 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "Un modello per tutto · circa 20 s a canzone"
         case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
-        case .studio: return "Ogni traccia da una squadra di modelli: la voce da tre, gli strumenti da tre o quattro · la più pulita, la più lenta"
+        case .studio: return "Ogni traccia da una squadra di modelli: la voce da due, gli strumenti da due passaggi · la più pulita, la più lenta"
         }
     }
 
@@ -142,8 +142,32 @@ enum Quality: String, CaseIterable, Identifiable {
         switch self {
         case .fast: return "circa 30 secondi"
         case .best: return "circa 3 minuti"
-        case .studio: return "circa 8 minuti"
+        case .studio: return "circa 5 minuti"
         }
+    }
+
+    /// Lo stesso, per un Mac Intel (senza Neural Engine): la frase del chip Apple prometteva «circa 3 minuti» anche
+    /// dove Massima ne prende quindici o più (bug b-3, caso della cognata). Massima da 48 s a pezzo misurati sul
+    /// Mac Intel di GitHub dopo la gara del motore; Rapida e Studio stimati, quindi detti larghi.
+    var cardTimeIntel: String {
+        switch self {
+        case .fast: return "qualche minuto su un Mac Intel"
+        case .best: return "circa 15 minuti su un Mac Intel"
+        case .studio: return "20 minuti o più su un Mac Intel"
+        }
+    }
+
+    /// La scheda della qualità su questo Mac: se ha già fatto separazioni con questa qualità, il tempo viene dalla sua
+    /// velocità vera (mediana delle ultime 5, riportata a una canzone di 4 minuti); altrimenti la frase fissa adatta.
+    func cardTime(history: [HistoryItem], appleChip: Bool) -> String {
+        let rates = history.filter { $0.quality == rawValue }.prefix(5).compactMap { h -> Double? in
+            guard let d = h.duration, let s = h.seconds, d >= 20, s > 0 else { return nil }
+            return s / d
+        }.sorted()
+        guard !rates.isEmpty else { return appleChip ? cardTime : cardTimeIntel }
+        let seconds = rates[rates.count / 2] * 240
+        if seconds < 90 { return "circa \(max(10, Int((seconds / 10).rounded()) * 10)) secondi su questo Mac" }
+        return "circa \(Int((seconds / 60).rounded())) minuti su questo Mac"
     }
 
     /// Da scaricare la prima volta.

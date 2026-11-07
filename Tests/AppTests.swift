@@ -515,6 +515,22 @@ final class AppTests: XCTestCase {
 
     // MARK: Qualità e motore
 
+    func testCardTimeOnIntelAndFromHistory() {
+        // b-3: sui Mac Intel la scheda non promette più i tempi del chip Apple
+        XCTAssertEqual(Quality.best.cardTime(history: [], appleChip: true), "circa 3 minuti")
+        XCTAssertTrue(Quality.best.cardTime(history: [], appleChip: false).contains("Mac Intel"))
+        XCTAssertNotEqual(Quality.best.cardTime(history: [], appleChip: false), Quality.best.cardTime)
+        // Con separazioni fatte: la velocità vera di questo Mac, riportata a 4 minuti (mediana delle ultime 5)
+        func item(_ q: Quality, _ d: Double, _ s: Double) -> HistoryItem {
+            HistoryItem(title: "x", folder: "/tmp/\(UUID())", date: Date(), quality: q.rawValue, duration: d, seconds: s)
+        }
+        let slow = [item(.best, 240, 900), item(.best, 120, 450), item(.best, 300, 1100), item(.fast, 240, 30)]
+        XCTAssertEqual(Quality.best.cardTime(history: slow, appleChip: false), "circa 15 minuti su questo Mac")
+        XCTAssertEqual(Quality.fast.cardTime(history: slow, appleChip: true), "circa 30 secondi su questo Mac")
+        // Pezzi troppo corti (anteprime, prove) non contano
+        XCTAssertEqual(Quality.studio.cardTime(history: [item(.studio, 5, 60)], appleChip: true), Quality.studio.cardTime)
+    }
+
     func testQualityModels() {
         XCTAssertEqual(Quality.fast.models, ["HTDemucs"])
         XCTAssertEqual(Quality.best.models, ["HTDemucsFT-0", "HTDemucsFT-1", "HTDemucsFT-2", "HTDemucsFT-3"])
