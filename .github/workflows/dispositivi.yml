@@ -8,6 +8,11 @@ name: Dispositivi
 
 on:
   workflow_dispatch:
+    inputs:
+      solo_mac_intel:
+        description: "Solo il Mac Intel (diagnosi dell'avvio)"
+        type: boolean
+        default: false
   # Dopo ogni compilazione di Windows riuscita (installer nella versione di prova o nel rilascio)
   workflow_run:
     workflows: [Windows]
@@ -22,7 +27,7 @@ concurrency:
 
 jobs:
   windows:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.solo_mac_intel) || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -268,7 +273,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        macchina: [macos-15, macos-26, xcode-27, macos-15-intel]
+        macchina: ${{ fromJSON(inputs.solo_mac_intel && '["macos-15-intel"]' || '["macos-15", "macos-26", "xcode-27", "macos-15-intel"]') }}
     runs-on: ${{ matrix.macchina }}
     timeout-minutes: 120
     steps:
@@ -313,8 +318,10 @@ jobs:
             echo "::error::IsoLR non è partita o si è chiusa da sola"
             # Perché: qui il Mac Intel di GitHub ha Metal 2 (grafica paravirtualizzata), quindi «senza Metal» non basta
             # come spiegazione. Registro dell'app, rapporti di arresto e messaggi di sistema finiscono nel registro della prova.
+            set +e
             "$APP/Contents/MacOS/AudioLR" > risultati/uscita-diretta.txt 2>&1 & pid=$!; sleep 20
             if kill -0 $pid 2>/dev/null; then echo "::notice::Lanciata direttamente IsoLR resta aperta: il problema è nell'avvio con open"; kill $pid; else wait $pid; echo "::notice::Lanciata direttamente IsoLR esce con codice $?"; fi
+            sleep 5
             echo "--- uscita diretta"; tail -n 40 risultati/uscita-diretta.txt || true
             echo "--- registro dell'app"; tail -n 60 ~/Library/Logs/AudioLR/*.log 2>/dev/null || echo "(nessun registro)"
             echo "--- rapporti di arresto"; for f in ~/Library/Logs/DiagnosticReports/AudioLR* ~/Library/Logs/DiagnosticReports/*/AudioLR*; do [ -f "$f" ] && head -n 80 "$f"; done
