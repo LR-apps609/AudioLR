@@ -32,7 +32,11 @@
     "category": "Music",
     "resources": {
       "libs/onnxruntime.dll": "onnxruntime.dll",
-      "libs/DirectML.dll": "DirectML.dll"
+      "libs/DirectML.dll": "DirectML.dll",
+      "libs/msvcp140.dll": "msvcp140.dll",
+      "libs/msvcp140_1.dll": "msvcp140_1.dll",
+      "libs/vcruntime140.dll": "vcruntime140.dll",
+      "libs/vcruntime140_1.dll": "vcruntime140_1.dll"
     },
     "shortDescription": "Separa voce e strumenti, tutto sul computer",
     "icon": [

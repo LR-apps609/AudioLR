@@ -92,6 +92,9 @@ jobs:
           (cd nuget && unzip -q -o ort.zip -d ort && unzip -q -o dml.zip -d dml)
           cp nuget/ort/runtimes/win-x64/native/onnxruntime.dll windows/src-tauri/libs/
           cp nuget/dml/bin/x64-win/DirectML.dll windows/src-tauri/libs/
+          # Visual C++ 2015–2022 accanto a IsoLR.exe (distribuzione «app-local» permessa da Microsoft, circa 1 MB):
+          # su un PC appena comprato onnxruntime.dll li cerca e senza di loro Massima e Studio non partono
+          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do cp "/c/Windows/System32/$f" windows/src-tauri/libs/; done
           ls -la windows/src-tauri/libs
       - name: Versione
         id: v
@@ -205,6 +208,10 @@ jobs:
           $bmp.Save("win-avvio-vero.png", [System.Drawing.Imaging.ImageFormat]::Png)
           Stop-Process -Id $p.Id -Force
           Write-Output "::notice::IsoLR per Windows si installa, si avvia e resta aperta"
+          # Visual C++ accanto a IsoLR.exe, per i PC appena comprati
+          $manca = "msvcp140.dll", "msvcp140_1.dll", "vcruntime140.dll", "vcruntime140_1.dll" | Where-Object { -not (Test-Path (Join-Path $exe.DirectoryName $_)) }
+          if ($manca) { Write-Output "::error::L'installer non mette accanto a IsoLR i componenti Visual C++: manca $($manca -join ', ')"; exit 1 }
+          Write-Output "::notice::Visual C++ installati accanto a IsoLR.exe"
       - name: Windows pulito (senza i componenti Visual C++)
         # Un PC appena comprato può non avere Visual C++ 2015–2022, che i server di GitHub hanno sempre.
         # Si tolgono qui (macchina usa e getta) e si carica il motore come fa IsoLR: deve dire cosa manca,

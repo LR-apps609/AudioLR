@@ -87,6 +87,9 @@ jobs:
           (cd nuget && unzip -q -o ort.zip -d ort && unzip -q -o dml.zip -d dml)
           cp nuget/ort/runtimes/win-x64/native/onnxruntime.dll windows/src-tauri/libs/
           cp nuget/dml/bin/x64-win/DirectML.dll windows/src-tauri/libs/
+          # Visual C++ 2015–2022 accanto a IsoLR.exe (distribuzione «app-local» permessa da Microsoft, circa 1 MB):
+          # su un PC appena comprato onnxruntime.dll li cerca e senza di loro Massima e Studio non partono
+          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do cp "/c/Windows/System32/$f" windows/src-tauri/libs/; done
       - name: Compilazione e installazione
         shell: bash
         run: |
