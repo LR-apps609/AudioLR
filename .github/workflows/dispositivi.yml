@@ -325,6 +325,18 @@ jobs:
             echo "--- uscita diretta"; tail -n 40 risultati/uscita-diretta.txt || true
             echo "--- registro dell'app"; tail -n 60 ~/Library/Logs/AudioLR/*.log 2>/dev/null || echo "(nessun registro)"
             echo "--- rapporti di arresto"; for f in ~/Library/Logs/DiagnosticReports/AudioLR* ~/Library/Logs/DiagnosticReports/*/AudioLR*; do [ -f "$f" ] && head -n 80 "$f"; done
+            # Controprova: un'app SwiftUI minima, senza il codice di IsoLR, con sfocatura e ombra (gli effetti che
+            # passano dal motore grafico di SwiftUI). Se va in crash anche lei, il problema è la macchina, non IsoLR.
+            mkdir -p /tmp/controprova
+            cat > /tmp/controprova/main.swift <<'SWIFT'
+          import SwiftUI
+          @main struct Prova: App { var body: some Scene { WindowGroup { Text("Controprova").padding(40).background(Color.orange.blur(radius: 8)).shadow(radius: 10).frame(width: 400, height: 300) } } }
+          SWIFT
+            if swiftc -parse-as-library -O /tmp/controprova/main.swift -o /tmp/controprova/Prova 2> /tmp/controprova/err.txt; then
+              /tmp/controprova/Prova > /tmp/controprova/uscita.txt 2>&1 & cp=$!; sleep 15
+              if kill -0 $cp 2>/dev/null; then echo "::notice::Controprova: l'app SwiftUI minima RESTA APERTA su questa macchina, quindi il crash è di IsoLR"; kill $cp
+              else wait $cp; echo "::notice::Controprova: anche l'app SwiftUI minima va in crash (codice $?): è la macchina"; tail -n 5 /tmp/controprova/uscita.txt; fi
+            else echo "::warning::Controprova non compilata"; tail -n 5 /tmp/controprova/err.txt; fi
             echo "--- messaggi di sistema"; log show --last 3m --style compact --predicate 'process == "AudioLR" OR eventMessage CONTAINS "AudioLR"' 2>/dev/null | grep -v -i "debug" | tail -n 60 || true
             exit 1
           fi
