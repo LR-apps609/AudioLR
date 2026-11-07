@@ -46,10 +46,11 @@
       <input class="lib-search" placeholder="Cerca" value="${esc(f.text)}" data-input="search">
       ${ui.library.length ? filterBar(list.length) : ""}
       ${list.length ? `<div class="lib-list">${list.map((e, i) => `
-        <div class="lib-item ${e.folder === cur ? "on" : ""}" data-open="${i}" title="${esc(e.meta.title)}">
+        <div class="lib-item ${e.folder === cur ? "on" : ""}" data-open="${i}" role="button" tabindex="0" ${job.busy ? 'aria-disabled="true"' : ""} title="${job.busy ? "Si apre alla fine della separazione in corso" : esc(e.meta.title)}">
           <span class="ic">${Icon("note")}</span><b>${esc(e.meta.title)}</b>
           <span>${Separation.QUALITY[e.meta.quality] ? Separation.QUALITY[e.meta.quality].title : ""} · ${fmt(e.meta.duration)}${e.meta.analysis && e.meta.analysis.bpm ? " · " + Math.round(e.meta.analysis.bpm) + " BPM" : ""}</span>
         </div>`).join("")}</div>`
+        : ui.library.length ? `<div class="lib-empty">${Icon("note", "i")}<span>Nessuna canzone con questa ricerca o questi filtri</span></div>`
         : `<div class="lib-empty">${Icon("note", "i")}<span>Le canzoni che separi compaiono qui</span></div>`}
       <div class="lib-foot">
         <div class="count">${Icon("note")}${ui.library.length} ${ui.library.length === 1 ? "canzone separata" : "canzoni separate"}</div>
@@ -154,7 +155,7 @@
       ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
-        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
+        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}" aria-pressed="${k === q}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
       <div class="go">
         ${f && q !== "fast" ? `<button class="btn round" data-act="preview" title="Separa solo 20 secondi dal centro della canzone con la qualità scelta, per sentire com'è prima di separarla tutta">${Icon("headphones")}Anteprima 20 s</button>` : ""}
         <button class="btn prominent round" data-act="separate" ${f ? "" : "disabled"}>${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa · ${Separation.QUALITY[q].title === "Massima" ? "Massima qualità" : Separation.QUALITY[q].title}</button>
@@ -356,11 +357,11 @@
       <span class="stem-ic" data-lvl="${k}">${Icon(ICON[k] || "note")}<i class="lvl"></i></span>
       <div class="name"><b>${esc(s.name)}</b><span>${share}</span></div>
       ${isBase ? `<span></span><span></span>` : `<div class="ms">
-        <button class="btn mute ${player.muted.has(k) ? "on" : ""}" data-mute="${k}" title="Silenzia ${esc(s.name)}">${Icon(player.muted.has(k) ? "speakerOff" : "speaker")}</button>
-        <button class="btn solo ${player.solo.has(k) ? "on" : ""}" data-solo="${k}" title="Ascolta solo ${esc(s.name)}">${Icon("headphones")}</button></div>
+        <button class="btn mute ${player.muted.has(k) ? "on" : ""}" data-mute="${k}" aria-pressed="${player.muted.has(k)}" title="Silenzia ${esc(s.name)}">${Icon(player.muted.has(k) ? "speakerOff" : "speaker")}</button>
+        <button class="btn solo ${player.solo.has(k) ? "on" : ""}" data-solo="${k}" aria-pressed="${player.solo.has(k)}" title="Ascolta solo ${esc(s.name)}">${Icon("headphones")}</button></div>
         <input type="range" min="0" max="2" step="0.01" value="${player.gains[k] ?? 1}" data-gain="${k}" title="Volume" aria-label="Volume ${esc(s.name)}">`}
       <canvas data-wave="${k}" height="26"></canvas>
-      <button class="btn small" data-dl="${k}">${Icon("download")}Scarica</button>
+      <button class="btn small" data-dl="${k}" aria-label="Scarica ${esc(s.name)}">${Icon("download")}<span class="lbl">Scarica</span></button>
     </div>`;
   }
 
@@ -492,6 +493,27 @@
     }
   }
 
+  // Ridisegnare con innerHTML toglie il fuoco della tastiera: si ricorda il controllo che l'aveva (dai suoi
+  // attributi data-*, aria-label, id) e, se il fuoco è finito sul body, lo si rimette sull'equivalente nuovo
+  function focusKey(el) {
+    if (!el || el === document.body || !el.attributes) return null;
+    const a = [...el.attributes].filter((x) => x.name.startsWith("data-") && x.name !== "data-last" && x.name !== "data-line" && x.name !== "data-at" || x.name === "aria-label" || x.name === "id")
+      .map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
+    return a ? el.tagName.toLowerCase() + a : null;
+  }
+  function keepFocus(fn) {
+    return function (...args) {
+      const key = focusKey(document.activeElement);
+      const out = fn.apply(this, args);
+      if (key && (!document.activeElement || document.activeElement === document.body)) {
+        const n = document.querySelector(key);
+        if (n) n.focus({ preventScroll: true });
+      }
+      return out;
+    };
+  }
+  header = keepFocus(header); library = keepFocus(library); panel = keepFocus(panel); transport = keepFocus(transport);
+
   function render() { header(); library(); panel(); try { wake(); } catch { /* il giro dei fotogrammi non è ancora pronto */ } }
 
   // ── Azioni ──
@@ -499,7 +521,7 @@
     const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t);
     setTimeout(() => t.remove(), 3500);
   }
-  async function refreshLibrary() { ui.library = await Separation.library(); library(); }
+  async function refreshLibrary() { ui.library = await Separation.library(); library(); window.dispatchEvent(new Event("isolr-libreria")); }
 
   /** Di quanti semitoni spostare i file scaricati (0 = tonalità originale). */
   const shift = () => (ui.downloadTransposed ? player.semitones : 0);
@@ -612,7 +634,15 @@
     } catch (e) { toast("File per DJ non riuscito: " + (e.message || e)); }
   }
 
+  async function chooseFile() {
+    const p = await Bridge.askOpen();
+    if (p) { const bytes = await Bridge.readFile(p); job.add([new File([bytes], p.split(/[\\/]/).pop())]); }
+  }
+
   async function openEntry(e, keepPreview = false) {
+    // Durante una separazione una canzone della libreria non si apre: prima non succedeva niente in silenzio
+    // (ma il lettore caricava lo stesso le sue tracce)
+    if (job.busy) { toast("La canzone si apre alla fine della separazione in corso"); return; }
     const p = job.preview;
     await job.open(e);
     if (keepPreview) job.preview = p;            // l'anteprima appena fatta resta un'anteprima
@@ -646,7 +676,7 @@
     switch (d.act) {
       case "library": ui.showLibrary = !ui.showLibrary; Prefs.set("showLibrary", ui.showLibrary); return library();
       case "new": player.stop(); job.reset(); return render();
-      case "choose": { const p = await Bridge.askOpen(); if (p) { const bytes = await Bridge.readFile(p); job.add([new File([bytes], p.split(/[\\/]/).pop())]); } return; }
+      case "choose": return chooseFile();
       case "clear-pending": return job.clearPending();
       case "separate": player.stop(); return job.start(ui.quality);
       case "preview": player.stop(); return job.startPreview(ui.quality);
@@ -667,7 +697,7 @@
       case "lyrics": return window.LyricsUI.open(job.current, player);
       case "arrange": return window.Editors.arrange(job.current, player);
       case "dl-transposed": ui.downloadTransposed = !ui.downloadTransposed; return panel();
-      case "mark-a": player.markA(); return transport();
+      case "mark-a": player.markA(); return panel();
       case "mark-b": player.markB(); return panel();
       case "clear-loop": player.clearLoop(); return panel();
       case "ramp": player.setRamp(!player.ramp); return transport();
@@ -709,8 +739,24 @@
       case "take-volume": player.takeVolume = +el.value; player.applyGains(); return;
     }
   });
+  // Le tendine che fanno subito qualcosa («Senza…», «Progetto per…», Note, File, Confronta): su Windows le frecce
+  // su una tendina chiusa cambiano il valore e mandano «change» a ogni pressione. Con la tastiera si sceglie con le
+  // frecce e si conferma con Invio (o uscendo dalla tendina), invece di partire alla prima freccia
+  const ACTION_SELECTS = new Set(["without", "project", "midi", "notes", "compare"]);
+  document.addEventListener("keydown", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLSelectElement) || !ACTION_SELECTS.has(el.dataset.input)) return;
+    if (["ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) el.dataset.kbd = "1";
+    if (e.key === "Enter" && el.dataset.kbd) { delete el.dataset.kbd; e.preventDefault(); el.dispatchEvent(new Event("change", { bubbles: true })); }
+  }, true);
+  document.addEventListener("focusout", (e) => {
+    const el = e.target;
+    if (el instanceof HTMLSelectElement && el.dataset.kbd) { delete el.dataset.kbd; if (el.value) el.dispatchEvent(new Event("change", { bubbles: true })); }
+  }, true);
+
   document.addEventListener("change", async (ev) => {
     const el = ev.target, d = el.dataset;
+    if (d.kbd && ev.isTrusted) return;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
     if (d.input === "clean-noise" || d.input === "clean-reverb") { Prefs.set(d.input === "clean-noise" ? "cleanNoise" : "cleanReverb", el.checked); return panel(); }
     // Filtri della libreria
@@ -739,10 +785,13 @@
 
   // Spazio = suona/pausa; ⌘[ e ⌘] (qui Ctrl) = A e B; Ctrl+N = nuova canzone
   document.addEventListener("keydown", (e) => {
-    if (e.target.matches("input[type=text],input:not([type]),select,textarea")) return;
+    const tg = e.target instanceof Element ? e.target : document.body;
+    if (tg.matches("input[type=text],input:not([type]),select,textarea")) return;
     // Con una finestra aperta sopra (Warp, Rimonta…) i tasti sono suoi
     if ($("#overlay").childElementCount) return;
-    if (e.code === "Space" && job.phase === "done") { e.preventDefault(); player.toggle(); transport(); }
+    if (e.code === "Space" && job.phase === "done" && !tg.closest("button,a,[role=button],input,select,textarea,[contenteditable]")) { e.preventDefault(); player.toggle(); transport(); }
+    // Invio e Spazio su una canzone della libreria la aprono, come il clic
+    if ((e.key === "Enter" || e.code === "Space") && tg.matches(".lib-item[data-open]")) { e.preventDefault(); tg.click(); }
     if (e.ctrlKey && e.key === "[") { player.markA(); transport(); }
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
@@ -756,7 +805,8 @@
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "b") { e.preventDefault(); window.Sheets.report(job); }
     // Come ⇧⌘P sul Mac: Pulisci la voce
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p" && job.phase === "done") { e.preventDefault(); $('[data-split="clean"]') && $('[data-split="clean"]').click(); }
-    if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); $('[data-act="choose"]') && $('[data-act="choose"]').click(); }
+    // Ctrl+O sceglie una canzone da ogni schermata (prima solo da quella iniziale vuota)
+    if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); if (!job.busy) chooseFile(); }
   });
   // Clic destro › «Separa con IsoLR» in Esplora file: all'avvio e mentre IsoLR è aperta
   async function takeOpened() {
@@ -790,7 +840,13 @@
     panelQueued = true;
     requestAnimationFrame(() => { panelQueued = false; if (job.phase === "working" || job.splitting) panel(); });
   }
-  player.addEventListener("change", () => { const b = $(".play"); if (b) b.innerHTML = IconFill(player.playing ? "pause" : "play"); });
+  player.addEventListener("change", () => {
+    const b = $(".play");
+    if (b) { b.innerHTML = IconFill(player.playing ? "pause" : "play"); b.title = player.playing ? "Pausa (spazio)" : "Suona tutte le tracce insieme (spazio)"; }
+  });
+  window.addEventListener("isolr-avviso", (e) => toast(e.detail));
+  // La rampa alza la velocità a ogni giro: cursore e percentuale la seguono
+  player.onRate = () => transport();
   window.addEventListener("resize", () => { if (job.phase === "done") drawWaves(); });
 
   // Il giro dei fotogrammi (logo a tempo, posizione, accordi, testo, livelli) gira solo quando serve: mentre

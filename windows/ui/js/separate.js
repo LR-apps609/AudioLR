@@ -112,7 +112,12 @@
 
     /** Canzoni trascinate: la prima diventa «pronta» (si sceglie la qualità), le altre in coda se si lavora già. */
     add(files) {
-      const list = [...files].filter((f) => f && f.size > 0);
+      const all = [...files].filter(Boolean), list = all.filter((f) => f.size > 0);
+      // Un file vuoto (0 byte) prima veniva scartato in silenzio: sembrava che il trascinamento non funzionasse
+      const empty = all.filter((f) => !f.size);
+      if (empty.length) window.dispatchEvent(new CustomEvent("isolr-avviso", { detail: empty.length === 1
+        ? `«${empty[0].name}» è vuoto (0 byte): non c'è niente da separare`
+        : `${empty.length} file vuoti (0 byte) lasciati fuori: non c'è niente da separare` }));
       if (!list.length) return;
       if (this.busy || this.queue.length) { for (const f of list) this.queue.push(f); this.emit(); return; }
       this.pending = list[0];

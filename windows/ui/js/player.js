@@ -272,6 +272,7 @@
         if (this.ramp && this.rate < 1) {
           this.rate = Math.min(1, Math.round((this.rate + 0.05) * 100) / 100);
           this.play(this.loopA, { counting: false });
+          if (this.onRate) this.onRate(this.rate);
           return;
         }
         // Le tracce ripartono da sole da A: qui si rimette a posto l'orologio (e i clic del giro nuovo)
@@ -286,7 +287,14 @@
     // ── Esercitati ──
     setRate(r) { const was = this.playing, at = this.position; this.rate = r; if (was) this.play(at, { counting: false }); else this.emit(); }
     setSemitones(s) { const was = this.playing, at = this.position; this.semitones = s; if (was) this.play(at, { counting: false }); else this.emit(); }
-    markA() { this.loopA = this.position; if (this.loopB != null && this.loopB <= this.loopA + 0.25) this.loopB = null; this.emit(); }
+    // Le tracce che suonano hanno il passaggio dentro (loopStart/loopEnd): con A nuovo si riprogrammano, altrimenti
+    // si sentiva il passaggio vecchio mentre il cursore ne mostrava un altro (anche dopo B tolto)
+    markA() {
+      const at = this.position;
+      this.loopA = at;
+      if (this.loopB != null && this.loopB <= this.loopA + 0.25) { this.loopB = null; this.ramp = false; }
+      if (this.playing) this.play(at, { counting: false }); else this.emit();
+    }
     markB() {
       const p = this.position;
       if (p <= (this.loopA ?? 0) + 0.25) return;
@@ -294,9 +302,11 @@
       this.loopB = p;
       if (this.playing) this.play(this.loopA, { counting: false }); else this.emit();
     }
-    clearLoop() { this.loopA = null; this.loopB = null; if (this.playing) this.play(this.position, { counting: false }); else this.emit(); }
+    // Senza passaggio la rampa non ha senso: si spegne e si torna alla velocità normale (come sul Mac)
+    clearLoop() { const at = this.position; this.loopA = null; this.loopB = null; if (this.ramp) { this.ramp = false; this.rate = 1; } if (this.playing) this.play(at, { counting: false }); else this.emit(); }
     practice(a, b) { if (b <= a + 0.25) return; this.loopA = Math.max(0, a); this.loopB = Math.min(this.duration, b); this.play(this.loopA); }
-    setRamp(on) { this.ramp = on; if (on) this.rate = 0.7; this.lastLap = -1; this.emit(); }
+    // Mentre suona la velocità nuova va anche nelle tracce, non solo nell'orologio
+    setRamp(on) { const was = this.playing, at = this.position; this.ramp = on; if (on) this.rate = 0.7; this.lastLap = -1; if (was) this.play(at, { counting: false }); else this.emit(); }
     resetPractice() { this.ramp = false; this.rate = 1; this.semitones = 0; this.loopA = null; this.loopB = null; this.emit(); }
     section(t) { const s = this.structure && this.structure.sections; return s ? s.find((x) => t >= x.start && t < x.end) : null; }
 
@@ -319,6 +329,7 @@
 
     /** Il mix che senti (o solo il passaggio), come MixPlayer.export: alla velocità e nel tono originali. */
     mixdown(range) {
+      if (range && !(range[1] > range[0])) throw new Error("il passaggio A–B non è completo: segna A e poi B");
       const n = Math.round(this.duration * RATE), s0 = range ? Math.max(0, Math.floor(range[0] * RATE)) : 0, s1 = range ? Math.min(n, Math.floor(range[1] * RATE)) : n;
       const out = [new Float32Array(s1 - s0), new Float32Array(s1 - s0)];
       for (const k of this.keys) {

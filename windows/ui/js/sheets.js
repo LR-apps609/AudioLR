@@ -7,16 +7,50 @@
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+  // La finestra aperta adesso: una nuova la chiude per bene (prima veniva solo coperta, e la Warp o la Rimonta
+  // lasciavano attivi i loro tasti: lo Spazio accendeva il metronomo invece di suonare)
+  let current = null;
+  const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
   function open(html, onReady, onClose) {
+    if (current) current();
     const o = $("#overlay");
-    o.innerHTML = `<div class="sheet-bg"><div class="sheet" role="dialog">${html}</div></div>`;
+    // Il controllo da cui si è aperta: alla chiusura il fuoco torna lì
+    const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    o.innerHTML = `<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" tabindex="-1">${html}</div></div>`;
+    const sheet = o.querySelector(".sheet"), title = sheet.querySelector("h2");
+    if (title) { title.id = "sheet-title"; sheet.setAttribute("aria-labelledby", "sheet-title"); }
+    // Quello che c'è dietro non si raggiunge con Tab né con il lettore dello schermo finché la finestra è aperta
+    const app = $("#app"); if (app) app.inert = true;
     let closed = false;
-    const close = () => { if (closed) return; closed = true; o.innerHTML = ""; document.removeEventListener("keydown", esc_); if (onClose) onClose(); };
-    const esc_ = (e) => { if (e.key === "Escape") close(); };
-    document.addEventListener("keydown", esc_);
+    const close = () => {
+      if (closed) return; closed = true;
+      if (current === close) current = null;
+      o.innerHTML = ""; if (app) app.inert = false;
+      document.removeEventListener("keydown", keys);
+      if (onClose) onClose();
+      if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+    const keys = (e) => {
+      if (e.key === "Escape") return close();
+      // Tab gira dentro la finestra
+      if (e.key !== "Tab") return;
+      const f = [...sheet.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
+      if (!f.length) { e.preventDefault(); return sheet.focus(); }
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", keys);
     o.querySelector(".sheet-bg").addEventListener("click", (e) => { if (e.target.classList.contains("sheet-bg")) close(); });
     o.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
-    if (onReady) onReady(o.querySelector(".sheet"), close);
+    current = close;
+    if (onReady) onReady(sheet, close);
+    // Il fuoco entra nella finestra: sul primo controllo (non su «Fatto» o «Chiudi» se c'è altro)
+    if (!sheet.contains(document.activeElement)) {
+      const f = [...sheet.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null && !x.hasAttribute("data-close"));
+      (f[0] || sheet).focus({ preventScroll: true });
+    }
     return close;
   }
   const toggle = (key, def, label, note) => `<label class="setting"><span>${label}${note ? `<small>${note}</small>` : ""}</span><input type="checkbox" data-pref="${key}" ${Prefs.get(key, def) ? "checked" : ""}></label>`;
@@ -233,10 +267,14 @@
     open(`<h2>Cronologia</h2>
       ${filters.length ? `<p class="muted" style="margin:0">Con i filtri della libreria: ${filters.map(esc).join(" · ")} · ${list.length} ${list.length === 1 ? "canzone" : "canzoni"}</p>` : ""}
       ${list.length ? `<table class="plain"><tr><th>Canzone</th><th>Qualità</th><th>Durata</th><th>BPM · tonalità</th><th>Data</th></tr>
-        ${list.map((e, i) => { const a = e.meta.analysis || {}; return `<tr data-h="${i}" style="cursor:pointer"><td>${esc(e.meta.title)}</td><td>${esc(Separation.QUALITY[e.meta.quality] ? Separation.QUALITY[e.meta.quality].title : "")}</td><td>${IsoApp.fmt(e.meta.duration)}</td><td>${a.bpm ? Math.round(a.bpm) + " BPM · " + IsoApp.KEY_NAMES[a.keyRoot] + (a.minor ? "m" : "") : "—"}</td><td>${new Date(e.meta.created).toLocaleDateString("it-IT")}</td></tr>`; }).join("")}</table>`
+        ${list.map((e, i) => { const a = e.meta.analysis || {}; return `<tr data-h="${i}" tabindex="0" role="button" style="cursor:pointer"><td>${esc(e.meta.title)}</td><td>${esc(Separation.QUALITY[e.meta.quality] ? Separation.QUALITY[e.meta.quality].title : "")}</td><td>${IsoApp.fmt(e.meta.duration)}</td><td>${a.bpm ? Math.round(a.bpm) + " BPM · " + IsoApp.KEY_NAMES[a.keyRoot] + (a.minor ? "m" : "") : "—"}</td><td>${new Date(e.meta.created).toLocaleDateString("it-IT")}</td></tr>`; }).join("")}</table>`
         : `<p class="muted">Ancora nessuna canzone separata.</p>`}
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`, (sheet, close) => {
       sheet.addEventListener("click", (e) => { const r = e.target.closest("[data-h]"); if (r) { close(); openEntry(list[+r.dataset.h]); } });
+      sheet.addEventListener("keydown", (e) => { const r = e.target.closest("[data-h]"); if (r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); r.click(); } });
+      // Aperta durante una separazione: alla fine si rifà con la canzone nuova (prima restava «Ancora nessuna canzone»)
+      const again = () => { if (!sheet.isConnected) return window.removeEventListener("isolr-libreria", again); window.removeEventListener("isolr-libreria", again); close(); history(IsoApp.ui.libList || IsoApp.ui.library, openEntry, filters); };
+      window.addEventListener("isolr-libreria", again);
     });
   }
 

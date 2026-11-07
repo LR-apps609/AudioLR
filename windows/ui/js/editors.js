@@ -93,7 +93,7 @@
     const grid = () => Object.assign({}, s0 || { sections: [] }, W.beatsFromMarks(marks, bpb, duration), { beatsPerBar: bpb });
     let raf = 0;
 
-    const html = `<div class="ed-head"><div><h2>Warp</h2><div class="muted">Trascina i segnaposto sul primo battito di ogni battuta. Doppio clic ne aggiunge uno, Canc toglie quello scelto.</div></div></div>
+    const html = `<div class="ed-head"><div><h2>Warp</h2><div class="muted">Trascina i segnaposto sul primo battito di ogni battuta. Doppio clic ne aggiunge uno; «Togli il segnaposto» (o Canc) toglie quello scelto.</div></div></div>
       <div class="ed-bar">
         <button class="play small" data-w="play" title="Ascolta dal cursore con il metronomo (spazio)">${IconFill("play")}</button>
         <span class="time" id="w-time"></span>
@@ -102,6 +102,7 @@
         <button class="btn small icon" data-w="zoom-out" title="Allontana (Ctrl −)">${Icon("zoomOut")}</button>
         <button class="btn small icon" data-w="zoom-in" title="Avvicina (Ctrl +)">${Icon("zoomIn")}</button>
         <button class="btn small" data-w="all" title="Tutta la canzone">Tutta</button>
+        <button class="btn small" data-w="remove" title="Togli il segnaposto scelto (anche con Canc): sui tablet senza tastiera" disabled>Togli il segnaposto</button>
         <button class="btn small" data-w="reset" title="Torna ai segnaposto trovati da IsoLR">${Icon("reset")}Ripristina</button>
       </div>
       <canvas class="wcanvas" id="w-canvas" tabindex="0" aria-label="Forma d'onda con i segnaposto delle battute"></canvas>
@@ -132,6 +133,7 @@
         if (bpm >= 40 && marks.length >= 2) txt += ` · a ${bpm} BPM la canzone dura ${fmt(W.WarpMap.toTempo(marks, bpm, bpb).length(duration))} (ora ${fmt(duration)})`;
         sheet.querySelector("#w-info").textContent = txt;
         sheet.querySelectorAll("[data-w-src]").forEach((b) => b.classList.toggle("on", b.dataset.wSrc === source));
+        const rm = sheet.querySelector('[data-w="remove"]'); if (rm) rm.disabled = !(sel >= 0 && marks.length > 2);
       }
       function draw() {
         const dpr = devicePixelRatio || 1, w = (cv.width = Math.max(1, cv.clientWidth * dpr)), h = (cv.height = cv.clientHeight * dpr);
@@ -199,8 +201,8 @@
       cv.addEventListener("pointerdown", (e) => {
         cv.focus();
         const x = e.offsetX, i = nearMark(x);
-        if (i >= 0) { sel = i; drag = i; cv.setPointerCapture(e.pointerId); }
-        else { sel = -1; cursor = Math.max(0, Math.min(duration, tOf(x))); if (player.playing) player.play(cursor, { counting: false }); }
+        if (i >= 0) { sel = i; drag = i; cv.setPointerCapture(e.pointerId); info(); }
+        else { if (sel >= 0) { sel = -1; info(); } sel = -1; cursor = Math.max(0, Math.min(duration, tOf(x))); if (player.playing) player.play(cursor, { counting: false }); }
         draw();
       });
       cv.addEventListener("pointermove", (e) => {
@@ -237,6 +239,7 @@
           case "zoom-out": return zoom(2);
           case "all": view.t0 = 0; view.span = duration; return draw();
           case "reset": marks = initial(); sel = -1; return changed();
+          case "remove": if (sel >= 0 && marks.length > 2) { marks.splice(sel, 1); sel = -1; changed(); } return;
           case "save": return saveGrid();
           case "tempo": return makeTempo();
         }

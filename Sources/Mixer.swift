@@ -328,6 +328,8 @@ final class MixPlayer: ObservableObject {
     func clearLoop() {
         loopA = nil
         loopB = nil
+        // Senza passaggio la rampa non ha senso: si spegne e si torna alla velocità normale (come su Windows)
+        if ramp { ramp = false; rate = 1 }
         if isPlaying { play(from: position) }
     }
 

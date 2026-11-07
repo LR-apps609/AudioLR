@@ -382,3 +382,43 @@ select.pop.mini { height: 22px; font-size: 11px; padding: 0 4px; max-width: 120p
 .lyr-strip { display: grid; justify-items: center; gap: 2px; }
 .lyr-strip b { font: 700 17px var(--font-display, inherit); color: var(--brass); }
 .lyr-strip span { font-size: 13px; color: var(--muted); }
+
+/* ── Correzioni del 07/11 dalle prove su più dispositivi (20 tester) ── */
+/* Mixer stretto (finestra sotto i 1100 punti, anche la minima 930×640): le righe stavano larghe almeno 468 px e
+   onda, volume e «Scarica» finivano sotto il riquadro a destra. Sotto i 500 px l'onda della riga si nasconde
+   (la posizione si sceglie sull'onda in alto) e «Scarica» resta solo con l'icona */
+@container (max-width: 500px) {
+  .row { grid-template-columns: 18px 30px minmax(0, 1fr) auto 56px auto; gap: 8px; }
+  .row canvas { display: none; }
+  .row .lbl { display: none; }
+  .row input[type=range] { width: 56px; }
+}
+/* Finestre basse: la colonna del mixer scorre invece di schiacciare l'elenco delle tracce a zero (con «Esercitati»
+   aperto alla misura minima il mixer spariva); il lavoro in corso scorre e «Annulla» resta raggiungibile */
+.results .col { overflow-y: auto; }
+.results .rows { min-height: 150px; }
+.work2 { overflow-y: auto; min-height: 0; }
+/* «Canzone pronta» e «Trascina qui»: centrata solo se ci sta, altrimenti si scorre dall'alto (prima l'alto e la
+   sinistra finivano fuori, senza poterci arrivare) */
+.drop { justify-content: safe center; align-items: safe center; }
+.picked { min-width: min(460px, 100%); max-width: 100%; }
+/* Libreria con i filtri aperti in una finestra bassa: l'elenco non va a zero, scorre tutta la colonna */
+.library { overflow-y: auto; }
+.lib-list { min-height: 120px; }
+.lib-item:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+.lib-item[aria-disabled="true"] { cursor: default; opacity: .7; }
+/* Impostazioni: la finestra non cambia altezza a ogni scheda (la riga delle schede saltava fino a 156 punti) */
+.sheet:has(.tabs) { min-height: min(560px, 86vh); align-content: start; }
+/* «Riduci movimento»: anche le barre della schermata iniziale stanno ferme */
+@media (prefers-reduced-motion: reduce) { .wave i { animation: none; } }
+/* Contrasto elevato di Windows: i pulsanti accesi (solo, muto, Esercitati, Metronomo, Conteggio, Rampa, qualità,
+   parti della canzone) si distinguono da quelli spenti anche senza colori di sfondo */
+@media (forced-colors: active) {
+  .btn.on, .row .ms .btn.on, [aria-pressed="true"], .seg button.on, .qcard.on, .sections button.on {
+    forced-color-adjust: none; background: Highlight; color: HighlightText; border: 2px solid HighlightText; outline: 2px solid Highlight;
+  }
+  .sections button { border: 1px solid ButtonText; }
+  .row .ms .btn.on svg, .btn.on svg { stroke: HighlightText; }
+}
+/* Le schede delle qualità vanno a capo quando non ci stanno (prima la prima veniva tagliata a sinistra) */
+.cards { grid-template-columns: repeat(auto-fit, minmax(170px, 194px)); justify-content: center; max-width: 100%; }
