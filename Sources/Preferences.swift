@@ -113,10 +113,10 @@ enum Prefs {
     /// Neural Engine. Cambia solo la memoria usata, non il risultato.
     static var oneModelAtATime: Bool { lowMemory || !SeparationJob.hasNeuralEngine }
 
-    /// Quante volte ogni punto della canzone passa nei RoFormer (voce e strumenti): 2 su tutti i Mac,
-    /// come nel banco di prova sulle 50 canzoni. Fisso: Studio è la stessa ovunque.
-    static let voiceOverlapValue = 2.0
-    static let instrumentOverlap = 2.0
+    /// Quante volte ogni punto della canzone passa nei RoFormer (voce e strumenti). Massima: 2. Studio: 1, perché
+    /// i suoi tre passaggi si fanno già la media (banco severo del 04/11, 50 canzoni: al massimo −0,07 dB, circa
+    /// metà del tempo). Fisso per qualità: uguale su tutti i Mac.
+    static func roformerOverlap(_ quality: Quality) -> Double { quality == .studio ? 1 : 2 }
 
     /// Massima qualità: chitarra e pianoforte in tracce proprie (altrimenti restano in «Altri strumenti»).
     static let splitKey = "splitGuitarPiano"

@@ -104,7 +104,7 @@ function releaseNet(name) {
   post("released", { name });
 }
 
-async function runRoformer(name, input, from, span, step) {
+async function runRoformer(name, input, from, span, step, overlap = self.IsoLR.Load.OVERLAP) {
   await ensure(name);
   const m = nets[name];
   if (!m) throw new Error("modello " + name + " non caricato");
@@ -113,7 +113,7 @@ async function runRoformer(name, input, from, span, step) {
     lastBackend = m.backend;
     try {
       out = await AudioLRRoFormer.separateAll(input, m.cfg, netFor(name), {
-        overlap: self.IsoLR.Load.OVERLAP,
+        overlap,
         onProgress: (p) => post("progress", { progress: from + span * p, step }), isCancelled: () => cancelled });
       break;
     } catch (e) {
@@ -154,12 +154,12 @@ async function separate(quality, mix, split) {
     tracks = { vocals: s.vocals, drums: s.drums, bass: s.bass, guitar: s.guitar, piano: s.piano, other: s.other };
   } else {
     // Studio (come sul Mac): voce da Revive e SW sulla canzone; strumenti dalla media di SW sulla canzone e sulla base
-    const L = self.IsoLR.Load, P = 1 / 3;
-    const revive = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 2")).vocals;
+    const L = self.IsoLR.Load, P = 1 / 3, O = L.overlapFor("studio");
+    const revive = (await runRoformer("VoceRevive", mix, 0, P, "Voce 1 di 2", O)).vocals;
     releaseNet("VoceRevive");
-    const onMix = await runRoformer("StrumentiSW", mix, P, P, "Voce 2 di 2 e strumenti");
+    const onMix = await runRoformer("StrumentiSW", mix, P, P, "Voce 2 di 2 e strumenti", O);
     const voice = L.voice(revive, onMix, n);
-    const onBase = await runRoformer("StrumentiSW", minus(mix, voice, n), 2 * P, P, "Strumenti sulla base");
+    const onBase = await runRoformer("StrumentiSW", minus(mix, voice, n), 2 * P, P, "Strumenti sulla base", O);
     releaseNet("StrumentiSW");
     tracks = { vocals: voice, ...L.instruments(onMix, onBase, n) };
   }

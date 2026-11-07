@@ -20,6 +20,10 @@ test("modelli: Studio ne scarica due su tutti i computer, Massima uno; sovrappos
   assert.deepStrictEqual(L.models("best"), ["StrumentiSW"]);
   assert.deepStrictEqual(L.models("fast"), []);
   assert.strictEqual(L.OVERLAP, 2);
+  // Meno doppio passaggio solo in Studio (banco severo del 04/11: al massimo −0,07 dB)
+  assert.strictEqual(L.overlapFor("studio"), 1);
+  assert.strictEqual(L.overlapFor("best"), 2);
+  assert.strictEqual(L.overlapFor("fast"), 2);
   assert.ok(L.perMinute("fast") < L.perMinute("best") && L.perMinute("best") < L.perMinute("studio"));
 });
 

@@ -12,8 +12,10 @@
 
   const NS = (root.IsoLR = root.IsoLR || {});
 
-  /// Pezzi sovrapposti dei RoFormer: 2 su tutti i computer, come nel banco di prova.
+  /// Pezzi sovrapposti dei RoFormer: 2 in Massima e nelle voci speciali, 1 in Studio, dove i tre passaggi si
+  /// fanno già la media (banco severo del 04/11, 50 canzoni: al massimo −0,07 dB). Uguale su tutti i computer.
   const OVERLAP = 2;
+  const overlapFor = (quality) => (quality === "studio" ? 1 : OVERLAP);
 
   /// Un modello alla volta in memoria: sui computer deboli. Non cambia il risultato.
   function oneAtATime({ webgpu = true, forceCpu = false, fellBack = false, memoryGB } = {}) {
@@ -27,8 +29,8 @@
     return ["VoceRevive", "StrumentiSW"];
   }
 
-  /// Secondi di lavoro per minuto di canzone, per le schede della qualità (Studio: tre passaggi RoFormer).
-  const perMinute = (quality) => ({ fast: 8, best: 40, studio: 120 })[quality];
+  /// Secondi di lavoro per minuto di canzone, per le schede della qualità (Studio: tre passaggi RoFormer senza doppio passaggio).
+  const perMinute = (quality) => ({ fast: 8, best: 40, studio: 65 })[quality];
 
   const zeros = (n) => [new Float32Array(n), new Float32Array(n)];
   function mean(list, n) {
@@ -48,7 +50,7 @@
       guitar: mean([onBase.guitar, onMix.guitar], n), piano: mean([onBase.piano, onMix.piano], n), other: mean([onBase.other, onMix.other], n) };
   }
 
-  const api = { OVERLAP, oneAtATime, models, perMinute, voice, instruments };
+  const api = { OVERLAP, overlapFor, oneAtATime, models, perMinute, voice, instruments };
   NS.Load = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof self !== "undefined" ? self : globalThis);

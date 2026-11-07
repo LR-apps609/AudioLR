@@ -550,7 +550,7 @@ final class AppTests: XCTestCase {
     }
 
     func testStudioRecipeIsTheSameEverywhere() {
-        // Studio: Revive + SW sulla canzone + SW sulla base, niente seconda voce né Demucs; sovrapposizione fissa 2
+        // Studio: Revive + SW sulla canzone + SW sulla base, niente seconda voce né Demucs; sovrapposizione 1
         XCTAssertNil(Quality.studio.secondVoice)
         XCTAssertNil(Quality.studio.bassModel)
         XCTAssertNil(Quality.studio.helperModel)
@@ -558,8 +558,10 @@ final class AppTests: XCTestCase {
         XCTAssertTrue(Quality.studio.swOnBase)
         XCTAssertEqual(Quality.studio.allModels, ["VoceRevive", "StrumentiSW2"])
         XCTAssertEqual(Quality.best.allModels, ["StrumentiSW2"])
-        XCTAssertEqual(Prefs.voiceOverlapValue, 2)
-        XCTAssertEqual(Prefs.instrumentOverlap, 2)
+        // Meno doppio passaggio solo in Studio (banco severo del 04/11: al massimo −0,07 dB); Massima resta a 2
+        XCTAssertEqual(Prefs.roformerOverlap(.studio), 1)
+        XCTAssertEqual(Prefs.roformerOverlap(.best), 2)
+        XCTAssertEqual(Prefs.roformerOverlap(.fast), 2)
         XCTAssertEqual(Quality.allCases.map(\.title), ["Rapida", "Massima qualità", "Studio"])
     }
 

@@ -690,7 +690,7 @@ final class SeparationJob: ObservableObject {
                         do {
                             let (voice, helpers) = try await SeparationJob.workers(used, units: units, label: "della voce", say: say)
                             await say("Separo la voce: primo pezzo della canzone…")
-                            voice.overlap = Prefs.voiceOverlapValue
+                            voice.overlap = Prefs.roformerOverlap(quality)
                             return try voice.separate(mix, helpers: helpers, progress: { report($0 * voiceShare * firstShare) }, isCancelled: { cancel.isSet })
                         } catch let e where !(e is ImplausibleResult) && !(e is CancellationError) && !cancel.isSet
                                     && Quality.fallbackVoice(for: used) != nil {
@@ -728,7 +728,7 @@ final class SeparationJob: ObservableObject {
                         do {
                             let (second, helpers) = try await SeparationJob.workers(s, units: sd.units, label: "della seconda voce", say: say)
                             await say("Seconda voce: primo pezzo della canzone…")
-                            second.overlap = Prefs.voiceOverlapValue
+                            second.overlap = Prefs.roformerOverlap(quality)
                             let other = try second.separate(mix, helpers: helpers, progress: { report(voiceShare * (firstShare + secondShare * $0)) },
                                                             isCancelled: { cancel.isSet })
                             for c in 0..<2 {
@@ -753,7 +753,7 @@ final class SeparationJob: ObservableObject {
                             func runMix(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
                                 let (model, helpers) = try await SeparationJob.workers(w, units: units, label: "degli strumenti", say: say)
                                 await say("Voce, terzo modello (SW sulla canzone intera): primo pezzo…")
-                                model.overlap = Prefs.instrumentOverlap
+                                model.overlap = Prefs.roformerOverlap(quality)
                                 let audio = try model.separateAll(mix, helpers: helpers,
                                                                   progress: { report(voiceShare * (firstShare + secondShare + (1 - firstShare - secondShare) * $0)) },
                                                                   isCancelled: { cancel.isSet })
@@ -808,7 +808,7 @@ final class SeparationJob: ObservableObject {
                     func runSW(_ units: MLComputeUnits) async throws -> (names: [String], audio: [[[Float]]]) {
                         let (model, helpers) = try await SeparationJob.workers(w, units: units, label: "degli strumenti", say: say)
                         await say("Separo gli strumenti: primo pezzo della canzone…")
-                        model.overlap = Prefs.instrumentOverlap
+                        model.overlap = Prefs.roformerOverlap(quality)
                         let audio = try model.separateAll(input, helpers: helpers, progress: { report(voiceShare + (1 - voiceShare) * swShare * $0) },
                                                           isCancelled: { cancel.isSet })
                         return (model.config.sources, audio)
