@@ -43,10 +43,13 @@
 
   /** Le voci che passano i filtri, nell'ordine scelto. */
   function apply(items, f) {
-    const q = (f.text || "").trim().toLowerCase();
+    // Senza badare ad accenti e maiuscole, e uguale per i titoli in forma decomposta (NFD, nomi da macOS):
+    // «ancora» trova «àncora», «perche» trova «perché» (prima no: trovato dai tester del 07/11)
+    const fold = (s) => String(s || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    const q = fold((f.text || "").trim());
     const kept = items.filter((e) => {
       const m = e.meta || {};
-      return (!q || (m.title || "").toLowerCase().includes(q)) && matchesKey(f, m.analysis) && matchesBpm(f, m.analysis)
+      return (!q || fold(m.title).includes(q)) && matchesKey(f, m.analysis) && matchesBpm(f, m.analysis)
         && (!f.quality || m.quality === f.quality)
         && (!f.instrument || (m.stems || []).some((s) => s.key === f.instrument));
     });

@@ -92,3 +92,13 @@ test("M4A: atomi iTunes si rileggono", () => {
   assert.strictEqual(tags["©nam"], "Canzone");
   assert.strictEqual(tags["©ART"], "Artista");
 });
+
+test("ricerca senza accenti e maiuscole, anche con titoli NFD", () => {
+  const items = [item("àncora"), item("Perche\u0301 no"), item("Èlite"), item("L'ultima canzone è qui 🎸")];
+  const titles = (text) => L.apply(items, { ...L.empty(), text }).map((e) => e.meta.title);
+  assert.deepStrictEqual(titles("ancora"), ["àncora"]);
+  assert.strictEqual(titles("perche").length, 1);
+  assert.strictEqual(titles("perché").length, 1);
+  assert.strictEqual(titles("ELITE").length, 1);
+  assert.strictEqual(titles("e qui").length, 1);
+});

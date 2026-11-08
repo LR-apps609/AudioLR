@@ -1,4 +1,6 @@
 Novità di IsoLR per Windows 0.16.0 (in preparazione):
+• La ricerca nella libreria non bada agli accenti: «ancora» trova «àncora», «perche» trova «perché»
+• Numeri con la virgola anche in Dettagli e nel rapporto; «+1 semitono» al singolare; in Warp l'anteprima del tempo è quella della versione che si crea
 • Corretto: Transpose e le registrazioni riportate alla velocità e al tono della canzone a volte uscivano mute (circa una volta su tre)
 • Tastiera: Spazio su un pulsante o su una casella preme quel controllo invece di far suonare la canzone; dopo «solo», «muto», qualità e preset il fuoco resta dov'era; le canzoni della libreria e della Cronologia si aprono con Tab e Invio; Ctrl+O sceglie una canzone da ogni schermata; «Progetto per…», «Senza…», Note e File si scelgono con le frecce e partono con Invio
 • Le finestre sopra (Impostazioni, Aiuto, Cronologia, Warp…) prendono il fuoco, Tab resta dentro e con Esc si torna al pulsante di prima; aprendone una mentre ce n'è già un'altra, la prima si chiude per bene (dopo la Warp lo Spazio accendeva il metronomo)

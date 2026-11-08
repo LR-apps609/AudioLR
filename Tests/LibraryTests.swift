@@ -21,6 +21,14 @@ final class LibraryTests: XCTestCase {
         XCTAssertTrue(LibraryFilter.compatible((4, false), (11, false)))  // Mi (12B) e Si (1B)
     }
 
+    func testSearchIgnoresAccents() {
+        // «ancora» trova «àncora», anche con il titolo in forma decomposta (come i nomi dei file di macOS)
+        let items = [item("àncora", ago: 3), item("Perche\u{301} no", ago: 2), item("Èlite", ago: 1)]
+        XCTAssertEqual(LibraryFilter(text: "ancora").apply(items).map(\.title), ["àncora"])
+        XCTAssertEqual(LibraryFilter(text: "perche").apply(items).count, 1)
+        XCTAssertEqual(LibraryFilter(text: "ELITE").apply(items).count, 1)
+    }
+
     func testFiltersAndSort() {
         let items = [
             item("Uno", bpm: 120, root: 9, minor: true, ago: 30),

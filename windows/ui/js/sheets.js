@@ -5,15 +5,17 @@
 (function () {
   "use strict";
   const $ = (s, r = document) => r.querySelector(s);
+  // I numeri con la virgola, come si scrive in italiano (prima «-1.4 dB», «106.1 s»)
+  const num1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace(".", ",");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   // La finestra aperta adesso: una nuova la chiude per bene (prima veniva solo coperta, e la Warp o la Rimonta
   // lasciavano attivi i loro tasti: lo Spazio accendeva il metronomo invece di suonare)
-  let current = null;
+  let openClose = null;
   const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
   function open(html, onReady, onClose) {
-    if (current) current();
+    if (openClose) openClose();
     const o = $("#overlay");
     // Il controllo da cui si è aperta: alla chiusura il fuoco torna lì
     const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
@@ -25,7 +27,7 @@
     let closed = false;
     const close = () => {
       if (closed) return; closed = true;
-      if (current === close) current = null;
+      if (openClose === close) openClose = null;
       o.innerHTML = ""; if (app) app.inert = false;
       document.removeEventListener("keydown", keys);
       if (onClose) onClose();
@@ -44,7 +46,7 @@
     document.addEventListener("keydown", keys);
     o.querySelector(".sheet-bg").addEventListener("click", (e) => { if (e.target.classList.contains("sheet-bg")) close(); });
     o.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
-    current = close;
+    openClose = close;
     if (onReady) onReady(sheet, close);
     // Il fuoco entra nella finestra: sul primo controllo (non su «Fatto» o «Chiudi» se c'è altro)
     if (!sheet.contains(document.activeElement)) {
@@ -131,10 +133,10 @@
         <tr><td>Motore</td><td>${esc(m.engine || "—")}</td></tr>
         <tr><td>Tempo</td><td>${a.bpm ? Math.round(a.bpm) + " BPM" : "—"}</td></tr>
         <tr><td>Tonalità</td><td>${key}</td></tr>
-        <tr><td>Volume abbassato</td><td>${m.gainDB ? m.gainDB.toFixed(1) + " dB (perché nessuna traccia distorca)" : "no"}</td></tr>
+        <tr><td>Volume abbassato</td><td>${m.gainDB ? num1(m.gainDB) + " dB (perché nessuna traccia distorca)" : "no"}</td></tr>
         <tr><td>Cartella</td><td>${esc(cur.folder)}</td></tr>
       </table>
-      <table class="plain"><tr><th>Traccia</th><th>Quota</th><th>Picco</th></tr>${m.stems.map((s) => `<tr><td>${esc(s.name)}</td><td>${s.share != null ? Math.round(s.share * 100) + "%" : "—"}</td><td>${s.peakDB != null ? s.peakDB + " dB" : "—"}</td></tr>`).join("")}</table>
+      <table class="plain"><tr><th>Traccia</th><th>Quota</th><th>Picco</th></tr>${m.stems.map((s) => `<tr><td>${esc(s.name)}</td><td>${s.share != null ? Math.round(s.share * 100) + "%" : "—"}</td><td>${s.peakDB != null ? num1(s.peakDB) + " dB" : "—"}</td></tr>`).join("")}</table>
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
   }
 
@@ -172,7 +174,7 @@
       const when = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${d.toTimeString().slice(0, 5)}`;
       const q = (Separation.QUALITY[t.quality] || {}).title || t.quality;
       const how = t.cancelled ? " annullata" : t.ok ? "" : ` non riuscita (${t.error || "?"})`;
-      const steps = (t.steps || []).filter((s) => s[1] >= 0.5).map((s) => `${s[0]} ${s[1]} s`).join(", ");
+      const steps = (t.steps || []).filter((s) => s[1] >= 0.5).map((s) => `${s[0]} ${num1(s[1])} s`).join(", ");
       return `${when} ${q}${t.preview ? " (anteprima)" : ""} ${t.song != null ? IsoApp.fmt(t.song) : "?"} → ${Math.round(t.seconds)} s${how} · ${t.engine || "?"}${t.gpu ? " · " + t.gpu : ""}${t.peakMB ? ` · ${t.peakMB} MB` : ""}${steps ? " · " + steps : ""}`;
     } catch (e) { return null; }
   }
@@ -356,7 +358,7 @@
           ${s ? `<span class="muted">→</span><b style="font:700 18px var(--font-display);color:var(--brass)">${Transpose.keyName(a.keyRoot, a.minor, s)}</b>` : ""}</div>`
           : `<div class="muted">Tonalità non misurata</div>`}
         <div class="form-line"><button class="btn icon" data-tp="-1" ${s <= Transpose.RANGE[0] ? "disabled" : ""}>−</button>
-          <b style="min-width:110px;text-align:center">${s ? Transpose.label(s) + " semitoni" : "Originale"}</b>
+          <b style="min-width:110px;text-align:center">${s ? Transpose.label(s) + (Math.abs(s) === 1 ? " semitono" : " semitoni") : "Originale"}</b>
           <button class="btn icon" data-tp="1" ${s >= Transpose.RANGE[1] ? "disabled" : ""}>+</button><div class="grow"></div>
           <button class="btn" data-tp="0" ${s ? "" : "disabled"}>Originale</button></div>
         <p class="muted" style="margin:0">Cambia solo il tono: la velocità resta quella. Anche i file scaricati e gli accordi seguono la tonalità scelta.</p>

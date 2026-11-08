@@ -74,9 +74,10 @@ struct LibraryFilter: Equatable {
 
     /// Le canzoni che passano i filtri, nell'ordine scelto. `stems` dice quali tracce ha una canzone.
     func apply(_ items: [HistoryItem], stems: (HistoryItem) -> Set<String> = { _ in [] }) -> [HistoryItem] {
-        let q = text.trimmingCharacters(in: .whitespaces).lowercased()
+        // Senza badare ad accenti e maiuscole: «ancora» trova «àncora» (come su Windows, dai tester del 07/11)
+        let q = text.trimmingCharacters(in: .whitespaces)
         let kept = items.filter { item in
-            (q.isEmpty || item.title.lowercased().contains(q))
+            (q.isEmpty || item.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil)
                 && matchesKey(item.analysis)
                 && matchesBPM(item.analysis)
                 && (quality == nil || item.quality == quality)

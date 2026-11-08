@@ -127,7 +127,8 @@
       const clampView = () => { view.span = Math.max(2, Math.min(duration, view.span)); view.t0 = Math.max(0, Math.min(duration - view.span, view.t0)); };
 
       function info() {
-        const bpm = +sheet.querySelector("#w-bpm").value;
+        // Il tempo è un numero intero (come la versione che si crea): l'anteprima non promette 97,5 per farne 98
+        const bpm = Math.round(+sheet.querySelector("#w-bpm").value);
         const now = W.bpmOf(marks, bpb);
         let txt = `${marks.length} segnaposto · ${now ? now.toFixed(1).replace(".", ",") + " BPM in media" : "—"}`;
         if (bpm >= 40 && marks.length >= 2) txt += ` · a ${bpm} BPM la canzone dura ${fmt(W.WarpMap.toTempo(marks, bpm, bpb).length(duration))} (ora ${fmt(duration)})`;
