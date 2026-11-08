@@ -134,6 +134,11 @@ jobs:
       - name: Prima e dopo
         run: |
           pip install -q numpy soundfile
+          # Con un solo Mac misurato download-artifact mette i file direttamente in banchi/: li si rimette nella
+          # cartella della macchina, come quando le macchine sono più d'una (il 07/11 il confronto non li trovava)
+          if [ -f banchi/banco-prima.json ] || [ -f banchi/banco-dopo.json ]; then
+            mkdir -p banchi/banco-macchina && find banchi -maxdepth 1 -mindepth 1 ! -name banco-macchina -exec mv {} banchi/banco-macchina/ \;
+          fi
           # Se la misura non è partita (succede: GitHub non trova un Mac Intel libero) lo si dice chiaro
           if ! ls banchi/*/banco-*.json >/dev/null 2>&1; then
             echo "::error::Nessuna misura arrivata: il Mac della misura non è partito o non ha finito (vedi il job «misura»)"; exit 1

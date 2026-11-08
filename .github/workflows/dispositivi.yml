@@ -374,7 +374,7 @@ jobs:
       - name: Avviso sui limiti
         if: ${{ steps.avvio.outcome == 'failure' && matrix.macchina == 'macos-15-intel' }}
         run: |
-          echo "::warning::Mac Intel di GitHub: IsoLR non resta aperta (la macchina ha Metal 2, la causa è da capire: vedi sopra). Provato solo lipo"
+          echo "::warning::Mac Intel di GitHub: IsoLR va in crash nel motore grafico di macOS sulla grafica virtuale («Target device architecture is nil»); la controprova con un'app SwiftUI senza IsoLR va in crash uguale (08/11): è la macchina. Provato solo lipo, l'interfaccia va provata su un Mac Intel vero"
       - name: Registro e rapporti di arresto
         if: always()
         run: |

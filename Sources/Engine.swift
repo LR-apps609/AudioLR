@@ -147,13 +147,14 @@ enum Quality: String, CaseIterable, Identifiable {
     }
 
     /// Lo stesso, per un Mac Intel (senza Neural Engine): la frase del chip Apple prometteva «circa 3 minuti» anche
-    /// dove Massima ne prende quindici o più (bug b-3, caso della cognata). Massima da 48 s a pezzo misurati sul
-    /// Mac Intel di GitHub dopo la gara del motore; Rapida e Studio stimati, quindi detti larghi.
+    /// dove Massima ne prende decine (bug b-3, caso della cognata). Misurato il 07/11 sul Mac Intel di GitHub con la
+    /// 0.41: Massima 275–296 s per 35 s di canzone, cioè circa 30 minuti per 4 minuti (la 0.40 il doppio). Un Mac Intel
+    /// vero può essere più svelto della macchina virtuale: si dice un intervallo. Rapida e Studio stimati, detti larghi.
     var cardTimeIntel: String {
         switch self {
         case .fast: return "qualche minuto su un Mac Intel"
-        case .best: return "circa 15 minuti su un Mac Intel"
-        case .studio: return "20 minuti o più su un Mac Intel"
+        case .best: return "20–35 minuti su un Mac Intel"
+        case .studio: return "40 minuti o più su un Mac Intel"
         }
     }
 
