@@ -139,10 +139,13 @@ enum Slicer {
 
     /// La nota MIDI di una fetta (36, 37, …; mai oltre 127).
     static func note(of i: Int) -> Int { min(127, firstNote + i) }
+    /// Quante fette hanno una nota loro nel MIDI (36…127): le altre restano solo nei WAV.
+    static let midiMax = 128 - firstNote
 
     /// Il file MIDI che suona le fette nel loro ritmo originale.
     static func midi(_ list: [AudioSlice], rate: Double = AudioIO.sampleRate, bpm: Double = 120, name: String = "") -> Data {
-        let notes = list.enumerated().map {
+        // Oltre la 92ª fetta le note finivano tutte sulla 127, sullo stesso pad: nel MIDI solo le prime 92
+        let notes = list.prefix(midiMax).enumerated().map {
             Note(start: Double($0.element.start) / rate, end: Double($0.element.end) / rate, pitch: note(of: $0.offset), velocity: 100)
         }
         return MidiFile.data(notes, bpm: bpm, program: 0, name: name)
@@ -158,6 +161,7 @@ enum Slicer {
             "",
             "\(count) fette (Slice 01.wav … \(fileName(count - 1))) e un file MIDI che le suona nel ritmo originale\(bpm.map { " (\(Int($0.rounded())) BPM)" } ?? "").",
             "La fetta 1 è la nota 36 (Do1), la fetta 2 la nota 37, e così via: come i pad di un Drum Rack.",
+        ] + (count > midiMax ? ["Il MIDI suona le prime \(midiMax) fette (da Do1 a Sol9, l'ultima nota MIDI): le altre \(count - midiMax) sono solo nei file WAV. Con una sensibilità più bassa le fette sono di meno."] : []) + [
             "",
             "Ableton Live",
             "1. Crea una traccia MIDI con un Drum Rack vuoto.",

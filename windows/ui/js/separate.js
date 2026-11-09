@@ -68,6 +68,7 @@
     constructor() {
       super();
       this.queue = [];            // [{ file, title }]
+      this.skipped = [];          // canzoni della coda non riuscite: { name, error }
       this.phase = "idle";        // idle · pending · working · done · failed
       this.current = null;        // la canzone aperta: { folder, meta }
       this.pending = null;        // canzone scelta ma non ancora separata
@@ -119,13 +120,20 @@
         ? `«${empty[0].name}» è vuoto (0 byte): non c'è niente da separare`
         : `${empty.length} file vuoti (0 byte) lasciati fuori: non c'è niente da separare` }));
       if (!list.length) return;
-      if (this.busy || this.queue.length) { for (const f of list) this.queue.push(f); this.emit(); return; }
-      this.pending = list[0];
-      for (const f of list.slice(1)) this.queue.push(f);
-      this.phase = "pending"; this.error = null; this.emit();
+      // Niente in lavorazione e nessuna pronta, ma una coda rimasta: la prima della coda torna pronta
+      if (!this.busy && !this.pending && this.queue.length) { this.pending = this.queue.shift(); this.phase = "pending"; this.error = null; }
+      else if (!this.busy && !this.queue.length) {
+        this.pending = list.shift(); this.phase = "pending"; this.error = null;
+      }
+      for (const f of list) this.queue.push(f);
+      this.emit();
     }
-    clearPending() { this.pending = null; this.phase = this.current ? "done" : "idle"; this.emit(); }
-    reset() { if (this.busy) return; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.phase = "idle"; this.emit(); }
+    /** «Togli» sulla canzone pronta: passa pronta la prossima della coda (prima la coda restava ferma e Separa spento). */
+    clearPending() {
+      this.pending = this.queue.length ? this.queue.shift() : null;
+      this.phase = this.pending ? "pending" : this.current ? "done" : "idle"; this.emit();
+    }
+    reset() { if (this.busy) return; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.skipped = []; this.phase = "idle"; this.emit(); }
 
     ensureWorker() {
       if (this.worker) return;
@@ -279,12 +287,14 @@
 
     async start(quality, opts = {}) {
       if (!this.pending || this.busy) return;
-      if (!this.batch) { this.batch = { start: Date.now(), songs: 0, failed: 0 }; Bridge.keepAwake(true); }
+      if (!this.batch) { this.batch = { start: Date.now(), songs: 0, failed: 0 }; this.skipped = []; Bridge.keepAwake(true); }
       const file = this.pending;
       this.preview = opts.preview ? { file, quality, start: 0 } : null;
       this.pending = null;
       this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
       this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
+      // Le scelte delle Impostazioni valgono dall'inizio di ogni canzone: la schermata mostra le tracce che nasceranno davvero
+      this.makeInstrumental = Prefs.get("makeInstrumental", true); this.splitGuitarPiano = Prefs.get("splitGuitarPiano", true);
       const stop = () => { if (this.cancelled) throw new Error("annullato"); };
       // «Annulla» fa finire subito l'attesa in corso (download, analisi, salvataggio), qualunque sia
       this.cancelGate = new Promise((_, reject) => { this.cancelNow = reject; });
@@ -307,11 +317,13 @@
         }
         // La forma d'onda della canzone, che si colora man mano che viene separata
         this.peaks = measure([song.left, song.right], 240).peaks; this.emit();
+        let loudest = 0; for (const v of this.peaks) loudest = Math.max(loudest, v);
+        const silent = loudest < 3e-5;              // sotto i -90 dB: non c'è niente da separare
         if (song.seconds > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
         songSeconds = song.seconds;
         lap("Modelli");
         const t0 = performance.now();
-        const split = Prefs.get("splitGuitarPiano", true);
+        const split = this.splitGuitarPiano;
         let light = false;
         const res = await this.withFallback(async () => {
           // Il lavoratore apre i modelli uno alla volta quando servono e li chiude appena finito: con la voce e
@@ -335,7 +347,7 @@
         res.keys.forEach((k, i) => { tracks[k] = [res.channels[2 * i], res.channels[2 * i + 1]]; });
         // La base è sempre la canzone meno la voce (voce + base ridanno la canzone)
         const n = tracks.vocals[0].length, mixL = song.left, mixR = song.right;
-        if (Prefs.get("makeInstrumental", true)) {
+        if (this.makeInstrumental) {
           tracks.instrumental = [new Float32Array(n), new Float32Array(n)];
           for (let i = 0; i < n; i++) { tracks.instrumental[0][i] = mixL[i] - tracks.vocals[0][i]; tracks.instrumental[1][i] = mixR[i] - tracks.vocals[1][i]; }
         }
@@ -358,6 +370,7 @@
         this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!this.preview, ok: true });
         if (!this.preview) {
           this.batch.songs++;
+          if (silent) window.dispatchEvent(new CustomEvent("isolr-avviso", { detail: `«${this.title}» è muta: le tracce sono vuote e tempo e tonalità non ci sono` }));
           this.finishedAt = Date.now();           // per la festa di fine separazione (non riaprendo dalla libreria)
         }
         this.emit();
@@ -373,6 +386,8 @@
           return;
         }
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
+        // In una coda la prossima canzone parte subito: chi non riesce resta scritta, con il perché
+        if (this.queue.length && !this.preview) this.skipped.push({ name: file.name, error: this.error });
         this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!opts.preview, ok: false, error: this.error.slice(0, 200) });
         this.emit();
       }

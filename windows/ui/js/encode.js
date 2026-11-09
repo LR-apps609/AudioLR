@@ -148,10 +148,12 @@
   const full = (type, version, flags, ...parts) => box(type, version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255, ...parts);
 
   /** Comprime in AAC con WebCodecs: { chunks: [Uint8Array], config: Uint8Array (AudioSpecificConfig) }. */
+  const NO_AAC = "su questo computer manca il codificatore AAC (sui Windows «N» si aggiunge con il «Media Feature Pack» di Microsoft)";
   async function aacEncode(ch, gain = 1, bitrate = 256000) {
-    if (typeof AudioEncoder === "undefined") throw new Error("questo Windows non sa comprimere in AAC: scegli WAV o FLAC");
+    // Il messaggio non suggerisce WAV o FLAC: il video e il File per DJ non hanno altri formati (lo aggiunge m4a)
+    if (typeof AudioEncoder === "undefined") throw new Error(NO_AAC);
     const support = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate: RATE, numberOfChannels: 2, bitrate });
-    if (!support.supported) throw new Error("AAC non disponibile su questo computer: scegli WAV o FLAC");
+    if (!support.supported) throw new Error(NO_AAC);
     const chunks = [];
     let config = null, failed = null;
     const enc = new AudioEncoder({
@@ -226,7 +228,10 @@
     return res;
   }
 
-  async function m4a(ch, gain = 1, udta) { return mp4([await aacEncode(ch, gain)], 256000, udta); }
+  async function m4a(ch, gain = 1, udta) {
+    try { return mp4([await aacEncode(ch, gain)], 256000, udta); }
+    catch (e) { if (String(e.message) === NO_AAC) throw new Error(NO_AAC + ": scegli WAV o FLAC"); throw e; }
+  }
 
   // Il file per DJ: canzone intera, batteria, basso, altro, voce (nomi e colori come Native Instruments)
   const STEM_LAYOUT = [

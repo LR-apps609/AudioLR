@@ -28,6 +28,9 @@
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const num = (x) => (Math.round(x * 1e6) / 1e6).toString();
+  /// «120 BPM» solo se il tempo è stato misurato davvero: altrimenti non si scrive nei nomi
+  const bpmText = (p) => (p.measured === false ? "" : `${Math.round(p.bpm)} BPM`);
+  const head = (p, sep) => [bpmText(p), p.key || ""].filter(Boolean).join(sep);
 
   /// Il progetto: le parti comuni a tutti i formati, dalla canzone separata.
   /// tracks: [{ key, name, file (percorso relativo nella cartella del progetto), seconds }]
@@ -37,6 +40,7 @@
     return {
       title, key: key || null, seconds,
       bpm: Math.max(20, Math.min(300, bpm || 120)),
+      measured: !!bpm,                                     // senza analisi (canzone cortissima) 120 è solo di serie
       tracks,
       beats, firstDownbeat: st.firstDownbeat || 0, beatsPerBar: st.beatsPerBar || 4,
       sections: (st.sections || []).filter((s) => s.start < seconds).map((s) => ({ start: Math.max(0, s.start), label: s.label })),
@@ -190,7 +194,7 @@ ${locators}
       const us = Math.max(200000, Math.min(3000000, Math.round(secPerBeat * 1e6)));
       ev.push([t, 0, [0xff, 0x51, 0x03, (us >> 16) & 255, (us >> 8) & 255, us & 255]]);
     };
-    const name = text(`${p.title} · ${Math.round(p.bpm)} BPM${p.key ? " · " + p.key : ""}`);
+    const name = text([p.title, head(p, " · ")].filter(Boolean).join(" · "));
     ev.push([0, -2, [0xff, 0x03, ...vlq(name.length), ...name]]);
     ev.push([0, -1, [0xff, 0x58, 0x04, p.beatsPerBar, 2, 24, 8]]);
     tempo(0, 60 / p.bpm);
@@ -218,7 +222,8 @@ ${locators}
   };
   function cueSheet(p, file) {
     const parts = p.sections.length ? p.sections : [{ start: 0, label: p.title }];
-    const lines = [`TITLE "${p.title.replace(/"/g, "'")}"`, `REM BPM ${num(p.bpm)}`];
+    const lines = [`TITLE "${p.title.replace(/"/g, "'")}"`];
+    if (p.measured !== false) lines.push(`REM BPM ${num(p.bpm)}`);
     if (p.key) lines.push(`REM KEY "${p.key}"`);
     lines.push(`FILE "${file.replace(/"/g, "'")}" ${/\.wav$/i.test(file) ? "WAVE" : "MP3"}`);
     parts.forEach((s, i) => lines.push(`  TRACK ${String(i + 1).padStart(2, "0")} AUDIO`, `    TITLE "${s.label.replace(/"/g, "'")}"`, `    INDEX 01 ${cueTime(s.start)}`));
@@ -226,8 +231,7 @@ ${locators}
   }
   const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}.${String(Math.floor((sec % 1) * 10))}`;
   function partsText(p) {
-    const head = `${p.title} · ${Math.round(p.bpm)} BPM${p.key ? " · " + p.key : ""}`;
-    return [head, "", ...p.sections.map((s) => `${clock(s.start)}  ${s.label}`)].join("\r\n") + "\r\n";
+    return [[p.title, head(p, " · ")].filter(Boolean).join(" · "), "", ...p.sections.map((s) => `${clock(s.start)}  ${s.label}`)].join("\r\n") + "\r\n";
   }
 
   /// Un nome che va bene come nome di file su Windows e sul Mac.
@@ -235,10 +239,10 @@ ${locators}
 
   /// Il nome della cartella: «Titolo – Ableton Project», «Titolo – REAPER», «Titolo – Tracce per DAW (120 BPM, La minore)».
   function folderName(p, kind) {
-    const tail = `${Math.round(p.bpm)} BPM${p.key ? ", " + p.key : ""}`;
+    const tail = head(p, ", ");
     if (kind === "ableton") return safe(`${p.title} – Ableton Project`);
     if (kind === "reaper") return safe(`${p.title} – REAPER`);
-    return safe(`${p.title} – Tracce per DAW (${tail})`);
+    return safe(`${p.title} – Tracce per DAW${tail ? ` (${tail})` : ""}`);
   }
 
   /// Dove vanno le tracce dentro la cartella del progetto: «Samples/Imported/01 Voce.wav» per Live, «Media/…» per REAPER.
@@ -250,7 +254,7 @@ ${locators}
   function readme(p) {
     return [
       `${p.title} – tracce separate con IsoLR`,
-      `Tempo: ${Math.round(p.bpm)} BPM${p.key ? " · Tonalità: " + p.key : ""}`,
+      (p.measured === false ? `Tempo: non misurato (canzone troppo corta per l'analisi): il progetto usa ${Math.round(p.bpm)} BPM, da cambiare a mano` : `Tempo: ${Math.round(p.bpm)} BPM`) + (p.key ? " · Tonalità: " + p.key : ""),
       "",
       "Tutte le tracce iniziano a 0 e sono lunghe uguali: messe una sotto l'altra dall'inizio, sono allineate.",
       "«Tempo e marcatori.mid» contiene il tempo che segue i battiti veri della canzone e le parti (Intro, Strofa…). Trascinalo per primo.",

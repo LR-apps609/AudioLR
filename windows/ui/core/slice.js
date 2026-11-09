@@ -120,10 +120,13 @@
 
   /** La nota MIDI di una fetta (36, 37, …; mai oltre 127). */
   const noteOf = (i) => Math.min(127, FIRST_NOTE + i);
+  /** Quante fette hanno una nota loro nel MIDI (36…127): le altre restano solo nei WAV. */
+  const MIDI_MAX = 128 - FIRST_NOTE;
 
   /** Il file MIDI che suona le fette nel loro ritmo originale. */
   function midi(list, rate, { bpm = 120, name = "" } = {}) {
-    const notes = list.map((s, i) => ({ start: s.start / rate, end: s.end / rate, pitch: noteOf(i), velocity: 100 }));
+    // Oltre la 92ª fetta le note finivano tutte sulla 127, sullo stesso pad: ora nel MIDI ci sono solo le prime 92
+    const notes = list.slice(0, MIDI_MAX).map((s, i) => ({ start: s.start / rate, end: s.end / rate, pitch: noteOf(i), velocity: 100 }));
     return Midi.MidiFile.data(notes, { bpm, program: 0, name });
   }
 
@@ -137,6 +140,7 @@
       ``,
       `${count} fette (Slice 01.wav … Slice ${String(count).padStart(2, "0")}.wav) e un file MIDI che le suona nel ritmo originale${bpm ? ` (${Math.round(bpm)} BPM)` : ""}.`,
       `La fetta 1 è la nota 36 (Do1), la fetta 2 la nota 37, e così via: come i pad di un Drum Rack.`,
+      ...(count > MIDI_MAX ? [`Il MIDI suona le prime ${MIDI_MAX} fette (da Do1 a Sol9, l'ultima nota MIDI): le altre ${count - MIDI_MAX} sono solo nei file WAV. Con una sensibilità più bassa le fette sono di meno.`] : []),
       ``,
       `Ableton Live`,
       `1. Crea una traccia MIDI con un Drum Rack vuoto.`,
@@ -152,7 +156,7 @@
     ].join("\n");
   }
 
-  const api = { mono, flux, onsets, slices, move, merge, split, render, noteOf, midi, fileName, readme, FIRST_NOTE };
+  const api = { mono, flux, onsets, slices, move, merge, split, render, noteOf, midi, fileName, readme, FIRST_NOTE, MIDI_MAX };
   NS.Slice = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof self !== "undefined" ? self : globalThis);

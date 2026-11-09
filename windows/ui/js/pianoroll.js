@@ -214,10 +214,11 @@
 
       // ── Modifiche ──
       let saveTimer = 0;
+      const saveNow = () => { saveTimer = 0; return store(cur, key, { version: 1, detected: ed.detected, edited: ed.edited ? ed.list() : null }).catch(() => status("Non riesco a salvare le note")); };
       function changed() {
         info(); draw();
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => store(cur, key, { version: 1, detected: ed.detected, edited: ed.edited ? ed.list() : null }).catch(() => status("Non riesco a salvare le note")), 400);
+        saveTimer = setTimeout(saveNow, 400);
       }
       const hit = (x, y) => {
         if (!ed) return null;
@@ -324,7 +325,8 @@
       };
       document.addEventListener("keydown", keys, true);
       const ro = new ResizeObserver(() => draw()); ro.observe(cv);
-      cleanup = () => { cancelAnimationFrame(raf); clearTimeout(saveTimer); ro.disconnect(); document.removeEventListener("keydown", keys, true); stopVoices(); };
+      // Chiusa subito dopo una modifica: si salva adesso (prima l'attesa di 0,4 s veniva buttata e la modifica persa)
+      cleanup = () => { cancelAnimationFrame(raf); if (saveTimer) { clearTimeout(saveTimer); saveNow(); } ro.disconnect(); document.removeEventListener("keydown", keys, true); stopVoices(); };
       sheet.api = {
         get editor() { return ed; }, get listen() { return listen; },
         setListen: (l) => { listen = l; applyListen(); info(); }, saveFile,

@@ -797,8 +797,10 @@ struct ContentView: View {
     @ViewBuilder private var sectionStrip: some View {
         let parts = mixer.structure?.sections ?? []
         if parts.isEmpty || mixer.duration <= 0 {
-            Text(mixer.structure == nil ? "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.31"
-                                        : "Parti della canzone non riconosciute: segna A e B a mano")
+            // Senza analisi la canzone era troppo corta (meno di 4 s) o muta; con l'analisi ma senza parti è di prima della 0.31
+            Text(mixer.structure != nil ? "Parti della canzone non riconosciute: segna A e B a mano"
+                 : job.analysis == nil ? "Niente parti da riconoscere: la canzone è troppo corta o muta. Segna A e B a mano"
+                 : "Le parti della canzone (strofa, ritornello…) compaiono nelle separazioni fatte dalla 0.31")
                 .font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -1179,7 +1181,7 @@ struct ContentView: View {
         guard job.phase == .done, !mixer.exporting, let folder = job.folder else { return }
         let f = downloadFormat, shift = downloadShift
         var name = MixPlayer.exportName(state: mixer.state, title: job.title) + Downloads.suffix(shift)
-        if let r = range { name += " (\(formatTime(r.0))–\(formatTime(r.1)))" }
+        if let r = range { name += " (\(Downloads.passageLabel(r.0, r.1)))" }
         guard let url = Downloads.askFile(name: "\(name).\(f.fileExtension)", format: f) else { return }
         Task {
             do {

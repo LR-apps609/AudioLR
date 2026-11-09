@@ -53,6 +53,13 @@ enum DawExport {
         var firstDownbeat = 0
         var beatsPerBar = 4
         var sections: [Section] = []
+        /// Senza analisi (canzone cortissima) 120 BPM è solo di serie: non si scrive nei nomi come se fosse misurato
+        var measured = true
+    }
+
+    /// «120 BPM · La minore» con solo quello che si sa davvero.
+    static func heading(_ p: Project, _ sep: String) -> String {
+        [p.measured ? "\(Int(p.bpm.rounded())) BPM" : nil, p.key].compactMap { $0 }.joined(separator: sep)
     }
 
     /// Colori delle tracce (gli stessi del tema scuro) e il colore più vicino della tavolozza di Ableton (0…69).
@@ -75,6 +82,7 @@ enum DawExport {
     /// Il progetto: le parti comuni a tutti i formati.
     static func project(title: String, bpm: Double?, key: String?, seconds: Double, tracks: [Track], structure: SongStructure?) -> Project {
         var p = Project(title: title, bpm: max(20, min(300, bpm ?? 120)), key: key, seconds: seconds, tracks: tracks)
+        p.measured = (bpm ?? 0) > 0
         if let s = structure {
             p.beats = s.beats.filter { $0 >= 0 && $0 <= seconds }
             p.firstDownbeat = s.firstDownbeat
@@ -288,7 +296,7 @@ enum DawExport {
             let us = max(200_000, min(3_000_000, Int((secPerBeat * 1e6).rounded())))
             ev.append((t, 0, [0xFF, 0x51, 0x03, UInt8((us >> 16) & 255), UInt8((us >> 8) & 255), UInt8(us & 255)]))
         }
-        let name = text("\(p.title) · \(Int(p.bpm.rounded())) BPM" + (p.key.map { " · " + $0 } ?? ""))
+        let name = text([p.title, heading(p, " · ")].filter { !$0.isEmpty }.joined(separator: " · "))
         ev.append((0, -2, [0xFF, 0x03] + vlq(name.count) + name))
         ev.append((0, -1, [0xFF, 0x58, 0x04, UInt8(p.beatsPerBar), 2, 24, 8]))
         tempo(0, 60 / p.bpm)
@@ -324,7 +332,8 @@ enum DawExport {
     static func cueSheet(_ p: Project, file: String) -> String {
         let parts = p.sections.isEmpty ? [Section(start: 0, label: p.title)] : p.sections
         func clean(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: "'") }
-        var lines = ["TITLE \"\(clean(p.title))\"", "REM BPM \(num(p.bpm))"]
+        var lines = ["TITLE \"\(clean(p.title))\""]
+        if p.measured { lines.append("REM BPM \(num(p.bpm))") }
         if let k = p.key { lines.append("REM KEY \"\(k)\"") }
         lines.append("FILE \"\(clean(file))\" \(file.lowercased().hasSuffix(".wav") ? "WAVE" : "MP3")")
         for (i, s) in parts.enumerated() {
@@ -335,7 +344,7 @@ enum DawExport {
 
     static func partsText(_ p: Project) -> String {
         func clock(_ s: Double) -> String { String(format: "%d:%02d.%d", Int(s) / 60, Int(s) % 60, Int((s - s.rounded(.down)) * 10)) }
-        let head = "\(p.title) · \(Int(p.bpm.rounded())) BPM" + (p.key.map { " · " + $0 } ?? "")
+        let head = [p.title, heading(p, " · ")].filter { !$0.isEmpty }.joined(separator: " · ")
         return ([head, ""] + p.sections.map { "\(clock($0.start))  \($0.label)" }).joined(separator: "\r\n") + "\r\n"
     }
 
@@ -348,11 +357,11 @@ enum DawExport {
     }
 
     static func folderName(_ p: Project, kind: Kind) -> String {
-        let tail = "\(Int(p.bpm.rounded())) BPM" + (p.key.map { ", " + $0 } ?? "")
+        let tail = heading(p, ", ")
         switch kind {
         case .ableton: return safe("\(p.title) – Ableton Project")
         case .reaper: return safe("\(p.title) – REAPER")
-        case .daw: return safe("\(p.title) – Tracce per DAW (\(tail))")
+        case .daw: return safe("\(p.title) – Tracce per DAW" + (tail.isEmpty ? "" : " (\(tail))"))
         }
     }
 
@@ -366,7 +375,7 @@ enum DawExport {
         let bpm = Int(p.bpm.rounded())
         return [
             "\(p.title) – tracce separate con IsoLR",
-            "Tempo: \(bpm) BPM" + (p.key.map { " · Tonalità: " + $0 } ?? ""),
+            (p.measured ? "Tempo: \(bpm) BPM" : "Tempo: non misurato (canzone troppo corta per l'analisi): il progetto usa \(bpm) BPM, da cambiare a mano") + (p.key.map { " · Tonalità: " + $0 } ?? ""),
             "",
             "Tutte le tracce iniziano a 0 e sono lunghe uguali: messe una sotto l'altra dall'inizio, sono allineate.",
             "«Tempo e marcatori.mid» contiene il tempo che segue i battiti veri della canzone e le parti (Intro, Strofa…). Trascinalo per primo.",

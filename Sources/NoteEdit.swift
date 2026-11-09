@@ -76,16 +76,21 @@ struct NoteEditor {
                                                                  pitch: $0.element.pitch, velocity: $0.element.velocity) }
         next = notes.count + 1
         base = edited != nil
+        clean = edited != nil ? -1 : 0
     }
 
-    var edited: Bool { base || !history.isEmpty }
+    /// Quanti passi di «Annulla» ci sono quando le note sono quelle rilevate (-1: mai, perché riaperte modificate).
+    /// Così dopo «Ripristina» non sono «modificate», ma «Annulla» riporta le correzioni di prima.
+    private var clean = 0
+    var edited: Bool { history.count != clean }
     var canUndo: Bool { !history.isEmpty }
 
     func find(_ id: Int) -> EditNote? { notes.first { $0.id == id } }
 
     private mutating func save() {
+        if history.count < clean { clean = -1 }   // si è tornati indietro e cambiato strada
         history.append(notes)
-        if history.count > 200 { history.removeFirst() }
+        if history.count > 200 { history.removeFirst(); clean = clean > 0 ? clean - 1 : -1 }
     }
 
     private static func clampPitch(_ p: Int) -> Int { max(0, min(127, p)) }
@@ -140,7 +145,9 @@ struct NoteEditor {
     mutating func undo() { if let last = history.popLast() { notes = last } }
 
     /// Di nuovo le note rilevate: non sono più «modificate».
+    /// Di nuovo le note rilevate; «Annulla» riporta le correzioni di prima (prima si perdevano per sempre).
     mutating func reset() {
+        save()
         var fresh: [EditNote] = []
         for n in detected {
             fresh.append(EditNote(id: next, start: n.start, end: n.end, pitch: n.pitch, velocity: n.velocity))
@@ -148,7 +155,7 @@ struct NoteEditor {
         }
         notes = fresh
         base = false
-        history = []
+        clean = history.count
     }
 
     /// Le note in ordine (per il file MIDI e lo spartito).

@@ -84,3 +84,14 @@ test("foglio CUE: una traccia per parte, tempi in minuti:secondi:frame", () => {
   assert.match(c, /TRACK 02 AUDIO\r\n {4}TITLE "Strofa"\r\n {4}INDEX 01 00:08:00/);
   assert.match(D.folderName(p, "daw"), /Tracce per DAW \(96 BPM, La minore\)$/);
 });
+
+test("dai tester (t15): senza tempo misurato niente «120 BPM» inventato nei nomi", () => {
+  const p = D.project({ title: "Cortissima", bpm: null, key: null, seconds: 2, tracks: [] });
+  assert.strictEqual(p.bpm, 120, "il progetto usa comunque 120 di serie");
+  assert.strictEqual(D.folderName(p, "daw"), "Cortissima – Tracce per DAW");
+  assert.doesNotMatch(D.cueSheet(p, "a.wav"), /REM BPM/);
+  assert.match(D.readme(p), /non misurato/);
+  const q = D.project({ title: "Vera", bpm: 98, key: "La minore", seconds: 200, tracks: [] });
+  assert.strictEqual(D.folderName(q, "daw"), "Vera – Tracce per DAW (98 BPM, La minore)");
+  assert.match(D.cueSheet(q, "a.wav"), /REM BPM 98/);
+});

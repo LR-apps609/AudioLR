@@ -1,4 +1,8 @@
 Novità della 0.41.0 (in preparazione):
+• Piano roll: dopo «Ripristina» con «Annulla» tornano le correzioni di prima (prima si perdevano)
+• Slice: oltre 92 fette il MIDI suona le prime 92 (prima le altre finivano tutte sulla nota 127, sullo stesso pad) e il LEGGIMI lo dice
+• Una canzone muta non riceve più tempo e tonalità inventati; i progetti per DAW di una canzone troppo corta per l'analisi non scrivono «120 BPM» come se fosse misurato
+• «Il passaggio A–B»: il nome del file ha i decimi («0m05,0s–0m12,5s») invece dei due punti, che nel Finder diventano «/»
 • La ricerca nella libreria non bada agli accenti: «ancora» trova «àncora»
 • Esercitati: togliendo il passaggio A–B la Rampa si spegne e la velocità torna normale
 • Testo sincronizzato: mentre Whisper ascolta la voce si vede il tempo che scorre e c'è «Annulla» (sui Mac Intel ci mette minuti e sembrava fermo)

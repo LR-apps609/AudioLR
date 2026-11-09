@@ -16,6 +16,16 @@ enum Downloads {
     /// « (+2)» per i file trasposti, niente per quelli nella tonalità originale.
     static func suffix(_ shift: Int) -> String { shift == 0 ? "" : " (\(PitchShift.label(shift)))" }
 
+    /// Il passaggio A–B nel nome di un file, con i decimi: «0m05,0s–0m12,5s» (prima «0:05–0:12», e i due punti
+    /// nel Finder diventano «/»; i passaggi brevi avevano lo stesso nome).
+    static func passageLabel(_ a: Double, _ b: Double) -> String {
+        func one(_ t: Double) -> String {
+            let d = Int((max(0, t) * 10).rounded()), m = d / 600, s = Double(d % 600) / 10
+            return "\(m)m" + String(format: "%04.1f", s).replacingOccurrences(of: ".", with: ",") + "s"
+        }
+        return "\(one(a))–\(one(b))"
+    }
+
     /// Una traccia, letta e riscritta nel formato scelto (e nella tonalità scelta).
     /// Con `tags`, tempo e tonalità finiscono nei metadati del file (per Rekordbox, Serato, Ableton…).
     nonisolated static func write(_ stem: Stem, to url: URL, format: OutputFormat, shift: Int = 0, tags: Tags.Info? = nil) throws {

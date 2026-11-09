@@ -95,3 +95,23 @@ test("fette: dall'attacco al successivo; sposta, unisci, dividi; audio con disso
   assert.strictEqual(S.noteOf(200), 127);
   assert.match(S.readme("Canzone", "Batteria", 3, 120), /Drum Rack/);
 });
+
+test("dai tester (t14): Ripristina si può annullare; oltre 92 fette il MIDI non ripete la nota 127", () => {
+  const e = new N.Editor([{ start: 0.5, end: 1, pitch: 60, velocity: 90 }, { start: 1, end: 2, pitch: 64, velocity: 90 }]);
+  const a = e.notes[0].id;
+  e.remove([a]);
+  assert.strictEqual(e.notes.length, 1);
+  e.reset();
+  assert.strictEqual(e.edited, false, "dopo Ripristina non sono modificate");
+  e.undo();
+  assert.strictEqual(e.notes.length, 1, "Annulla riporta la correzione di prima");
+  assert.strictEqual(e.edited, true);
+  const list = Array.from({ length: 100 }, (_, i) => ({ start: i * 441, end: (i + 1) * 441 }));
+  const bytes = [...S.midi(list, 44100)];
+  let on127 = 0;
+  for (let i = 0; i + 1 < bytes.length; i++) if ((bytes[i] & 0xf0) === 0x90 && bytes[i + 1] === 127 && bytes[i + 2] > 0) on127++;
+  assert.ok(on127 <= 1, `una sola fetta sulla nota 127 (erano ${on127})`);
+  assert.strictEqual(S.MIDI_MAX, 92);
+  assert.match(S.readme("Canzone", "Batteria", 100, 120), /prime 92 fette/);
+  assert.doesNotMatch(S.readme("Canzone", "Batteria", 50, 120), /prime 92/);
+});

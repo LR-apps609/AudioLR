@@ -66,16 +66,24 @@
       this.entry = entry;
       await this.ensureCtx();
       const wanted = mixable(entry.meta.stems);
+      // Le tracce si leggono a parte e si mettono nel lettore tutte insieme: con due caricamenti di fila
+      // (libreria + fine lavoro) prima si mischiavano e basso e altri finivano due volte, al doppio del volume
+      const token = this.loadToken = (this.loadToken || 0) + 1;
       this.buffers = {}; this.keys = []; this.duration = 0;
+      const buffers = {}, keys = [];
+      let duration = 0;
       for (const s of wanted) {
         try {
           const ch = Encode.readWav(await Bridge.readFile(entry.folder + "/" + s.file));
           const b = this.ctx.createBuffer(2, ch[0].length, RATE);
           b.copyToChannel(ch[0], 0); b.copyToChannel(ch[1], 1);
-          this.buffers[s.key] = b; this.keys.push(s.key);
-          this.duration = Math.max(this.duration, b.duration);
+          if (!buffers[s.key]) keys.push(s.key);
+          buffers[s.key] = b;
+          duration = Math.max(duration, b.duration);
         } catch (e) { /* una traccia illeggibile resta fuori dal mixer */ }
       }
+      if (token !== this.loadToken) return;      // è arrivato un caricamento più nuovo: vale quello
+      this.buffers = buffers; this.keys = keys; this.duration = duration;
       if (folderChanged) {
         this.gains = {}; this.muted = new Set(); this.solo = new Set();
         this.resetPractice();
@@ -152,7 +160,8 @@
       const when = this.ctx.currentTime + 0.08;
       this.startCtx = when; this.startPos = at; this.scheduledTo = at;
       const musicAt = when + this.lead / this.rate;
-      if (this.usesStretch) await this.playStretched(at, musicAt);
+      const token = this.playToken;
+      if (this.usesStretch) { await this.playStretched(at, musicAt, token); if (token !== this.playToken) return; }
       else this.playPlain(at, musicAt);
       // Conteggio: una battuta di clic prima della musica (sempre udibile, anche senza metronomo)
       if (this.lead > 0) for (let i = 0; i < bar; i++) this.clickAt(when + (i * period) / this.rate, i === 0, true);
@@ -182,8 +191,25 @@
     }
 
     // Velocità e tono: un solo nodo Signalsmith con tutte le tracce come canali, poi diviso per traccia
-    async playStretched(at, when) {
+    async playStretched(at, when, token = this.playToken) {
+      // Una sola creazione alla volta: con il cursore trascinato arrivavano più play() insieme, ognuno creava
+      // il suo motore e quelli in più continuavano a suonare dopo la Pausa
+      if (!this.stretch && this.stretchMaking) await this.stretchMaking;
       if (!this.stretch) {
+        let done; this.stretchMaking = new Promise((r) => { done = r; });
+        try { await this.makeStretch(); } finally { this.stretchMaking = null; done(); }
+      }
+      const s = this.stretch;
+      // Nel frattempo è arrivata una Pausa o un altro play(): questo non deve più far suonare niente
+      if (!s || token !== this.playToken) return;
+      s.outs.forEach((o) => { if (o.key) o.gain.gain.value = this.effectiveGain(o.key); });
+      this.nodes.push(...s.outs.filter((o) => o.key).map((o) => ({ key: o.key, gain: o.gain })));
+      const loop = this.isLooping && !this.recording ? { loopStart: this.loopA, loopEnd: this.loopB } : { loopStart: 0, loopEnd: 0 };
+      s.node.schedule({ active: true, output: when, input: at, rate: this.rate, semitones: this.semitones, ...loop });
+    }
+    async makeStretch() {
+      const gen = this.stretchGen = (this.stretchGen || 0) + 1;
+      {
         if (typeof SignalsmithStretch !== "function") throw new Error("velocità e tono non disponibili");
         const all = this.take && this.takeBuffer ? [...this.keys, "__take"] : [...this.keys];
         const C = all.length * 2;
@@ -198,15 +224,13 @@
         });
         const chans = all.flatMap((k) => { const b = k === "__take" ? this.takeBuffer : this.buffers[k]; return [b.getChannelData(0), b.getChannelData(1)]; });
         await node.addBuffers(chans);
+        // Canzone cambiata mentre il motore si preparava: questo non serve più
+        if (gen !== this.stretchGen) { try { node.disconnect(); split.disconnect(); } catch {} return; }
         this.stretch = { node, outs, split };
       }
-      const s = this.stretch;
-      s.outs.forEach((o) => { if (o.key) o.gain.gain.value = this.effectiveGain(o.key); });
-      this.nodes.push(...s.outs.filter((o) => o.key).map((o) => ({ key: o.key, gain: o.gain })));
-      const loop = this.isLooping && !this.recording ? { loopStart: this.loopA, loopEnd: this.loopB } : { loopStart: 0, loopEnd: 0 };
-      s.node.schedule({ active: true, output: when, input: at, rate: this.rate, semitones: this.semitones, ...loop });
     }
     dropStretch() {
+      this.stretchGen = (this.stretchGen || 0) + 1;
       if (!this.stretch) return;
       try { this.stretch.node.schedule({ active: false }); this.stretch.node.disconnect(); this.stretch.split.disconnect(); } catch {}
       this.stretch = null;
@@ -219,6 +243,12 @@
       src.connect(g).connect(this.clickGain);
       src.start(t);
       this.clickNodes.push({ src, g, count });
+    }
+    /** Metronomo acceso o spento subito, anche sui clic già programmati (prima si sentiva dopo 1,5 s). */
+    setMetronome(on) {
+      this.metronome = on;
+      for (const c of this.clickNodes) if (!c.count) c.g.gain.value = on ? 1 : 0;
+      this.emit();
     }
     /** I clic del metronomo nel prossimo secondo e mezzo (si ricalcola a ogni giro del passaggio). */
     scheduleClicks() {
@@ -251,6 +281,7 @@
     pause() { this.startPos = this.position; this.stopNodes(); this.playing = false; this.emit(); }
     stop() { this.stopNodes(); this.playing = false; this.startPos = 0; this.emit(); }
     stopNodes() {
+      this.playToken = (this.playToken || 0) + 1;
       for (const n of this.nodes) if (n.src) try { n.src.stop(); n.src.disconnect(); } catch {}
       for (const c of this.clickNodes) try { c.src.stop(); } catch {}
       if (this.stretch) try { this.stretch.node.schedule({ active: false }); } catch {}

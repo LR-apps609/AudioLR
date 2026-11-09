@@ -31,7 +31,12 @@
       o.innerHTML = ""; if (app) app.inert = false;
       document.removeEventListener("keydown", keys);
       if (onClose) onClose();
-      if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+      if (opener && opener.isConnected) {
+        opener.focus({ preventScroll: true });
+        // Il fuoco torna sul pulsante che l'ha aperta, ma lo Spazio deve far suonare la canzone come sempre
+        // (prima riapriva la finestra). Vale finché non si usa Tab o il mouse.
+        window.isolrSpacePlays = true;
+      }
     };
     const keys = (e) => {
       if (e.key === "Escape") return close();
@@ -326,7 +331,7 @@
       const a = cur.meta.analysis || {}, bpm = a.bpm || 120, name = `${cur.meta.title} – ${stem.name}${Transpose.suffix(shift)}`;
       const files = [];
       const mid = `${cur.folder}/${name}.mid`;
-      await Bridge.writeFile(mid, Midi.data(list, { bpm, program: Midi.program(key), name }));
+      await Bridge.writeFile(mid, Midi.MidiFile.data(list, { bpm, program: Midi.MidiFile.program(key), name }));
       files.push(mid);
       // Spartito (MusicXML) sulle battute vere della canzone; per chitarra e basso anche la tablatura
       const kind = Sheet.MusicXML.kind(key, list);
@@ -334,7 +339,7 @@
         monophonic: ["bass", "vocals", "lead", "male", "female"].includes(key) });
       if (score.bars.length) {
         const xml = `${cur.folder}/${name}.musicxml`;
-        await Bridge.writeText(xml, Sheet.MusicXML.data(score, kind, name, stem.name, Midi.program(key)));
+        await Bridge.writeText(xml, Sheet.MusicXML.data(score, kind, name, stem.name, Midi.MidiFile.program(key)));
         files.push(xml);
         const tuning = Sheet.MusicXML.tuning(kind);
         if (tuning) { const tab = `${cur.folder}/${name} (tab).txt`; await Bridge.writeText(tab, Sheet.Tab.text(score, tuning, name)); files.push(tab); }

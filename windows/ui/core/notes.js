@@ -44,9 +44,16 @@
       this.next = this.notes.length + 1;
       this.history = [];
       this.base = !!edited;                          // riaperte già modificate
+      // Quanti passi di «Annulla» ci sono quando le note sono quelle rilevate (-1: mai, perché riaperte modificate).
+      // Così dopo «Ripristina» non sono «modificate», ma «Annulla» riporta le correzioni di prima
+      this.clean = edited ? -1 : 0;
     }
-    get edited() { return this.base || this.history.length > 0; }
-    save() { this.history.push(copy(this.notes)); if (this.history.length > 200) this.history.shift(); }
+    get edited() { return this.history.length !== this.clean; }
+    save() {
+      if (this.history.length < this.clean) this.clean = -1;   // si è tornati indietro e cambiato strada
+      this.history.push(copy(this.notes));
+      if (this.history.length > 200) { this.history.shift(); if (this.clean > 0) this.clean--; else this.clean = -1; }
+    }
     find(id) { return this.notes.find((n) => n.id === id); }
 
     /** Sposta le note scelte di `dt` secondi e `dp` semitoni; con la griglia l'inizio della prima si aggancia. */
@@ -95,7 +102,7 @@
 
     undo() { if (this.history.length) this.notes = this.history.pop(); }
     /** Di nuovo le note rilevate: non sono più «modificate» (Annulla resta possibile). */
-    reset() { this.save(); this.notes = copy(this.detected).map((n) => ({ ...n, id: this.next++ })); this.base = false; this.history = []; }
+    reset() { this.save(); this.notes = copy(this.detected).map((n) => ({ ...n, id: this.next++ })); this.base = false; this.clean = this.history.length; }
 
     /** Le note in ordine, senza i numeri (per il file MIDI e lo spartito). */
     list() { return this.notes.map(({ start, end, pitch, velocity }) => ({ start, end, pitch, velocity })).sort((a, b) => a.start - b.start || a.pitch - b.pitch); }

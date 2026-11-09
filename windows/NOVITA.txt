@@ -1,4 +1,13 @@
 Novità di IsoLR per Windows 0.16.0 (in preparazione):
+• Coda delle canzoni: i file rilasciati sulla zona tratteggiata entrano una volta sola (prima due, con il doppio delle separazioni e dei doppioni in libreria); «Togli» sulla canzone pronta fa passare la prossima della coda invece di bloccarla; una canzone della coda che non riesce resta scritta, con il perché; tra una canzone e l'altra niente più avviso «si apre alla fine…»; togliendo la base o le parti di chitarra e piano durante il lavoro, le schede mostrano le tracce che nascono davvero
+• Corretto: una canzone aperta dalla libreria o dalla Cronologia poteva caricare basso e altri strumenti due volte: si sentivano e si esportavano al doppio del volume
+• Esercitati: trascinando il cursore della velocità mentre suona si creava più di un motore e quelli in più continuavano a suonare dopo la Pausa; il metronomo si accende e si spegne subito (prima dopo 1,5 s); cambiando la velocità compare «Normale»; tra i prossimi accordi lo stesso accordo non compare due volte di seguito
+• Corretto: «File: MIDI, spartito e tab» non salvava mai niente («Midi.program is not a function»)
+• Piano roll: una modifica fatta subito prima di chiudere resta; dopo «Ripristina» con «Annulla» tornano le correzioni di prima
+• Slice: oltre 92 fette il MIDI suona le prime 92 (prima le altre finivano tutte sulla nota 127, sullo stesso pad) e il LEGGIMI lo dice. Warp: «Salva la griglia» non toglie più il segnaposto proprio alla fine della canzone
+• Una canzone muta non riceve più tempo e tonalità inventati («182 BPM · Do maggiore») e IsoLR dice che è muta; i progetti per DAW di una canzone troppo corta per l'analisi non scrivono «120 BPM» come se fosse misurato
+• «Il passaggio A–B»: il nome del file ha i decimi («0m05,0s–0m12,5s»); prima i passaggi brevi diventavano «0.00–0.00»
+• Dopo aver chiuso Warp, Rimonta o un'altra finestra con Esc, lo Spazio fa suonare la canzone invece di riaprirla; senza codificatore AAC (Windows «N») il video karaoke e il File per DJ dicono cosa manca invece di «scegli WAV o FLAC»
 • La ricerca nella libreria non bada agli accenti: «ancora» trova «àncora», «perche» trova «perché»
 • Numeri con la virgola anche in Dettagli e nel rapporto; «+1 semitono» al singolare; in Warp l'anteprima del tempo è quella della versione che si crea
 • Corretto: Transpose e le registrazioni riportate alla velocità e al tono della canzone a volte uscivano mute (circa una volta su tre)

@@ -43,7 +43,9 @@
       for (let k = 0; k < beatsPerBar; k++) beats.push(m[i] + k * step);
     }
     const last = (m[m.length - 1] - m[m.length - 2]) / beatsPerBar;
-    for (let t = m[m.length - 1]; t < duration - 1e-9; t += last) beats.push(t);
+    // Come sul Mac: un segnaposto proprio alla fine della canzone resta (prima «Salva» lo toglieva ogni volta)
+    if (last > 0.05) for (let t = m[m.length - 1]; t < duration + 0.001; t += last) beats.push(t);
+    else beats.push(m[m.length - 1]);
     if (!isFinite(duration)) beats.push(m[m.length - 1]);
     return { beats: beats.map((x) => +x.toFixed(4)), firstDownbeat };
   }

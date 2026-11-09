@@ -152,7 +152,7 @@
         <div class="picked">${Icon("note")}${esc(f.name.replace(/\.[^.]+$/, ""))}<button class="btn borderless icon small" data-act="clear-pending" title="Togli">${Icon("x")}</button></div>
         <div class="muted">Scegli la qualità, poi premi «Separa»</div>`
       : `<h2>Trascina qui una canzone</h2><div class="muted">MP3, WAV, FLAC, M4A… oppure <button class="btn small" data-act="choose">Scegli un file</button></div>`}
-      ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}
+      ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}${skippedNote()}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
         <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}" aria-pressed="${k === q}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
@@ -167,7 +167,8 @@
     const drop = $("#drop");
     drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
     drop.ondragleave = () => drop.classList.remove("over");
-    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); job.add(e.dataTransfer.files); };
+    // stopPropagation: senza, l'evento arrivava anche al gestore della finestra e i file entravano due volte
+    drop.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("over"); job.add(e.dataTransfer.files); };
   }
 
   // ── Lavoro in corso (come la schermata del Mac): la canzone che si colora, le tracce che nascono,
@@ -176,8 +177,10 @@
   const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
   function workKeys() {
-    const keys = Separation.QUALITY[job.quality || ui.quality].keys.filter((k) => Prefs.get("splitGuitarPiano", true) || !["guitar", "piano"].includes(k));
-    return Prefs.get("makeInstrumental", true) ? [...keys, "instrumental"] : keys;
+    // Durante il lavoro valgono le scelte prese all'inizio di quella canzone (le stesse che usa la separazione)
+    const pick = (name, k) => (job.busy && job[k] != null ? job[k] : Prefs.get(name, true));
+    const keys = Separation.QUALITY[job.quality || ui.quality].keys.filter((k) => pick("splitGuitarPiano", "splitGuitarPiano") || !["guitar", "piano"].includes(k));
+    return pick("makeInstrumental", "makeInstrumental") ? [...keys, "instrumental"] : keys;
   }
 
   /** Quanto è separata la canzone (0…1): solo durante la separazione vera e propria. */
@@ -224,6 +227,14 @@
   const eq = (k, i) => `<div class="eq" style="--c:var(--c-${k})">${Array.from({ length: 7 }, (_, j) =>
     `<i style="height:${30 + ((j * 23 + i * 11) % 40)}px;animation-duration:${(0.45 + ((j + i) % 5) * 0.12).toFixed(2)}s;animation-delay:${(-j * 0.11).toFixed(2)}s"></i>`).join("")}</div>`;
 
+  /** Le canzoni della coda che non sono riuscite: restano scritte, con il perché, finché si lavora e dopo. */
+  function skippedNote() {
+    const sk = job.skipped || [];
+    if (!sk.length) return "";
+    const one = (x) => `«${esc(x.name.replace(/\.[^.]+$/, ""))}»: ${esc(x.error)}`;
+    return `<div class="rec skipped">${sk.length === 1 ? "Non riuscita" : `Non riuscite (${sk.length})`}: ${sk.map(one).join(" · ")} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>`;
+  }
+
   function work(p) {
     // Mentre un modello si apre non c'è una percentuale vera: tre puntini invece di uno «0%» fermo
     const pct = job.stage === "saving" ? "100%" : (job.stage === "model" || job.stage === "reading") && !job.progress ? "…" : `${Math.round(job.progress * 100)}%`;
@@ -231,6 +242,9 @@
     const current = STAGES.findIndex(([k]) => k === job.stage);
     // Se la schermata c'è già si aggiornano solo i valori: ridisegnarla farebbe ripartire le animazioni
     let w = p.querySelector(".work2");
+    // Un'altra canzone della coda o tracce diverse: la schermata si rifà (prima restavano le schede di prima)
+    const bornKey = `${job.title}|${workKeys().join(",")}`;
+    if (w && w.dataset.born !== bornKey) { w = null; p.innerHTML = ""; }
     if (!w) {
       p.innerHTML = `<div class="work2">
         <div class="whead"><h2 class="wtitle"></h2><span class="rec"><i></i>REC</span></div>
@@ -245,10 +259,14 @@
         <div class="wfoot"><span class="pct"></span><div class="wtext"><b class="step"></b><span class="detail muted"></span></div>
           <span class="chip qchip"></span><button class="btn" data-act="cancel">Annulla</button></div>
         <div class="stages"></div>
+        <div class="wskip"></div>
       </div>`;
       w = p.querySelector(".work2");
+      w.dataset.born = bornKey;
     }
     w.querySelector(".wtitle").textContent = job.title || "";
+    const skip = w.querySelector(".wskip"), skipHtml = skippedNote();
+    if (skip.dataset.n !== String((job.skipped || []).length)) { skip.dataset.n = String((job.skipped || []).length); skip.innerHTML = skipHtml; }
     w.querySelector(".pct").textContent = pct;
     w.querySelector(".step").textContent = `${job.step} · ${Separation.QUALITY[job.quality || ui.quality].title}`;
     w.querySelector(".detail").textContent = workDetail();
@@ -300,6 +318,7 @@
     p.innerHTML = `<div class="results">
       <div class="col">
         <div class="song"><span class="ic">${Icon("note")}</span><div style="min-width:0"><b>${esc(m.title)}</b><span>${esc(infoLine(m))}</span></div></div>
+        ${skippedNote()}
         ${job.preview ? `<div class="preview-banner">${Icon("headphones")}<div style="flex:1;min-width:0"><b>Anteprima di 20 secondi · ${esc(Separation.QUALITY[job.preview.quality].title)}</b>
           <span>Dal minuto ${fmt(job.preview.start)}. Non va in libreria: ascolta e decidi.</span></div>
           <button class="btn" data-act="preview-back">Indietro</button><button class="btn prominent" data-act="preview-full">${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa tutta</button></div>` : ""}
@@ -408,7 +427,10 @@
           const end = Math.min(d, x.end), on = Math.abs((player.loopA ?? -9) - x.start) < 0.05 && Math.abs((player.loopB ?? -9) - end) < 0.05;
           return `<button class="${on ? "on" : ""}" data-section="${i}" style="left:${(100 * x.start) / d}%;width:calc(${(100 * (end - x.start)) / d}% - 1px);background:${on ? "" : `color-mix(in srgb, var(--brass) ${10 + 7 * (x.group % 4)}%, transparent)`}" title="Ripeti «${esc(x.label)}» (${fmt(x.start)}–${fmt(end)})">${esc(x.label)}</button>`;
         }).join("")}<span class="head" id="head"></span></div>`
-      : `<span class="hint" style="flex:1">${s ? "Parti della canzone non riconosciute: segna A e B a mano" : "Le parti della canzone (strofa, ritornello…) compaiono nelle canzoni separate da questa versione"}</span>`;
+      : `<span class="hint" style="flex:1">${s ? "Parti della canzone non riconosciute: segna A e B a mano"
+        // Senza analisi la canzone era troppo corta (meno di 4 s) o muta; con l'analisi ma senza parti è di prima della 0.31
+        : !(job.current && job.current.meta.analysis) ? "Niente parti da riconoscere: la canzone è troppo corta o muta. Segna A e B a mano"
+        : "Le parti della canzone (strofa, ritornello…) compaiono nelle canzoni separate da questa versione"}</span>`;
     // Il testo a tempo (karaoke), se la canzone l'ha già: si carica una volta e si aggiorna in updateLive
     if (job.current && !window.LyricsUI.cache.has(job.current.folder)) window.LyricsUI.load(job.current.folder).then(() => updateLive());
     return `<div class="practice">
@@ -470,7 +492,16 @@
     const box = $("#chords"), chords = job.current && job.current.meta.analysis && job.current.meta.analysis.chords;
     if (box && chords) {
       let i = chords.findIndex((c) => t < c.end); if (i < 0) i = chords.length - 1;
-      const next = chords.slice(i + 1).filter((c) => c.root != null).slice(0, 3);
+      // Gli accordi uguali di seguito (anche con una pausa in mezzo) si contano una volta sola
+      const next = [];
+      let prev = chordName(chords[i]);
+      for (const c of chords.slice(i + 1)) {
+        if (c.root == null) continue;
+        const n = chordName(c);
+        if (n !== prev) next.push(c);
+        prev = n;
+        if (next.length === 3) break;
+      }
       const html = `<span class="muted" style="font-size:11px;font-weight:600">Accordi</span><span class="chord-now">${chordName(chords[i])}</span>
         ${next.map((c, k) => `<span class="chord-next" style="${k ? "" : "color:var(--ink);opacity:.75"}">${chordName(c)}</span>`).join("")}
         ${next[0] ? `<span class="hint">tra ${Math.max(0, Math.ceil((next[0].start - t) / Math.max(0.25, player.rate)))} s</span>` : ""}
@@ -564,7 +595,7 @@
   }
   async function downloadMix(range) {
     const f = Prefs.get("downloadFormat", "wav24"), ext = Encode.FORMATS[f].ext, sh = shift();
-    const name = player.exportName(job.current.meta.title) + Transpose.suffix(sh) + (range ? ` (${fmt(range[0])}–${fmt(range[1])})` : "");
+    const name = player.exportName(job.current.meta.title) + Transpose.suffix(sh) + (range ? ` (${IsoLR.Library.passageLabel(range[0], range[1])})` : "");
     const path = await Bridge.askFile(`${name}.${ext}`.replace(/:/g, "."), ext);
     if (!path) return;
     try {
@@ -644,7 +675,9 @@
     // (ma il lettore caricava lo stesso le sue tracce)
     if (job.busy) { toast("La canzone si apre alla fine della separazione in corso"); return; }
     const p = job.preview;
-    await job.open(e);
+    // job.open porta la fase a «done»: il controllo qui sotto non deve aprirla una seconda volta
+    ui.opening = true;
+    try { await job.open(e); } finally { ui.opening = false; }
     if (keepPreview) job.preview = p;            // l'anteprima appena fatta resta un'anteprima
     ui.unselected = new Set();
     await player.load(e);
@@ -687,7 +720,7 @@
       case "reveal": return Bridge.reveal(job.current.folder + "/isolr.json");
       case "play": player.toggle(); return transport();
       case "practice": ui.practice = !ui.practice; Prefs.set("showPractice", ui.practice); return transport();
-      case "metronome": player.metronome = !player.metronome; return transport();
+      case "metronome": player.setMetronome(!player.metronome); return transport();
       case "count": player.countIn = !player.countIn; return transport();
       case "pitch-down": transposeBy(-1); return;
       case "pitch-up": transposeBy(1); return;
@@ -758,6 +791,8 @@
     const el = ev.target, d = el.dataset;
     if (d.kbd && ev.isTrusted) return;
     if (d.input === "without" && el.value) { player.without(el.value); return panel(); }
+    // Velocità lasciata (o cambiata con le frecce): la barra si ridisegna e compare «Normale»
+    if (d.input === "rate") return transport();
     if (d.input === "clean-noise" || d.input === "clean-reverb") { Prefs.set(d.input === "clean-noise" ? "cleanNoise" : "cleanReverb", el.checked); return panel(); }
     // Filtri della libreria
     if (d.input && d.input.startsWith("lib-")) {
@@ -783,13 +818,21 @@
     }
   });
 
+  // Dopo una finestra chiusa lo Spazio fa suonare anche con il fuoco sul pulsante che l'ha aperta:
+  // il clic del pulsante (che arriva al rilascio del tasto) non deve partire
+  document.addEventListener("pointerdown", () => { window.isolrSpacePlays = false; }, true);
+  document.addEventListener("keyup", (e) => {
+    if (e.code === "Space" && window.isolrSpacePlays && e.target instanceof Element && e.target.matches("button") && !$("#overlay").childElementCount) e.preventDefault();
+  }, true);
   // Spazio = suona/pausa; ⌘[ e ⌘] (qui Ctrl) = A e B; Ctrl+N = nuova canzone
   document.addEventListener("keydown", (e) => {
     const tg = e.target instanceof Element ? e.target : document.body;
     if (tg.matches("input[type=text],input:not([type]),select,textarea")) return;
     // Con una finestra aperta sopra (Warp, Rimonta…) i tasti sono suoi
     if ($("#overlay").childElementCount) return;
-    if (e.code === "Space" && job.phase === "done" && !tg.closest("button,a,[role=button],input,select,textarea,[contenteditable]")) { e.preventDefault(); player.toggle(); transport(); }
+    if (e.key === "Tab") window.isolrSpacePlays = false;
+    const spacePlays = window.isolrSpacePlays && tg.matches("button");
+    if (e.code === "Space" && job.phase === "done" && (spacePlays || !tg.closest("button,a,[role=button],input,select,textarea,[contenteditable]"))) { e.preventDefault(); player.toggle(); transport(); return; }
     // Invio e Spazio su una canzone della libreria la aprono, come il clic
     if ((e.key === "Enter" || e.code === "Space") && tg.matches(".lib-item[data-open]")) { e.preventDefault(); tg.click(); }
     if (e.ctrlKey && e.key === "[") { player.markA(); transport(); }
@@ -828,7 +871,13 @@
   job.addEventListener("change", async () => {
     if (job.phase !== lastPhase) {
       lastPhase = job.phase;
-      if (job.phase === "done" && job.current) { await refreshLibrary(); await openEntry(job.current, !!job.preview); return; }
+      if (job.phase === "done" && job.current && ui.opening) return;   // openEntry finisce e ridisegna
+      if (job.phase === "done" && job.current) {
+        await refreshLibrary();
+        // In una coda la prossima canzone è già partita: si resta sul lavoro, senza l'avviso «si apre alla fine…»
+        if (job.busy) { render(); return; }
+        await openEntry(job.current, !!job.preview); return;
+      }
       render(); return;
     }
     // Durante il lavoro gli aggiornamenti si raccolgono e la schermata si ridisegna una volta per fotogramma

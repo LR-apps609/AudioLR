@@ -264,6 +264,7 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 .work2 .whead { display: flex; align-items: center; gap: 12px; }
 .work2 .whead .wtitle { flex: 1; min-width: 0; }
 .work2 .rec { display: inline-flex; align-items: center; gap: 6px; font: 700 10.5px var(--mono); color: color-mix(in srgb, #FF5D5D 70%, var(--ink)); letter-spacing: .06em; }
+.work2 .rec.skipped, .rec.skipped { display: block; font: inherit; letter-spacing: normal; color: var(--red); margin-top: 8px; }
 .work2 .rec i { width: 7px; height: 7px; border-radius: 50%; background: #FF5D5D; box-shadow: 0 0 6px #FF5D5D; animation: led 1.2s ease-in-out infinite; }
 @keyframes led { 50% { opacity: .25; box-shadow: none; } }
 .work2 .song { border: 1px solid var(--stroke); height: 100px; }

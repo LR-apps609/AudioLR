@@ -83,6 +83,8 @@
     const drums = mono((k) => k === "drums");
     const everything = mono(() => true);
     const eAll = energy(everything);
+    // Una canzone muta (sotto i -90 dB): niente tempo né tonalità inventati (prima «182 BPM · Do maggiore»)
+    if (!(eAll / n > 1e-9)) return null;
     const rhythm = list.some(([k]) => k === "drums") && energy(drums) > 1e-3 * eAll ? drums : everything;
     const harmonic = mono((k) => k !== "drums" && k !== "vocals");
     const eHarm = energy(harmonic);

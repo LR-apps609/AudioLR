@@ -133,3 +133,9 @@ test("analisi della versione rimontata", () => {
   assert.deepStrictEqual(m.chords.map((c) => [c.root, c.start, c.end]), [[2, 0, 4], [7, 4, 12]]);
   assert.strictEqual(m.bpm, 120);
 });
+
+test("dai tester (t14): un segnaposto proprio alla fine della canzone resta nella griglia", () => {
+  const marks = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25];
+  const g = W.beatsFromMarks(marks, 4, 25);
+  assert.ok(g.beats.includes(25), "il battito a 25 s c'è");
+});

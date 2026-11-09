@@ -89,7 +89,15 @@
     return [start, start + length];
   }
 
-  const api = { NAMES, SORTS, empty, camelot, compatible, active, apply, chips, clear, previewRange };
+  /** Il passaggio A–B nel nome di un file, con i decimi: «0m05,0s–0m12,5s» (prima «0.05–0.12», e i passaggi
+   *  brevi diventavano «0.00–0.00»). Niente «:», che Windows non accetta nei nomi. */
+  function passageLabel(a, b) {
+    const one = (t) => { const d = Math.round(Math.max(0, t) * 10), m = Math.floor(d / 600), s = (d % 600) / 10;
+      return `${m}m${s.toFixed(1).padStart(4, "0").replace(".", ",")}s`; };
+    return `${one(a)}–${one(b)}`;
+  }
+
+  const api = { NAMES, SORTS, empty, camelot, compatible, active, apply, chips, clear, previewRange, passageLabel };
   NS.Library = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof self !== "undefined" ? self : globalThis);

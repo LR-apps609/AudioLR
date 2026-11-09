@@ -166,7 +166,7 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
       return { sw: rows.scrollWidth, cw: rows.clientWidth, h: r.height, dlOk: !!hit && dl.contains(hit) };
     });
     check(m.sw <= m.cw + 1 && m.dlOk, `${w}×${h}: le righe del mixer stanno nel loro riquadro e «Scarica» della Voce si clicca (${JSON.stringify(m)})`);
-    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b) b.click(); });
+    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b && !IsoApp.ui.practice) b.click(); });
     await page.waitForTimeout(300);
     const ph = await page.evaluate(() => { const rows = document.querySelector(".rows"); rows.scrollIntoView(); return rows.getBoundingClientRect().height; });
     check(ph >= 100, `${w}×${h}: con «Esercitati» aperto il mixer si vede ancora (altezza ${Math.round(ph)} px)`);
@@ -222,6 +222,123 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
       return out;
     });
     check(peaks.every((m) => m > 0.1), `Transpose 8 volte di fila, mai silenzio (picchi ${peaks.join(", ")})`);
+    await page.close();
+  }
+
+  // ── Dai tester t11–t16 (08/11): coda, Sala prove, note, libreria, Spazio dopo una finestra ──
+  {
+    const page = await fresh(browser);
+    // Due file rilasciati sulla zona tratteggiata entrano una volta sola (prima due: 4 separazioni)
+    const q = await page.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array(100)], "Uno.wav")); dt.items.add(new File([new Uint8Array(100)], "Due.wav"));
+      document.querySelector("#drop").dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      return { pending: IsoApp.job.pending && IsoApp.job.pending.name, queue: IsoApp.job.queue.map((f) => f.name) };
+    });
+    check(q.pending === "Uno.wav" && q.queue.length === 1 && q.queue[0] === "Due.wav", `due file sulla zona: una pronta e una in coda (${JSON.stringify(q)})`);
+    // «Togli» sulla pronta con la coda: passa pronta la prossima, Separa resta usabile
+    await page.evaluate(() => document.querySelector('[data-act="clear-pending"]').click());
+    await page.waitForTimeout(150);
+    const t = await page.evaluate(() => ({ pending: IsoApp.job.pending && IsoApp.job.pending.name, queue: IsoApp.job.queue.length, sep: !document.querySelector('[data-act="separate"]').disabled }));
+    check(t.pending === "Due.wav" && t.queue === 0 && t.sep, `«Togli» con la coda: la prossima diventa pronta e Separa è attivo (${JSON.stringify(t)})`);
+    await page.evaluate(() => IsoApp.job.reset());
+    // Una canzone della coda non riuscita resta scritta, con il perché
+    await page.evaluate(() => { IsoApp.job.skipped = [{ name: "Testo finto.mp3", error: "non riesco ad aprire questo file come audio" }]; IsoApp.job.add([new File([new Uint8Array(100)], "Tre.wav")]); });
+    await page.waitForTimeout(150);
+    const sk = await page.evaluate(() => (document.querySelector(".skipped") || {}).textContent || "");
+    check(/Testo finto/.test(sk) && /audio/.test(sk), `la canzone della coda non riuscita resta scritta («${sk.slice(0, 80)}»)`);
+    await page.evaluate(() => { IsoApp.job.reset(); });
+    // Aperta dalla libreria (anche due volte di fila): ogni traccia una volta sola nel lettore
+    await page.evaluate(async () => { const e = IsoApp.ui.library[0]; await Promise.all([IsoApp.openEntry(e), IsoApp.openEntry(e)]); });
+    await page.waitForTimeout(400);
+    const keys = await page.evaluate(() => IsoApp.player.keys);
+    check(keys.length === new Set(keys).size && keys.length >= 4, `dalla libreria ogni traccia una volta sola (${keys.join(",")})`);
+    // Velocità cambiata col cursore: compare «Normale»
+    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b && !IsoApp.ui.practice) b.click(); });
+    await page.waitForTimeout(300);
+    const normal = await page.evaluate(async () => {
+      const r = document.querySelector('[data-input="rate"]'); if (!r) return "nessun cursore";
+      r.value = "1.3"; r.dispatchEvent(new Event("input", { bubbles: true })); r.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 150));
+      return !!document.querySelector('[data-act="normal"]');
+    });
+    check(normal === true, `velocità cambiata col cursore: compare «Normale» (${normal})`);
+    // Il cursore trascinato mentre suona: un solo motore velocità/tono, e in pausa tutto tace
+    const motors = await page.evaluate(async () => {
+      const P = IsoApp.player, orig = window.SignalsmithStretch;
+      let made = 0;
+      window.SignalsmithStretch = async (...a) => { made++; return orig(...a); };
+      P.dropStretch(); P.rate = 1; await P.play(0);
+      for (const r of [0.95, 0.9, 0.85, 0.8]) P.setRate(r);
+      await new Promise((x) => setTimeout(x, 1500));
+      P.pause();
+      window.SignalsmithStretch = orig;
+      return made;
+    });
+    check(motors === 1, `cursore della velocità trascinato mentre suona: un solo motore (${motors})`);
+    // Il metronomo si accende subito, anche sui clic già programmati
+    const metro = await page.evaluate(async () => {
+      const P = IsoApp.player; P.setRate(1); P.metronome = false; await P.play(0);
+      await new Promise((x) => setTimeout(x, 200));
+      P.setMetronome(true);
+      const on = P.clickNodes.filter((c) => !c.count).map((c) => c.g.gain.value);
+      P.setMetronome(false);
+      const off = P.clickNodes.filter((c) => !c.count).map((c) => c.g.gain.value);
+      P.pause();
+      return { n: on.length, on: on.every((v) => v === 1), off: off.every((v) => v === 0) };
+    });
+    check(metro.n > 0 && metro.on && metro.off, `metronomo acceso e spento subito sui clic già programmati (${JSON.stringify(metro)})`);
+    // Accordi uguali di seguito (anche con una pausa in mezzo) si vedono una volta sola
+    const chords = await page.evaluate(async () => {
+      IsoApp.job.current.meta.analysis.chords = [{ start: 0, end: 0.5, root: 2, minor: false }, { start: 0.5, end: 1, root: null }, { start: 1, end: 2.5, root: 9, minor: true },
+        { start: 2.5, end: 3, root: null }, { start: 3, end: 4, root: 9, minor: true }, { start: 4, end: 7, root: 2, minor: true }];
+      IsoApp.player.startPos = 0; IsoApp.player.emit();
+      await new Promise((x) => setTimeout(x, 300));
+      return [...document.querySelectorAll("#chords .chord-next")].map((e) => e.textContent);
+    });
+    check(chords.length >= 2 && chords.every((c, i) => i === 0 || c !== chords[i - 1]), `nessun accordo ripetuto di seguito tra i prossimi (${chords.join(" ")})`);
+    // MIDI, spartito e tab dalle note corrette a mano: si salvano (prima «Midi.program is not a function»)
+    const midi = await page.evaluate(async () => {
+      const cur = IsoApp.job.current;
+      const ns = [0, 1, 2, 3].map((i) => ({ start: i * 0.5, end: i * 0.5 + 0.4, pitch: 40 + i, velocity: 90 }));
+      await Bridge.writeText(`${cur.folder}/isolr-note-bass.json`, JSON.stringify({ version: 1, detected: ns, edited: ns }));
+      const toasts = []; const t = (e) => toasts.push(e); IsoApp.toast = ((orig) => (m) => { toasts.push(m); return orig(m); })(IsoApp.toast);
+      await window.Sheets.notes(cur, "bass", () => {}, 0);
+      const stem = cur.meta.stems.find((s) => s.key === "bass");
+      const base = `${cur.folder}/${cur.meta.title} – ${stem.name}`;
+      void t;
+      return { mid: await Bridge.exists(base + ".mid"), toasts };
+    });
+    check(midi.mid && !midi.toasts.some((x) => /non riuscite/.test(x)), `«File: MIDI, spartito e tab» salva il .mid (${JSON.stringify(midi)})`);
+    // Piano roll chiuso subito dopo una modifica: la modifica resta
+    const roll = await page.evaluate(async () => {
+      const cur = IsoApp.job.current;
+      window.PianoRoll.open(cur, IsoApp.player, "bass");
+      for (let i = 0; i < 40; i++) { const sh = document.querySelector("#overlay .sheet"); if (sh && sh.api && sh.api.editor) break; await new Promise((x) => setTimeout(x, 100)); }
+      const sh = document.querySelector("#overlay .sheet");
+      if (!sh || !sh.api || !sh.api.editor) return "piano roll non aperto";
+      sh.api.select([sh.api.editor.notes[0].id]);
+      return "ok";
+    });
+    if (roll === "ok") { await page.keyboard.press("Delete"); await page.keyboard.press("Escape"); await page.waitForTimeout(250); }
+    const saved = await page.evaluate(async () => { const s = await window.PianoRoll.edited(IsoApp.job.current, "bass"); return s ? s.length : null; });
+    check(saved === 3, `piano roll chiuso subito dopo Canc: la nota tolta resta tolta (${roll}, ${saved} note salvate)`);
+    // Dopo Warp chiusa con Esc, lo Spazio fa suonare la canzone invece di riaprire Warp
+    await page.waitForTimeout(200);
+    await page.focus('[data-act="warp"]');
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(600);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(400);
+    const sp = await page.evaluate(() => ({ playing: IsoApp.player.playing, sheet: !!document.querySelector("#overlay").childElementCount }));
+    check(sp.playing && !sp.sheet, `dopo Warp chiusa con Esc lo Spazio fa suonare e non la riapre (${JSON.stringify(sp)})`);
+    await page.evaluate(() => IsoApp.player.pause());
+    // Senza AAC il messaggio non suggerisce formati che il video e il File per DJ non hanno
+    const aac = await page.evaluate(async () => { const A = window.AudioEncoder; window.AudioEncoder = undefined; let m = ""; try { await Encode.aacEncode([new Float32Array(10), new Float32Array(10)]); } catch (e) { m = e.message; } window.AudioEncoder = A; return m; });
+    check(/AAC/.test(aac) && !/WAV o FLAC/.test(aac), `senza AAC un messaggio senza «scegli WAV o FLAC» («${aac}»)`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t11–t16): " + page.errors.join(" | "));
     await page.close();
   }
 

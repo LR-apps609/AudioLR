@@ -102,3 +102,10 @@ test("ricerca senza accenti e maiuscole, anche con titoli NFD", () => {
   assert.strictEqual(titles("ELITE").length, 1);
   assert.strictEqual(titles("e qui").length, 1);
 });
+
+test("dai tester (t15): il passaggio A–B nel nome del file con i decimi e senza «:»", () => {
+  assert.strictEqual(L.passageLabel(0.3, 0.9), "0m00,3s–0m00,9s");
+  assert.strictEqual(L.passageLabel(5, 12.5), "0m05,0s–0m12,5s");
+  assert.strictEqual(L.passageLabel(65, 600), "1m05,0s–10m00,0s");
+  assert.doesNotMatch(L.passageLabel(61.2, 62), /:/);
+});

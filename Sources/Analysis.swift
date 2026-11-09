@@ -53,6 +53,8 @@ enum Analysis {
         }
         let drums = mono { $0 == "drums" }
         let everything = mono { _ in true }
+        // Una canzone muta (sotto i -90 dB): niente tempo né tonalità inventati (prima «182 BPM · Do maggiore»)
+        guard isAudible(everything) else { return nil }
         let rhythm = sources.contains("drums") && energy(drums) > 1e-3 * energy(everything) ? drums : everything
         let harmonic = mono { $0 != "drums" && $0 != "vocals" }
         let key = self.key(energy(harmonic) > 1e-4 * energy(everything) ? harmonic : everything)
@@ -70,6 +72,8 @@ enum Analysis {
     }
 
     private static func energy(_ x: [Float]) -> Float { vDSP.sumOfSquares(x) }
+    /// C'è qualcosa da sentire: la potenza media sopra i -90 dB.
+    static func isAudible(_ x: [Float]) -> Bool { !x.isEmpty && energy(x) / Float(x.count) > 1e-9 }
 
     // MARK: Tempo
 
