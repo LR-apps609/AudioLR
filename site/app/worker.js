@@ -32,6 +32,7 @@ async function download(url, onBytes) {
   let chunks = [], got = 0, lastError = null;
   for (let attempt = 1; attempt <= TRIES; attempt++) {
     if (attempt > 1) { onBytes(0, attempt); await wait(1000 * 2 ** (attempt - 2)); }
+    let moved = false;                      // questo tentativo ha portato dei byte
     const ctl = new AbortController();
     let timer = setTimeout(() => ctl.abort(), STALL_MS);
     try {
@@ -43,8 +44,9 @@ async function download(url, onBytes) {
         const { done, value } = await reader.read();
         clearTimeout(timer); timer = setTimeout(() => ctl.abort(), STALL_MS);
         if (done) break;
-        chunks.push(value); got += value.length;
-        onBytes(value.length, attempt);
+        chunks.push(value); got += value.length; moved = true;
+        // I dati arrivano di nuovo: il messaggio «riprendo…» lascia il posto ai MB scaricati
+        onBytes(value.length, 1);
       }
       clearTimeout(timer);
       return chunks;
@@ -53,6 +55,8 @@ async function download(url, onBytes) {
       // Il motivo in italiano (il browser dice solo «network error» o «Failed to fetch»)
       lastError = new Error(ctl.signal.aborted ? "nessun dato per 30 secondi" : "la connessione si è interrotta");
       if (/errore 4/.test(String(e.message))) throw e;    // 404 e simili: riprovare non serve
+      // Una ripresa riuscita azzera il conto: tante cadute brevi non fanno fallire il download
+      if (moved) attempt = 1;
     }
   }
   throw new Error("non riesco a scaricare il modello dopo 5 tentativi (" + lastError.message + "): controlla la connessione e riprova");
@@ -68,13 +72,20 @@ async function sha256(buf) {
 // nella cache solo dopo il controllo (dimensione e impronta SHA-256): un download rovinato non resta lì.
 async function fetchModel(onProgress, again = false) {
   let res = null;
+  const cache = "caches" in self ? await caches.open(CACHE) : null;
+  const modelUrl = new URL(MODEL, self.location).href;
+  // Senza internet si usa la descrizione del modello salvata con i pezzi: «Funziona anche offline»
+  const offline = async () => (cache ? await cache.match(modelUrl) : undefined);
   for (let attempt = 0; ; attempt++) {
-    try { res = await fetch(MODEL, { cache: "no-cache" }); if (res.ok) break; } catch (e) { /* si riprova */ }
-    if (attempt >= 3) throw new Error("non riesco a raggiungere il sito: controlla la connessione e riprova");
+    try { res = await fetch(MODEL, { cache: "no-cache" }); if (res.ok) { if (cache) try { await cache.put(modelUrl, res.clone()); } catch (e) { /* niente */ } break; } } catch (e) { /* si riprova */ }
+    if (self.navigator && navigator.onLine === false || attempt >= 3) {
+      res = await offline();
+      if (res) break;
+      throw new Error("non riesco a raggiungere il sito: controlla la connessione e riprova");
+    }
     await wait(1000 * 2 ** attempt);
   }
   config = await res.json();
-  const cache = "caches" in self ? await caches.open(CACHE) : null;
   const parts = [], fresh = [];
   let done = 0, retry = 0;
   const total = config.bytes || 1;

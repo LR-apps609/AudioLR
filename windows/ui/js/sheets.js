@@ -271,6 +271,7 @@
 
   // ── Cronologia ──
   function history(list, openEntry, filters = []) {
+    let again = null;
     open(`<h2>Cronologia</h2>
       ${filters.length ? `<p class="muted" style="margin:0">Con i filtri della libreria: ${filters.map(esc).join(" · ")} · ${list.length} ${list.length === 1 ? "canzone" : "canzoni"}</p>` : ""}
       ${list.length ? `<table class="plain"><tr><th>Canzone</th><th>Qualità</th><th>Durata</th><th>BPM · tonalità</th><th>Data</th></tr>
@@ -280,9 +281,10 @@
       sheet.addEventListener("click", (e) => { const r = e.target.closest("[data-h]"); if (r) { close(); openEntry(list[+r.dataset.h]); } });
       sheet.addEventListener("keydown", (e) => { const r = e.target.closest("[data-h]"); if (r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); r.click(); } });
       // Aperta durante una separazione: alla fine si rifà con la canzone nuova (prima restava «Ancora nessuna canzone»)
-      const again = () => { if (!sheet.isConnected) return window.removeEventListener("isolr-libreria", again); window.removeEventListener("isolr-libreria", again); close(); history(IsoApp.ui.libList || IsoApp.ui.library, openEntry, filters); };
+      again = () => { close(); history(IsoApp.ui.libList || IsoApp.ui.library, openEntry, filters); };
       window.addEventListener("isolr-libreria", again);
-    });
+    // Chiusa: l'ascolto si toglie subito (prima restava, con la finestra staccata, fino alla separazione dopo)
+    }, () => { if (again) window.removeEventListener("isolr-libreria", again); });
   }
 
   // ── Confronto con l'originale ──

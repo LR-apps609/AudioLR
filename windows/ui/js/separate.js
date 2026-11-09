@@ -135,13 +135,27 @@
     }
     reset() { if (this.busy) return; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.skipped = []; this.phase = "idle"; this.emit(); }
 
+    /** Finito il lavoro, dopo 2 minuti fermo il lavoratore si chiude e libera la memoria dei modelli (2,5–4 GB
+     *  senza scheda grafica, che prima restavano presi finché l'app era aperta). Un'altra canzone lo riapre. */
+    idleLater() {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(() => {
+        if (this.busy || this.splitting || this.calls) return this.idleLater();
+        if (this.worker) { this.worker.terminate(); this.worker = null; }
+        for (const n of this.loaded || []) Bridge.nativeRelease(n);
+        this.loaded = new Set();
+      }, Job.IDLE_MS);
+    }
     ensureWorker() {
+      clearTimeout(this.idleTimer);
       if (this.worker) return;
       this.worker = new Worker("js/sep-worker.js");
       this.loaded = new Set();
     }
     call(msg, transfer = []) {
       this.ensureWorker();
+      this.calls = (this.calls || 0) + 1;
+      const done = () => { this.calls--; if (!this.calls) this.idleLater(); };
       return new Promise((resolve, reject) => {
         const w = this.worker;
         const on = (e) => {
@@ -160,7 +174,7 @@
         this.abort = (err) => { w.removeEventListener("message", on); reject(err); };
         w.onerror = (e) => { w.removeEventListener("message", on); this.worker = null; reject(new Error("il lavoro si è interrotto (" + (e.message || "memoria insufficiente?") + ")")); };
         w.postMessage(msg, transfer);
-      });
+      }).finally(done);
     }
 
     /** Apre un RoFormer fuori dalla finestra (ONNX Runtime nativo): dice dove calcola, o null se non si può. */
@@ -399,6 +413,7 @@
 
     finishBatch(quiet = false) {
       const b = this.batch; this.batch = null;
+      this.idleLater();
       Bridge.keepAwake(false); Bridge.progress(null);
       if (quiet) return;
       if (!b) return;
@@ -493,6 +508,7 @@
     async open(entry) { if (this.busy) return; this.finishedAt = null; this.preview = null; this.current = entry; this.pending = null; this.phase = "done"; this.emit(); }
   }
   Job.lines = [];
+  Job.IDLE_MS = 120000;
 
   // ── Analisi: tempo, tonalità, battiti, parti e accordi (core/*.js, come Analysis.swift), in un lavoratore ──
   function analyze(tracks, onWorker) {

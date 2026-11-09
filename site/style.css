@@ -58,7 +58,7 @@ nav.top .links a:hover { opacity: 1; color: var(--brass); }
   color: var(--c, var(--brass)); background: color-mix(in srgb, var(--c, var(--brass)) 13%, transparent); border: 1px solid color-mix(in srgb, var(--c, var(--brass)) 28%, transparent); }
 .chip.green { --c: var(--green); }
 
-section { padding-block: 44px; }
+section { padding-block: 44px; scroll-margin-top: 64px; }   /* l'etichetta non resta sotto la barra in alto */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); }
 
 /* La prova nel browser: lo stesso riquadro dell'app */
@@ -98,7 +98,12 @@ section { padding-block: 44px; }
   /* In alto restano solo i link essenziali, su una riga */
   nav.top .links { gap: 14px; flex-wrap: nowrap; }
   nav.top .links a[href="#confronto"], nav.top .links a[href="#privacy"] { display: none; }
+  /* «Altri strumenti» va a capo invece di diventare «Altri strum…» */
+  .stem b { white-space: normal; line-height: 1.15; }
 }
+/* Un nome di file lungo senza spazi va a capo invece di allargare la pagina */
+#song, #title { overflow-wrap: anywhere; }
+.working .row > div, #results .row > div { min-width: 0; }
 
 /* Confronto sito / app */
 .compare { overflow-x: auto; }
@@ -106,6 +111,12 @@ table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15p
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 td.yes { color: var(--green); font-weight: 700; } td.no { color: var(--muted); }
+@media (max-width: 640px) {
+  /* Il confronto sta nella scheda: le colonne vanno a capo, niente colonna dell'app tagliata a metà */
+  table { min-width: 0; font-size: 13.5px; }
+  th, td { padding: 9px 7px; }
+  th { letter-spacing: .04em; }
+}
 
 /* Privacy */
 .privacy { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 20px; }

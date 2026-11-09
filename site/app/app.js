@@ -10,6 +10,8 @@
   const DESKTOP = "__TAURI_INTERNALS__" in window || location.protocol === "tauri:" || location.hostname === "tauri.localhost";
   if (DESKTOP) document.documentElement.classList.add("desktop");
   const MAX_SECONDS = DESKTOP ? 1800 : 600;
+  // Senza internet, dopo il primo uso: la pagina e il motore dalla copia salvata (sw.js). Non nell'app per Windows
+  if (!DESKTOP && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   // Barre «in attesa», come nell'app
   const bars = $("bars"), stemOrder = ["--voice", "--drums", "--bass", "--other"];
@@ -57,7 +59,14 @@
           resolve(m);
         } else if (m.type === "progress") onProgress(m.progress);
         else if (m.type === "done") onDone(m);
-        else if (m.type === "error") { if (m.message === "annullato") show("drop"); else fail("Non ci sono riuscito: " + m.message); reject(new Error(m.message)); }
+        else if (m.type === "error") {
+          if (m.message === "annullato") show("drop"); else fail("Non ci sono riuscito: " + m.message);
+          // Si può riprovare: la prossima canzone riparte da un lavoratore nuovo (prima restava la promessa
+          // già fallita e la pagina si fermava per sempre su «Leggo la canzone… 0%»)
+          if (worker) { worker.terminate(); worker = null; }
+          ready = null;
+          reject(new Error(m.message));
+        }
       };
       worker.onerror = (e) => { fail("Il browser ha interrotto il lavoro: " + (e.message || "memoria insufficiente?")); ready = null; };
       worker.postMessage({ type: "load", forceWasm });
@@ -77,6 +86,8 @@
 
   async function handle(file) {
     if (!file) return;
+    // Questa canzone vale finché non arriva un «Annulla» o un'altra canzone (anche mentre si decodifica)
+    const mine = ++generation;
     songName = file.name.replace(/\.[^.]+$/, "");
     show("working");
     $("song").textContent = songName;
@@ -87,13 +98,13 @@
       const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
       audio = await ctx.decodeAudioData(await file.arrayBuffer());
       ctx.close();
-    } catch { return fail("Questo file non si apre: prova con un MP3, M4A, WAV o FLAC."); }
+    } catch { return mine === generation ? fail("Questo file non si apre: prova con un MP3, M4A, WAV o FLAC.") : undefined; }
+    if (mine !== generation) return;               // annullata mentre si leggeva la canzone
     if (audio.duration > MAX_SECONDS) return fail(DESKTOP ? "Per ora fino a 30 minuti a canzone." : "Nel browser fino a 10 minuti: per le canzoni più lunghe usa l'app.");
     if (audio.duration < 1) return fail("La canzone è troppo corta (almeno 1 secondo).");
     const left = new Float32Array(audio.getChannelData(0));
     const right = new Float32Array(audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0));
-    const mine = generation;
-    try { await startWorker(); } catch (e) { return; }
+    try { await startWorker(); } catch (e) { if (mine === generation && !$("working").hidden) fail("Non ci sono riuscito: " + e.message); return; }
     if (!worker || mine !== generation) return; // annullata mentre si preparava il modello
     $("step").textContent = "Separo voce e strumenti…";
     setProgress(0);

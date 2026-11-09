@@ -70,6 +70,10 @@ jobs:
           sleep 2
           NODE_PATH=/tmp/pw/node_modules node site/test/browser.test.js http://127.0.0.1:8080/ | tee browser.log
           echo "::notice::$(grep -E 'Tracce|WAV' browser.log | tr '\n' ' ')"
+      - name: Prove di regressione del sito (bug dei tester dell'08/11)
+        run: |
+          node site/test/download.test.js
+          NODE_PATH=/tmp/pw/node_modules node site/test/regressioni.test.js http://127.0.0.1:8080/
       - name: Schermata del sito
         if: always()
         env:

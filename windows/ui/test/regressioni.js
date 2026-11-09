@@ -338,6 +338,25 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     // Senza AAC il messaggio non suggerisce formati che il video e il File per DJ non hanno
     const aac = await page.evaluate(async () => { const A = window.AudioEncoder; window.AudioEncoder = undefined; let m = ""; try { await Encode.aacEncode([new Float32Array(10), new Float32Array(10)]); } catch (e) { m = e.message; } window.AudioEncoder = A; return m; });
     check(/AAC/.test(aac) && !/WAV o FLAC/.test(aac), `senza AAC un messaggio senza «scegli WAV o FLAC» («${aac}»)`);
+    // La Cronologia chiusa non lascia ascolti attaccati (prima uno per ogni apertura, fino alla separazione dopo)
+    const hist = await page.evaluate(async () => {
+      let n = 0; const add = window.addEventListener, rem = window.removeEventListener;
+      window.addEventListener = function (t, f, o) { if (t === "isolr-libreria") n++; return add.call(this, t, f, o); };
+      window.removeEventListener = function (t, f, o) { if (t === "isolr-libreria") n--; return rem.call(this, t, f, o); };
+      for (let i = 0; i < 5; i++) { window.Sheets.history(IsoApp.ui.library, () => {}); document.querySelector("#overlay [data-close]").click(); }
+      window.addEventListener = add; window.removeEventListener = rem;
+      return n;
+    });
+    check(hist === 0, `5 Cronologie aperte e chiuse: nessun ascolto rimasto (${hist})`);
+    // Il lavoratore della separazione si chiude da solo quando resta fermo (libera la memoria dei modelli)
+    const idle = await page.evaluate(async () => {
+      const J = IsoApp.job, before = J.constructor.IDLE_MS;
+      J.constructor.IDLE_MS = 100; J.ensureWorker(); J.idleLater();
+      await new Promise((x) => setTimeout(x, 400));
+      J.constructor.IDLE_MS = before;
+      return J.worker === null;
+    });
+    check(idle, "il lavoratore fermo si chiude da solo e libera la memoria");
     check(page.errors.length === 0, "nessun errore nella pagina (t11–t16): " + page.errors.join(" | "));
     await page.close();
   }
