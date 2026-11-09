@@ -156,12 +156,18 @@ enum Slicer {
 
     /// Come caricare le fette nei programmi musicali.
     static func readme(title: String, stem: String, count: Int, bpm: Double?) -> String {
-        [
+        // In tre parti con il tipo scritto: tutto in una espressione il compilatore non ce la faceva
+        let tempo: String = bpm.map { " (\(Int($0.rounded())) BPM)" } ?? ""
+        var lines: [String] = [
             "\(title) – Slice \(stem)",
             "",
-            "\(count) fette (Slice 01.wav … \(fileName(count - 1))) e un file MIDI che le suona nel ritmo originale\(bpm.map { " (\(Int($0.rounded())) BPM)" } ?? "").",
+            "\(count) fette (Slice 01.wav … \(fileName(count - 1))) e un file MIDI che le suona nel ritmo originale\(tempo).",
             "La fetta 1 è la nota 36 (Do1), la fetta 2 la nota 37, e così via: come i pad di un Drum Rack.",
-        ] + (count > midiMax ? ["Il MIDI suona le prime \(midiMax) fette (da Do1 a Sol9, l'ultima nota MIDI): le altre \(count - midiMax) sono solo nei file WAV. Con una sensibilità più bassa le fette sono di meno."] : []) + [
+        ]
+        if count > midiMax {
+            lines.append("Il MIDI suona le prime \(midiMax) fette (da Do1 a Sol9, l'ultima nota MIDI): le altre \(count - midiMax) sono solo nei file WAV. Con una sensibilità più bassa le fette sono di meno.")
+        }
+        let guide: [String] = [
             "",
             "Ableton Live",
             "1. Crea una traccia MIDI con un Drum Rack vuoto.",
@@ -174,7 +180,8 @@ enum Slicer {
             "3. Trascina il file .mid nella traccia.",
             "",
             "Creato con IsoLR.",
-        ].joined(separator: "\n")
+        ]
+        return (lines + guide).joined(separator: "\n")
     }
 
     /// Esporta in una cartella nuova «`title` – Slice `stem`» accanto alle tracce: fette WAV, MIDI e LEGGIMI.
