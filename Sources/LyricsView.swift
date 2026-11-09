@@ -26,6 +26,8 @@ struct LyricsView: View {
     /// Intel Whisper ci mette minuti e si vedeva solo una rotellina)
     @State private var started = Date()
     @State private var work: Task<Void, Never>?
+    /// Cresce a ogni trascrizione e a ogni «Annulla»: le frasi di una trascrizione annullata non tornano a schermo
+    @State private var run = 0
     @State private var showVideo = false
     @AppStorage("lyricsLanguage") private var language = ""
 
@@ -49,6 +51,9 @@ struct LyricsView: View {
         .frame(minWidth: 760, idealWidth: 860, minHeight: 560, idealHeight: 640)
         .background(Theme.background)
         .onAppear(perform: load)
+        // Finestra chiusa (anche con Esc) mentre trascrive: Whisper si ferma. Prima restava acceso in sottofondo
+        // e riaprendo se ne poteva avviare un secondo insieme
+        .onDisappear { if working { cancelTranscription() } }
         .sheet(isPresented: $showVideo) {
             if let lyr = lyrics { KaraokeVideoSheet(lyrics: lyr) { showVideo = false }.environmentObject(job) }
         }
@@ -184,7 +189,8 @@ struct LyricsView: View {
                 .help("Il testo come sottotitoli, per i programmi video")
             Button("Video karaoke…") { mixer.pause(); showVideo = true }.disabled(lines.isEmpty)
                 .help("Un video con la base e il testo che si illumina, per YouTube o Instagram")
-            Button("Chiudi") { onClose() }.keyboardShortcut(.cancelAction)
+            // Mentre trascrive Esc vale per «Annulla» (prima tutti e due i pulsanti avevano Esc)
+            Button("Chiudi") { onClose() }.keyboardShortcut(working ? nil : KeyboardShortcut.cancelAction)
         }
     }
 
@@ -229,12 +235,15 @@ struct LyricsView: View {
         let lang = language.isEmpty ? nil : language
         let folder = job.folder
         started = Date()
+        run += 1
+        let mine = run
         work = Task {
             do {
-                try await LyricsEngine.prepare { p in Task { @MainActor in progress = p } }
-                await MainActor.run { progress = nil }
+                try await LyricsEngine.prepare { p in Task { @MainActor in if run == mine { progress = p } } }
+                try Task.checkCancellation()
+                await MainActor.run { if run == mine { progress = nil } }
                 let result = try await LyricsEngine.transcribe(voice: v.url, language: lang) { s in
-                    Task { @MainActor in status = s }
+                    Task { @MainActor in if run == mine { status = s } }
                 }
                 if Task.isCancelled { return }
                 await MainActor.run {
@@ -257,6 +266,7 @@ struct LyricsView: View {
     }
 
     private func cancelTranscription() {
+        run += 1
         work?.cancel()
         work = nil
         working = false

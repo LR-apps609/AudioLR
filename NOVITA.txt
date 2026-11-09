@@ -1,4 +1,6 @@
 Novità della 0.41.0 (in preparazione):
+• Testo sincronizzato: chiudendo la finestra (anche con Esc) mentre trascrive, Whisper si ferma (prima restava acceso in sottofondo e se ne poteva avviare un secondo); dopo «Annulla» resta scritto «Trascrizione annullata»
+• Mac Intel: «Annulla» durante la prova del motore la ferma subito, invece di far aspettare minuti la separazione dopo; «Fermo il lavoro di prima…» compare mentre si aspetta, e sui Mac Intel niente frase sul Neural Engine che non hanno
 • Piano roll: dopo «Ripristina» con «Annulla» tornano le correzioni di prima (prima si perdevano)
 • Slice: oltre 92 fette il MIDI suona le prime 92 (prima le altre finivano tutte sulla nota 127, sullo stesso pad) e il LEGGIMI lo dice
 • Una canzone muta non riceve più tempo e tonalità inventati; i progetti per DAW di una canzone troppo corta per l'analisi non scrivono «120 BPM» come se fosse misurato

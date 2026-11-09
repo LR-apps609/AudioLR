@@ -496,7 +496,10 @@ final class SeparationJob: ObservableObject {
         // fino a un minuto. La nuova separazione aspetta che finisca, invece di farlo andare insieme (bug b-4)
         let before = task
         task = Task.detached(priority: .userInitiated) { [weak self] in
-            if await SeparationJob.settle(before) { await self?.note(cancel, "Fermo il lavoro di prima…") }
+            // La frase compare mentre si aspetta (prima solo quando l'attesa era già finita)
+            let waiting = Task { try? await Task.sleep(nanoseconds: 300_000_000); if !Task.isCancelled { await self?.note(cancel, "Fermo il lavoro di prima…") } }
+            _ = await SeparationJob.settle(before)
+            waiting.cancel()
             if cancel.isSet { return }
             // Cronometro delle fasi
             var times: [Timing] = []
@@ -645,14 +648,14 @@ final class SeparationJob: ObservableObject {
                 }
                 for v in [voiceName, swName].compactMap({ $0 }) where EngineChoice.current(v) == nil {
                     await self?.set(cancel, .tuning)
-                    EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix, label: v == swName ? "degli strumenti" : "della voce", say: say), for: v)
+                    EngineChoice.store(try await SeparationJob.tuneRoFormer(v, mix: mix, label: v == swName ? "degli strumenti" : "della voce", say: say, cancelled: { cancel.isSet }), for: v)
                     if cancel.isSet { throw CancellationError() }
                 }
                 // La seconda voce: se è già quella di riserva in uso, o la prova del motore non riesce, si fa senza
                 if secondName == voiceName { secondName = nil }
                 if let s = secondName, EngineChoice.current(s) == nil {
                     await self?.set(cancel, .tuning)
-                    do { EngineChoice.store(try await SeparationJob.tuneRoFormer(s, mix: mix, label: "della seconda voce", say: say), for: s) } catch {
+                    do { EngineChoice.store(try await SeparationJob.tuneRoFormer(s, mix: mix, label: "della seconda voce", say: say, cancelled: { cancel.isSet }), for: s) } catch {
                         if cancel.isSet { throw CancellationError() }
                         secondName = nil
                     }
@@ -1050,13 +1053,14 @@ final class SeparationJob: ObservableObject {
 
     /// Come `tune`, per i modelli RoFormer: un pezzo dal centro della canzone su Neural Engine e su grafica.
     nonisolated static func tuneRoFormer(_ name: String, mix: [[Float]], label: String = "",
-                                         say: @escaping (String) async -> Void = { _ in }) async throws -> EngineChoice.Decision {
+                                         say: @escaping (String) async -> Void = { _ in },
+                                         cancelled: @escaping @Sendable () -> Bool = { false }) async throws -> EngineChoice.Decision {
         let what = label.isEmpty ? "il modello" : "il modello \(label)"
         if !hasNeuralEngine {
             let chunk = try await ModelStore.shared.roformer(name, units: .cpuOnly) { _ in }.config.chunk
             let start = max(0, (mix[0].count - chunk) / 2)
             let piece = (0..<2).map { c in (0..<chunk).map { i in start + i < mix[c].count ? mix[c][start + i] : 0 } }
-            return try await race(name, what: what, say: say,
+            return try await race(name, what: what, say: say, cancelled: cancelled,
                                   open: { u in _ = try await ModelStore.shared.roformer(name, units: u) { _ in } },
                                   run: { u in _ = try await ModelStore.shared.roformer(name, units: u) { _ in }.runChunkAll(piece) })
         }
@@ -1133,24 +1137,37 @@ final class SeparationJob: ObservableObject {
     /// programmi) e, se è vicina, un secondo giro. Vince il più veloce: le tracce sono le stesse (55 dB di accordo).
     /// Se la grafica non ce la fa in tempo il suo calcolo finisce da solo in sottofondo e la sua copia si libera.
     nonisolated static func race(_ name: String, what: String, say: @escaping (String) async -> Void,
+                                 cancelled: @escaping @Sendable () -> Bool = { false },
                                  open: @escaping (MLComputeUnits) async throws -> Void,
                                  run: @escaping (MLComputeUnits) async throws -> Void) async throws -> EngineChoice.Decision {
+        // «Annulla» ferma la gara tra un passo e l'altro e anche mentre aspetta la grafica (prima andava fino in fondo
+        // e la separazione dopo aspettava minuti in silenzio)
+        func stop() throws { if cancelled() { throw CancellationError() } }
+        // Un'attesa interrotta da «Annulla» lo dice; un tempo scaduto o un errore della grafica valgono «troppo lenta»
+        func timed(_ limit: Double, _ op: @escaping () async throws -> Void) async throws -> Bool {
+            do { return try await withTimeout(limit, cancelled: cancelled, op) != nil }
+            catch is CancellationError { throw CancellationError() }
+            catch { return false }
+        }
         await say("Prova del motore: \(what) sul processore…")
         try await open(.cpuOnly)
+        try stop()
         let c0 = Date()
         try await run(.cpuOnly)
         let cpu = Date().timeIntervalSince(c0)
+        try stop()
         var gpu: Double?
-        await say("Prova del motore: \(what) sulla grafica (al massimo \(Int(2 * cpu + 0.5)) secondi)…")
-        if (try? await withTimeout(aneLimit, { try await open(.cpuAndGPU) })) != nil {
+        // Niente «al massimo N secondi»: la prima apertura sulla grafica può durare di più (il Mac prepara i suoi programmi)
+        await say("Prova del motore: \(what) sulla grafica, poi IsoLR usa il più veloce…")
+        if try await timed(aneLimit, { try await open(.cpuAndGPU) }) {
             let g0 = Date()
-            if (try? await withTimeout(max(2 * cpu, 5), { try await run(.cpuAndGPU) })) != nil {
+            if try await timed(max(2 * cpu, 5), { try await run(.cpuAndGPU) }) {
                 let first = Date().timeIntervalSince(g0)
                 if first < cpu * 0.9 {
                     gpu = first
                 } else {
                     let g1 = Date()
-                    if (try? await withTimeout(cpu, { try await run(.cpuAndGPU) })) != nil { gpu = Date().timeIntervalSince(g1) }
+                    if try await timed(cpu, { try await run(.cpuAndGPU) }) { gpu = Date().timeIntervalSince(g1) }
                 }
             }
         } else {

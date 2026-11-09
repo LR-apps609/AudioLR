@@ -1237,7 +1237,11 @@ struct ContentView: View {
             : job.downloadNote ?? "Solo la prima volta, \(job.quality.downloadSize). Poi funziona anche senza internet."
         case .tuning, .reading:
             if let d = job.stepDetail { return d + " · " + formatTime(Date().timeIntervalSince(job.stepStarted)) }
-            return "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica."
+            // La frase del Neural Engine solo dove c'è, e solo mentre si prova il motore (non mentre si legge la canzone)
+            if job.phase == .reading { return "Apro la canzone e la preparo per i modelli." }
+            return SeparationJob.hasNeuralEngine
+                ? "Solo la prima volta: il Neural Engine adatta i modelli a questo Mac e li confronto con la grafica."
+                : "Solo la prima volta: provo il processore e la grafica di questo Mac e uso il più veloce."
         case .separating(let p):
             // Con la stima resta anche il tempo che scorre: sui Mac lenti (Intel) un pezzo della canzone dura
             // minuti, e con la sola stima la finestra sembrava ferma

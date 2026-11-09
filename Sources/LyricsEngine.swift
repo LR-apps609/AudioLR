@@ -84,8 +84,11 @@ enum LyricsEngine {
 
     /// Trascrive la voce: parole con i tempi. `language` nil = la riconosce da sola.
     static func transcribe(voice: URL, language: String?, progress: @escaping (String) -> Void) async throws -> Lyrics {
+        // «Annulla» si sente tra un passo e l'altro (prima il lavoro andava avanti fino in fondo)
+        try Task.checkCancellation()
         progress("Leggo la voce…")
         let audio = mono16k(try AudioIO.read(voice))
+        try Task.checkCancellation()
         progress("Preparo il modello del testo…")
         let tokenizer = folder.appendingPathComponent("tokenizer", isDirectory: true)
         let config = WhisperKitConfig(model: "openai_whisper-small",
@@ -93,11 +96,13 @@ enum LyricsEngine {
                                       tokenizerFolder: tokenizer,
                                       verbose: false, logLevel: .error, prewarm: false, load: true, download: false)
         let kit = try await WhisperKit(config)
+        try Task.checkCancellation()
         progress("Ascolto la voce…")
         var options = DecodingOptions(task: .transcribe, language: language, temperature: 0,
                                       detectLanguage: language == nil, wordTimestamps: true)
         options.chunkingStrategy = .vad
         let results: [TranscriptionResult] = try await kit.transcribe(audioArray: audio, decodeOptions: options)
+        try Task.checkCancellation()
         var raw: [LyricWord] = []
         for r in results {
             for s in r.segments {
