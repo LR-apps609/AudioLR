@@ -4,6 +4,8 @@
 // La canzone non lascia mai il computer: l'unico indirizzo raggiungibile è la pagina dei rilasci su GitHub.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod nomi;
+use nomi::clean_name;
 mod finestra;
 mod salute;
 mod nativo;
@@ -56,11 +58,6 @@ fn check(app: &AppHandle, allowed: &Allowed, path: &Path) -> Result<(), String> 
     if ok { Ok(()) } else { Err("IsoLR può scrivere solo in Musica › IsoLR o dove scegli tu".into()) }
 }
 
-fn clean_name(s: &str) -> String {
-    let t: String = s.chars().map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '-' } else { c }).collect();
-    let t = t.trim().trim_end_matches('.').to_string();
-    if t.is_empty() { "Canzone".into() } else { t.chars().take(120).collect() }
-}
 
 #[tauri::command]
 fn app_version(app: AppHandle) -> String {
@@ -99,8 +96,14 @@ fn write_file(app: AppHandle, allowed: State<Allowed>, request: tauri::ipc::Requ
     }
     // Prima un file provvisorio, poi al suo posto: un'interruzione non lascia un file a metà
     let tmp = path.with_extension("parziale");
-    std::fs::write(&tmp, bytes).map_err(|e| format!("non riesco a scrivere {}: {e}", path.display()))?;
-    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    // Se la scrittura non riesce (disco pieno) il provvisorio a metà si toglie: prima restava, centinaia di MB
+    let done = std::fs::write(&tmp, bytes)
+        .map_err(|e| format!("non riesco a scrivere {}: {e}", path.display()))
+        .and_then(|_| std::fs::rename(&tmp, &path).map_err(|e| e.to_string()));
+    if done.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    done
 }
 
 #[tauri::command]
@@ -876,6 +879,8 @@ fn inbox() -> PathBuf {
 
 fn leave_for_window(files: &[String]) {
     if files.is_empty() {
+        // IsoLR riaperta dal menu Start o dall'icona: la finestra già aperta torna davanti (prima non succedeva niente)
+        let _ = std::fs::write(inbox().join("davanti"), b"");
         return;
     }
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(inbox().join("da-aprire.txt")) {
@@ -887,7 +892,10 @@ fn leave_for_window(files: &[String]) {
 
 /// Le canzoni arrivate dal clic destro (e mai prese): si possono leggere, poi la lista si svuota.
 #[tauri::command]
-fn take_opened(allowed: State<'_, Allowed>) -> Vec<String> {
+fn take_opened(app: AppHandle, allowed: State<'_, Allowed>) -> Vec<String> {
+    if std::fs::remove_file(inbox().join("davanti")).is_ok() {
+        bring_to_front(app);
+    }
     let path = inbox().join("da-aprire.txt");
     let Ok(text) = std::fs::read_to_string(&path) else { return vec![] };
     let _ = std::fs::remove_file(&path);

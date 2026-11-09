@@ -25,6 +25,8 @@ jobs:
           node-version: "22"
       - name: Calcoli (battiti, accordi, confronto, spartito…)
         run: node --test windows/ui/core/test/*.test.js
+      - name: Nomi delle cartelle (Rust, senza compilare l'app)
+        run: rustc --edition 2021 --test windows/src-tauri/src/nomi.rs -o /tmp/nomi-test && /tmp/nomi-test
       - name: Pagine (con il modello Veloce)
         env:
           GH_TOKEN: ${{ github.token }}

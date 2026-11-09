@@ -112,7 +112,7 @@
     get busy() { return this.phase === "working"; }
 
     /** Canzoni trascinate: la prima diventa «pronta» (si sceglie la qualità), le altre in coda se si lavora già. */
-    add(files) {
+    add(files, { keep = false } = {}) {
       const all = [...files].filter(Boolean), list = all.filter((f) => f.size > 0);
       // Un file vuoto (0 byte) prima veniva scartato in silenzio: sembrava che il trascinamento non funzionasse
       const empty = all.filter((f) => !f.size);
@@ -122,7 +122,7 @@
       if (!list.length) return;
       // Niente in lavorazione e nessuna pronta, ma una coda rimasta: la prima della coda torna pronta
       if (!this.busy && !this.pending && this.queue.length) { this.pending = this.queue.shift(); this.phase = "pending"; this.error = null; }
-      else if (!this.busy && !this.queue.length) {
+      else if (!this.busy && !this.queue.length && !(keep && this.pending)) {
         this.pending = list.shift(); this.phase = "pending"; this.error = null;
       }
       for (const f of list) this.queue.push(f);
@@ -305,7 +305,9 @@
       const file = this.pending;
       this.preview = opts.preview ? { file, quality, start: 0 } : null;
       this.pending = null;
-      this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.title = file.name.replace(/\.[^.]+$/, "");
+      this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null;
+      // Al massimo 120 caratteri, come la cartella: con i titoli lunghi (YouTube) i nomi dei file superavano i 255 di Windows
+      this.title = file.name.replace(/\.[^.]+$/, "").slice(0, 120).replace(/[.\s]+$/, "") || "Canzone";
       this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
       // Le scelte delle Impostazioni valgono dall'inizio di ogni canzone: la schermata mostra le tracce che nasceranno davvero
       this.makeInstrumental = Prefs.get("makeInstrumental", true); this.splitGuitarPiano = Prefs.get("splitGuitarPiano", true);
@@ -549,6 +551,7 @@
     const gain = top > 0.98 ? 0.98 / top : 1;
     const total = Object.keys(tracks).filter((k) => k !== "instrumental").reduce((s, k) => s + m[k].energy, 0) || 1;
     const stems = [];
+    try {
     for (const k of ORDER.filter((x) => tracks[x])) {
       await stop();
       const ext = Encode.FORMATS[format].ext;
@@ -566,6 +569,12 @@
       source: info.source, analysis: info.analysis, stems };
     await Bridge.writeText(`${folder}/isolr.json`, JSON.stringify(meta));
     return { folder, meta };
+    } catch (e) {
+      // Non riuscito (disco pieno…): la cartella a metà si toglie, come con «Annulla». Prima restava, invisibile
+      // in libreria, e il nuovo tentativo creava «Titolo 2»
+      if (!into && String(e.message) !== "annullato") await Bridge.remove(folder).catch(() => {});
+      throw e;
+    }
   }
 
   /** Il nome del motore per la scheda della canzone. Il calcolo nativo dice già dove ha lavorato
@@ -643,5 +652,5 @@
     } catch {}
   }
 
-  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, loadInfo, library, decode, measure, saveVersion };
+  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, loadInfo, library, decode, measure, save, saveVersion };
 })();

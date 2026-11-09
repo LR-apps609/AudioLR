@@ -1,4 +1,8 @@
 Novità di IsoLR per Windows 0.16.0 (in preparazione):
+• Clic destro su più canzoni › «Separa con IsoLR»: la prima non viene più sostituita dalle altre, e un file che non si apre (aperto in un altro programma, solo nel cloud) dà un avviso invece di far perdere tutte le canzoni
+• Riaprendo IsoLR dal menu Start o dall'icona quando è già aperta, la finestra torna davanti (prima non succedeva niente)
+• Con il disco pieno durante il salvataggio la cartella a metà e il file provvisorio si tolgono (prima restavano, invisibili, anche centinaia di MB); i titoli lunghissimi si accorciano a 120 caratteri anche nei nomi dei file
+• Se l'antivirus aveva bloccato il motore di Massima e Studio, dopo averlo sbloccato basta premere di nuovo Separa: non serve più riavviare IsoLR
 • Finita la separazione, dopo 2 minuti fermo IsoLR libera la memoria dei modelli (senza scheda grafica adatta restavano presi 2,5–4 GB finché l'app era aperta); la Cronologia chiusa non resta più in memoria
 • Coda delle canzoni: i file rilasciati sulla zona tratteggiata entrano una volta sola (prima due, con il doppio delle separazioni e dei doppioni in libreria); «Togli» sulla canzone pronta fa passare la prossima della coda invece di bloccarla; una canzone della coda che non riesce resta scritta, con il perché; tra una canzone e l'altra niente più avviso «si apre alla fine…»; togliendo la base o le parti di chitarra e piano durante il lavoro, le schede mostrano le tracce che nascono davvero
 • Corretto: una canzone aperta dalla libreria o dalla Cronologia poteva caricare basso e altri strumenti due volte: si sentivano e si esportavano al doppio del volume

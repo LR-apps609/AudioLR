@@ -20,7 +20,9 @@ pub struct Net {
 }
 
 static NETS: OnceLock<Mutex<HashMap<String, Net>>> = OnceLock::new();
-static INIT: OnceLock<Result<(), String>> = OnceLock::new();
+/// Riuscito una volta, vale per sempre; un errore no: dopo aver sbloccato la DLL (antivirus, quarantena) il
+/// Separa dopo riprova, senza riavviare IsoLR.
+static INIT: Mutex<bool> = Mutex::new(false);
 /// Perché la scheda grafica non ha aperto l'ultimo modello (per il registro e «Segnala»).
 static GPU_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
@@ -54,18 +56,21 @@ pub fn cancel_all() {
 
 /// Carica onnxruntime.dll (una volta sola).
 pub fn init(dll: &Path) -> Result<(), String> {
-    INIT.get_or_init(|| {
-        if !dll.exists() {
-            return Err(format!("manca {}", dll.display()));
-        }
-        // Prima la libreria da sola: se le manca un componente di Windows lo si dice (ort invece si interrompe
-        // con un «panic», e la finestra aspettava per sempre «Preparo il modello…»)
-        probe(dll)?;
-        let path = dll.to_string_lossy().to_string();
-        std::panic::catch_unwind(move || ort::init_from(path).with_name("IsoLR").commit().map(|_| ()).map_err(|e| e.to_string()))
-            .unwrap_or_else(|_| Err("il motore di calcolo (onnxruntime.dll) non si avvia su questo PC".into()))
-    })
-    .clone()
+    let mut ok = INIT.lock().unwrap_or_else(|e| e.into_inner());
+    if *ok {
+        return Ok(());
+    }
+    if !dll.exists() {
+        return Err(format!("manca {}", dll.display()));
+    }
+    // Prima la libreria da sola: se le manca un componente di Windows lo si dice (ort invece si interrompe
+    // con un «panic», e la finestra aspettava per sempre «Preparo il modello…»)
+    probe(dll)?;
+    let path = dll.to_string_lossy().to_string();
+    let r = std::panic::catch_unwind(move || ort::init_from(path).with_name("IsoLR").commit().map(|_| ()).map_err(|e| e.to_string()))
+        .unwrap_or_else(|_| Err("il motore di calcolo (onnxruntime.dll) non si avvia su questo PC".into()));
+    *ok = r.is_ok();
+    r
 }
 
 /// Carica onnxruntime.dll con Windows, per avere un errore chiaro se non si può (componente mancante, file

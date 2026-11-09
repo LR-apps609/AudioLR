@@ -357,6 +357,44 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
       return J.worker === null;
     });
     check(idle, "il lavoratore fermo si chiude da solo e libera la memoria");
+    // Dal tester t20 — clic destro su più canzoni, a giri e con un file bloccato: nessuna si perde
+    const right = await page.evaluate(async () => {
+      IsoApp.job.reset();
+      const rounds = [["C:/m/Uno.wav"], ["C:/m/Due.wav", "C:/m/Bloccata.wav", "C:/m/Tre.wav"]];
+      const take = Bridge.takeOpened, read = Bridge.readFile, toasts = [];
+      Bridge.takeOpened = async () => rounds.shift() || [];
+      Bridge.readFile = async (p) => { if (/Bloccata/.test(p)) throw new Error("os error 32"); if (/^C:\/m\//.test(p)) return new Uint8Array(100); return read(p); };
+      const obs = new MutationObserver(() => { const t = document.querySelector(".toast"); if (t) toasts.push(t.textContent); });
+      obs.observe(document.body, { subtree: true, childList: true, characterData: true });
+      await new Promise((x) => setTimeout(x, 3600));
+      obs.disconnect(); Bridge.takeOpened = take; Bridge.readFile = read;
+      return { pending: IsoApp.job.pending && IsoApp.job.pending.name, queue: IsoApp.job.queue.map((f) => f.name), toast: toasts.some((t) => /Bloccata/.test(t)) };
+    });
+    check(right.pending === "Uno.wav" && right.queue.join(",") === "Due.wav,Tre.wav" && right.toast,
+      `clic destro a giri con un file bloccato: Uno pronta, Due e Tre in coda, avviso per Bloccata (${JSON.stringify(right)})`);
+    await page.evaluate(() => IsoApp.job.reset());
+    // Disco pieno mentre salva: la cartella a metà si toglie (prima restava, e il nuovo tentativo faceva «Titolo 2»)
+    const full = await page.evaluate(async () => {
+      const write = Bridge.writeFile, removed = [];
+      let n = 0;
+      Bridge.writeFile = async (p, b) => { if (++n === 3) throw new Error("Spazio su disco insufficiente (os error 112)"); return write(p, b); };
+      const rem = Bridge.remove; Bridge.remove = async (p) => { removed.push(p); return rem(p); };
+      const ch = [new Float32Array(44100), new Float32Array(44100)];
+      let err = "";
+      try { await Separation.save("Disco pieno", { vocals: ch, drums: ch, bass: ch, other: ch }, { quality: "fast", seconds: 1, took: 1 }); } catch (e) { err = e.message; }
+      Bridge.writeFile = write; Bridge.remove = rem;
+      return { err, removed: removed.some((p) => /Disco pieno$/.test(p)) };
+    });
+    check(/112/.test(full.err) && full.removed, `disco pieno mentre salva: la cartella a metà si toglie (${JSON.stringify(full)})`);
+    // Titoli lunghissimi: il titolo si accorcia a 120 caratteri come la cartella, senza punto in fondo
+    const long = await page.evaluate(() => {
+      const J = IsoApp.job; J.reset();
+      J.add([new File([new Uint8Array(10)], "x".repeat(118) + ". e poi tanto altro titolo ancora.mp3")]);
+      const t = J.pending.name.replace(/\.[^.]+$/, "").slice(0, 120).replace(/[.\s]+$/, "");
+      J.reset();
+      return t.length <= 120 && !/[.\s]$/.test(t);
+    });
+    check(long, "un titolo lunghissimo si accorcia a 120 caratteri senza punto in fondo");
     check(page.errors.length === 0, "nessun errore nella pagina (t11–t16): " + page.errors.join(" | "));
     await page.close();
   }

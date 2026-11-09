@@ -853,13 +853,20 @@
   });
   // Clic destro › «Separa con IsoLR» in Esplora file: all'avvio e mentre IsoLR è aperta
   async function takeOpened() {
-    try {
-      const list = await Bridge.takeOpened();
-      if (!list.length) return;
-      const files = [];
-      for (const p of list) files.push(new File([await Bridge.readFile(p)], p.split(/[\\/]/).pop()));
-      player.stop(); job.add(files); Bridge.focus();
-    } catch (e) { /* un file sparito nel frattempo: niente */ }
+    let list = [];
+    try { list = await Bridge.takeOpened(); } catch (e) { return; }
+    if (!list.length) return;
+    // Un file alla volta: uno illeggibile (bloccato da un altro programma, solo nel cloud) non fa perdere gli altri
+    const files = [], bad = [];
+    for (const p of list) {
+      const name = p.split(/[\\/]/).pop();
+      try { files.push(new File([await Bridge.readFile(p)], name)); } catch (e) { bad.push(name); }
+    }
+    if (bad.length) toast(`${bad.length === 1 ? `«${bad[0]}» non si apre` : `${bad.length} canzoni non si aprono`}: forse è aperta in un altro programma o è solo nel cloud`);
+    if (!files.length) return;
+    // keep: le canzoni del clic destro arrivano a giri; quella pronta non viene sostituita, le nuove vanno in coda
+    if (!job.busy && !job.pending) player.stop();
+    job.add(files, { keep: true }); Bridge.focus();
   }
   takeOpened();
   setInterval(takeOpened, 1500);
