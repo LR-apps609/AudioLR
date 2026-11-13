@@ -160,6 +160,13 @@
         ? `«${empty[0].name}» è vuoto (0 byte): non c'è niente da separare`
         : `${empty.length} file vuoti (0 byte) lasciati fuori: non c'è niente da separare` }));
       if (!list.length) return;
+      // Con un'anteprima finita da ascoltare le nuove canzoni aspettano, come sul Mac: tornano pronte con «Indietro»
+      // o partono dopo «Separa tutta». Prima la canzone dell'anteprima spariva (dal tester t14)
+      if (this.preview && !this.busy && this.phase === "done") {
+        for (const f of list) this.queue.push(f);
+        window.dispatchEvent(new CustomEvent("isolr-avviso", { detail: `${list.length === 1 ? `«${list[0].name.replace(/\.[^.]+$/, "")}» aspetta` : `${list.length} canzoni aspettano`}: ${list.length === 1 ? "parte" : "partono"} dopo «Separa tutta», o con «Indietro»` }));
+        this.emit(); return;
+      }
       // Niente in lavorazione e nessuna pronta, ma una coda rimasta: la prima della coda torna pronta
       if (!this.busy && !this.pending && this.queue.length) { this.pending = this.queue.shift(); this.phase = "pending"; this.error = null; }
       else if (!this.busy && !this.queue.length && !(keep && this.pending)) {
@@ -177,7 +184,7 @@
       this.pending = this.queue.length ? this.queue.shift() : null;
       this.phase = this.pending ? "pending" : this.current ? "done" : "idle"; this.emit();
     }
-    reset() { if (this.busy) return; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.skipped = []; this.phase = "idle"; this.emit(); }
+    reset() { if (this.busy) return; this.failedFile = null; this.preview = null; this.pending = null; this.current = null; this.queue = []; this.skipped = []; this.phase = "idle"; this.emit(); }
 
     /** Finito il lavoro, dopo 2 minuti fermo il lavoratore si chiude e libera la memoria dei modelli (2,5–4 GB
      *  senza scheda grafica, che prima restavano presi finché l'app era aperta). Un'altra canzone lo riapre. */
@@ -349,7 +356,7 @@
       const file = this.pending;
       this.preview = opts.preview ? { file, quality, start: 0 } : null;
       this.pending = null;
-      this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null;
+      this.phase = "working"; this.progress = 0; this.step = "Apro la canzone…"; this.error = null; this.failedFile = null;
       // Al massimo 120 caratteri, come la cartella: con i titoli lunghi (YouTube) i nomi dei file superavano i 255 di Windows
       this.title = file.name.replace(/\.[^.]+$/, "").slice(0, 120).replace(/[.\s]+$/, "") || "Canzone";
       this.quality = quality; this.peaks = null; this.stage = null; this.setStage("reading"); this.cancelled = false;
@@ -449,6 +456,7 @@
           return;
         }
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
+        this.failedFile = opts.preview ? null : file;   // per «Riprova» (anteprime escluse)
         // In una coda la prossima canzone parte subito: chi non riesce resta scritta, con il perché
         if (this.queue.length) this.skipped.push({ name: this.preview ? `${file.name} (anteprima)` : file.name, error: this.error });
         // Un'anteprima non riuscita si chiude, come sul Mac: le canzoni trascinate intanto partono (prima la coda restava ferma)
@@ -471,7 +479,7 @@
       const mins = Math.round((Date.now() - b.start) / 60000);
       const time = mins < 1 ? "meno di un minuto" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
       if (b.songs + b.failed > 1 || document.hidden) {
-        Bridge.notify("IsoLR ha finito", `${b.songs} ${b.songs === 1 ? "canzone pronta" : "canzoni pronte"} in ${time}${b.failed ? ` · ${b.failed} non riuscite` : ""}`);
+        Bridge.notify("IsoLR ha finito", `${b.songs} ${b.songs === 1 ? "canzone pronta" : "canzoni pronte"} in ${time}${b.failed ? ` · ${b.failed} ${b.failed === 1 ? "non riuscita" : "non riuscite"}` : ""}`);
       }
       Bridge.focus();
       if (Prefs.get("sleepAfterBatch", false) && b.songs + b.failed > 1) setTimeout(() => Bridge.sleepNow(), 60000);

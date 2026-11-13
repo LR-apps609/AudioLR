@@ -75,7 +75,7 @@
       function render() { renderPads(); info(); draw(); }
 
       function info() {
-        sheet.querySelector("#s-info").textContent = ch ? `${list.length} fette${sel >= 0 ? ` · scelta la ${sel + 1} (${fmt(list[sel].start / RATE)}, ${Math.round(((list[sel].end - list[sel].start) / RATE) * 1000)} ms)` : ""}` : "";
+        sheet.querySelector("#s-info").textContent = ch ? `${list.length} ${list.length === 1 ? "fetta" : "fette"}${sel >= 0 ? ` · scelta la ${sel + 1} (${fmt(list[sel].start / RATE)}, ${Math.round(((list[sel].end - list[sel].start) / RATE) * 1000)} ms)` : ""}` : "";
         sheet.querySelector('[data-s="merge"]').disabled = sel < 0 || sel >= list.length - 1;
         sheet.querySelector('[data-s="prev"]').disabled = page === 0;
         sheet.querySelector('[data-s="next"]').disabled = (page + 1) * 16 >= list.length;
@@ -207,7 +207,7 @@
           await Bridge.writeFile(`${dir}/${name}.mid`, S.midi(list, RATE, { bpm, name }));
           await Bridge.writeText(`${dir}/LEGGIMI.txt`, S.readme(cur.meta.title, stem.name, list.length, bpm));
           Bridge.reveal(`${dir}/${name}.mid`);
-          status(`Esportate ${list.length} fette, il file MIDI e il LEGGIMI in «${dir.split("/").pop()}».`);
+          status(`${list.length === 1 ? "Esportata 1 fetta" : `Esportate ${list.length} fette`}, il file MIDI e il LEGGIMI in «${dir.split("/").pop()}».`);
           sheet.lastExport = dir;
         } catch (e) { status("Esportazione non riuscita: " + (e.message || e)); }
         busy = false;

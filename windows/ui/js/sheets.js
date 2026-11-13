@@ -137,7 +137,11 @@
   function applyAppearance() {
     const a = Prefs.get("appearance", "dark");
     if (a === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = a;
+    // Le onde e gli editor sono disegnati con i colori del tema: si ridisegnano (prima restavano quelli vecchi: dal tester t13)
+    window.dispatchEvent(new Event("isolr-tema"));
   }
+  // «Automatico»: anche quando cambia il tema di Windows
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => window.dispatchEvent(new Event("isolr-tema")));
 
   // ── Dettagli della separazione ──
   function details(cur) {
@@ -178,7 +182,7 @@
         <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr>
         <tr><td>Note</td><td>Trascina una nota per spostarla, il bordo per allungarla · doppio clic aggiunge · Canc toglie · Ctrl+Z annulla · Alt senza aggancio · ↑ ↓ di un semitono (Maiusc: un'ottava)</td></tr>
         <tr><td>Slice</td><td>Tasti 1–4, Q–R, A–F, Z–V suonano i pad · trascina un segnaposto · doppio clic divide · ← → fetta prima e dopo</td></tr></table>
-      <p class="muted">Rapida, Massima e Studio danno lo stesso risultato su tutti i computer: su quelli più lenti ci mettono solo di più. Se hai fretta, Massima è circa 2–3 volte più rapida di Studio.</p>
+      <p class="muted">Rapida, Massima e Studio danno lo stesso risultato su tutti i computer: su quelli più lenti ci mettono solo di più. Se hai fretta, Massima è più rapida di Studio.</p>
       <p class="muted">La prima volta Massima e Studio scaricano i loro modelli (una volta sola); poi IsoLR funziona anche senza internet. Le canzoni non lasciano mai il computer.</p>
       <div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`);
   }

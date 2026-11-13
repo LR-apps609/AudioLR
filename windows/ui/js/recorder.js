@@ -54,6 +54,8 @@
         if (!this.recording) return;
         this.recording = false; this.level = 0;
         node.port.postMessage("stop"); src.disconnect(); stream.getTracks().forEach((t) => t.stop());
+        // Fermo il processore, si chiude anche la porta: con la porta aperta il nodo restava vivo a ogni registrazione (dal tester t15)
+        setTimeout(() => { try { node.port.onmessage = null; node.port.close(); } catch {} }, 300);
         if (player.playing) player.pause();
         player.recording = false; player.onPlay = null; player.onStopped = null; player.applyGains();
         changed();

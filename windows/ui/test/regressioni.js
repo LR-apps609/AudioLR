@@ -753,6 +753,116 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await page.close();
   }
 
+  {
+    // t15: il motore di velocità e tono tolto si libera davvero, e i clic del metronomo non si accumulano
+    const page = await fresh(browser);
+    const cdp = await page.context().newCDPSession(page), live = new Map();
+    await cdp.send("WebAudio.enable");
+    cdp.on("WebAudio.audioNodeCreated", (e) => live.set(e.node.nodeId, e.node.nodeType));
+    cdp.on("WebAudio.audioNodeWillBeDestroyed", (e) => live.delete(e.nodeId));
+    await openSong(page);
+    for (let i = 0; i < 20; i++) {
+      await page.evaluate(async () => { const P = IsoApp.player; await P.load(IsoApp.job.current); P.setRate(0.8); await P.play(0); await new Promise((ok) => setTimeout(ok, 150)); P.pause(); });
+    }
+    await page.waitForTimeout(800);
+    await cdp.send("HeapProfiler.enable");
+    for (let i = 0; i < 2; i++) { await cdp.send("HeapProfiler.collectGarbage"); await page.waitForTimeout(1200); }
+    const worklets = [...live.values()].filter((t) => /Worklet/.test(t)).length;
+    const db = await page.evaluate(async () => {
+      const P = IsoApp.player, a = P.ctx.createAnalyser(); a.fftSize = 2048; P.master.connect(a);
+      P.setRate(0.8); await P.play(0); let top = -120;
+      for (let i = 0; i < 15; i++) { await new Promise((ok) => setTimeout(ok, 100)); const d = new Float32Array(2048); a.getFloatTimeDomainData(d); let s = 0; for (const v of d) s += v * v; top = Math.max(top, 10 * Math.log10(s / 2048 + 1e-12)); }
+      P.pause(); P.setRate(1); return Math.round(top);
+    });
+    check(worklets <= 2 && db > -40, `20 cambi di canzone a velocità 80%: al massimo 2 motori vivi e si sente ancora (${worklets} motori, ${db} dB)`);
+    // Passaggio A–B di 1 s ripetuto con il metronomo per 6 s: l'elenco dei clic resta piccolo
+    const clicks = await page.evaluate(async () => {
+      const P = IsoApp.player; P.metronome = true; P.loopA = 2; P.loopB = 3; await P.play(2);
+      const n = [];
+      for (let i = 0; i < 6; i++) { await new Promise((ok) => setTimeout(ok, 1000)); n.push(P.clickNodes.length); }
+      P.pause(); P.metronome = false; P.clearLoop(); return n;
+    });
+    check(Math.max(...clicks.slice(2)) <= Math.max(12, clicks[1] + 2), `passaggio A–B con il metronomo: i clic non si accumulano (${clicks})`);
+    await page.close();
+  }
+
+  {
+    // t14: coda e anteprima
+    const page = await fresh(browser);
+    const r = await page.evaluate(async () => {
+      const J = IsoApp.job, wait = (ms) => new Promise((ok) => setTimeout(ok, ms)), out = {};
+      const bad = (n) => new File([new Uint8Array(2000).fill(7)], n, { type: "audio/wav" });
+      // «Annulla tutto» con una coda
+      const saved = { phase: J.phase, step: J.step, progress: J.progress, stage: J.stage, title: J.title, quality: J.quality, queue: J.queue };
+      Object.assign(J, { phase: "working", step: "Separazione", stage: "separating", title: "Uno", quality: "studio", progress: 0.3, queue: [bad("Due.wav")] }); J.emit(); await wait(150);
+      out.withQueue = document.querySelector('[data-act="cancel"]').textContent;
+      J.queue = []; J.emit(); await wait(150);
+      out.alone = document.querySelector('[data-act="cancel"]').textContent;
+      Object.assign(J, saved, { phase: "idle" }); J.emit(); await wait(150);
+      // L'ultima canzone non riuscita: si sa quale e c'è «Riprova»
+      J.reset(); J.add([bad("Ultima della coda.wav")]); J.start("fast");
+      for (let i = 0; i < 100 && J.busy; i++) await wait(50);
+      await wait(150);
+      const rec = document.querySelector(".drop .rec");
+      out.failed = rec ? rec.textContent : null;
+      out.retry = !!document.querySelector('[data-act="retry"]');
+      if (out.retry) { document.querySelector('[data-act="retry"]').click(); await wait(50); out.retried = J.busy || J.phase === "failed"; for (let i = 0; i < 100 && J.busy; i++) await wait(50); }
+      // «1 non riuscita» al singolare
+      const notes = [], nt = Bridge.notify; Bridge.notify = (t, b) => notes.push(b);
+      J.batch = { start: Date.now(), songs: 1, failed: 1 }; J.finishBatch(); Bridge.notify = nt;
+      out.note = notes[0];
+      // Trascinata durante un'anteprima finita: la canzone dell'anteprima resta e la nuova aspetta
+      J.reset(); await IsoApp.openEntry(IsoApp.ui.library[0]);
+      const pf = new File([new Uint8Array(10)], "Anteprima.wav");
+      J.preview = { file: pf, quality: "studio", start: 60 };
+      J.add([bad("Nuova.wav")]); await wait(100);
+      out.during = { preview: !!J.preview, pending: J.pending && J.pending.name, queue: J.queue.map((f) => f.name) };
+      J.backFromPreview(); await wait(100);
+      out.back = { pending: J.pending && J.pending.name, queue: J.queue.map((f) => f.name) };
+      J.reset();
+      return out;
+    });
+    check(r.withQueue === "Annulla tutto" && r.alone === "Annulla", `con una coda il pulsante dice «Annulla tutto», come sul Mac (${r.withQueue}, ${r.alone})`);
+    check(/Ultima della coda/.test(r.failed || "") && r.retry && r.retried, `la canzone non riuscita si sa quale è e c'è «Riprova» (${JSON.stringify([r.failed, r.retry, r.retried])})`);
+    check(/1 non riuscita$/.test(r.note || ""), `«1 non riuscita» al singolare (${r.note})`);
+    check(r.during.preview && !r.during.pending && r.during.queue.join() === "Nuova.wav" && r.back.pending === "Anteprima.wav" && r.back.queue.join() === "Nuova.wav",
+      `una canzone trascinata durante un'anteprima finita aspetta e l'anteprima resta (${JSON.stringify([r.during, r.back])})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t14): " + page.errors.join(" | "));
+    await page.close();
+  }
+
+  {
+    // t13: cambiando tema le onde del mixer si ridisegnano con i colori nuovi; contrasto elevato e riduci movimento
+    const page = await fresh(browser);
+    await openSong(page);
+    const theme = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const color = () => { const c = document.querySelector('canvas[data-wave="vocals"]'), g = c.getContext("2d"), d = g.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) return [d[i], d[i + 1], d[i + 2]].join(","); return null; };
+      Prefs.set("appearance", "dark"); Sheets.applyAppearance(); await wait(200);
+      const dark = color();
+      Prefs.set("appearance", "light"); Sheets.applyAppearance(); await wait(200);
+      const light = color();
+      Prefs.set("appearance", "dark"); Sheets.applyAppearance();
+      return { dark, light };
+    });
+    check(theme.dark && theme.light && theme.dark !== theme.light, `cambiando tema le onde prendono i colori nuovi (${JSON.stringify(theme)})`);
+    const css = fs.readFileSync(path.join(__dirname, "../ui.css"), "utf8");
+    const forced = (css.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/) || [])[1] || "";
+    check(/\.lib-item\.on/.test(forced) && /\.btn\.mute\.on/.test(forced) && /\.btn\.solo\.on/.test(forced), "contrasto elevato: la canzone aperta, muto e solo accesi si distinguono");
+    await page.close();
+    const still = await browser.newPage({ viewport: { width: 1280, height: 820 }, reducedMotion: "reduce" });
+    await still.goto(`http://127.0.0.1:${server.address().port}/`); await still.waitForTimeout(500);
+    const moving = await still.evaluate(() => {
+      const p = document.createElement("div"); p.className = "party"; p.innerHTML = '<svg class="tick"><path d="M0 0"/></svg><b>Fatto</b>';
+      document.querySelector(".main").appendChild(p);
+      const names = [p, p.querySelector(".tick"), p.querySelector("path"), p.querySelector("b")].map((e) => getComputedStyle(e).animationName);
+      p.remove(); return names;
+    });
+    check(moving.every((n) => n === "none"), `con «Riduci movimento» la festa sta ferma (${moving})`);
+    await still.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");

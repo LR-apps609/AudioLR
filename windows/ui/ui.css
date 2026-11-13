@@ -349,7 +349,9 @@ input.num { width: 64px; height: 26px; border: 1px solid var(--stroke2); border-
 @keyframes draw { 0% { stroke-dashoffset: 48; } 35%, 100% { stroke-dashoffset: 0; } }
 .party b { transform: translateY(78px); font-size: 17px; text-shadow: 0 1px 12px var(--bg); animation: rise 2.5s ease-out both; }
 @keyframes rise { 0%, 35% { transform: translateY(92px); opacity: 0; } 55%, 85% { transform: translateY(78px); opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .reels .reel, .reels .tape, .reels.ind .rbar i { animation: none; } .party .ring { display: none; } }
+@media (prefers-reduced-motion: reduce) { .reels .reel, .reels .tape, .reels.ind .rbar i { animation: none; } .party .ring { display: none; }
+  /* Anche il resto della festa sta fermo: il segno di spunta e la scritta compaiono e basta (dal tester t13) */
+  .party, .party .tick, .party .tick path, .party b { animation: none; } .party .tick path { stroke-dashoffset: 0; } }
 
 /* Filtri della libreria */
 .lib-filters { display: flex; flex-direction: column; gap: 6px; }
@@ -418,7 +420,7 @@ select.pop.mini { height: 22px; font-size: 11px; padding: 0 4px; max-width: 120p
 /* Contrasto elevato di Windows: i pulsanti accesi (solo, muto, Esercitati, Metronomo, Conteggio, Rampa, qualità,
    parti della canzone) si distinguono da quelli spenti anche senza colori di sfondo */
 @media (forced-colors: active) {
-  .btn.on, .row .ms .btn.on, [aria-pressed="true"], .seg button.on, .qcard.on, .sections button.on {
+  .btn.on, .row .ms .btn.on, .row .ms .btn.mute.on, .row .ms .btn.solo.on, [aria-pressed="true"], .seg button.on, .qcard.on, .sections button.on, .lib-item.on {
     forced-color-adjust: none; background: Highlight; color: HighlightText; border: 2px solid HighlightText; outline: 2px solid Highlight;
   }
   .sections button { border: 1px solid ButtonText; }

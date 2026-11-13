@@ -7,6 +7,8 @@
 (function () {
   "use strict";
   const RATE = 44100;
+  // Il motore di velocità e tono gira nel modulo che lo sa anche fermare (js/stretch-worklet.js, dal tester t15)
+  if (typeof SignalsmithStretch === "function" && !SignalsmithStretch.moduleUrl) SignalsmithStretch.moduleUrl = new URL("js/stretch-worklet.js", document.baseURI).href;
   const VOICES = ["vocals", "lead", "backing", "male", "female", "clean"];
   const SPLITS = { vocals: ["lead", "backing"], gender: ["male", "female"], clean: ["clean"], drums: ["kick", "snare", "toms", "hh", "ride", "crash"] };
   const SOURCE = { vocals: "vocals", gender: "vocals", clean: "vocals", drums: "drums" };
@@ -235,7 +237,9 @@
     dropStretch() {
       this.stretchGen = (this.stretchGen || 0) + 1;
       if (!this.stretch) return;
-      try { this.stretch.node.schedule({ active: false }); this.stretch.node.disconnect(); this.stretch.split.disconnect(); } catch {}
+      // fine: il processore si ferma davvero (stretch-worklet-fine.js) e le tracce dentro si liberano: prima restava
+      // vivo per sempre, un motore in più a ogni canzone e a ogni registrazione (dal tester t15)
+      try { const n = this.stretch.node; n.schedule({ active: false, fine: true }); n.disconnect(); setTimeout(() => { try { n.port.onmessage = null; n.port.close(); } catch {} }, 500); this.stretch.split.disconnect(); } catch {}
       this.stretch = null;
     }
 
@@ -245,7 +249,10 @@
       const g = this.ctx.createGain(); g.gain.value = count || this.metronome ? 1 : 0;
       src.connect(g).connect(this.clickGain);
       src.start(t);
-      this.clickNodes.push({ src, g, count });
+      const c = { src, g, count };
+      this.clickNodes.push(c);
+      // Suonato il clic, si toglie: con il passaggio A–B che ricomincia l'elenco cresceva di 11 clic al secondo (dal tester t15)
+      src.onended = () => { const i = this.clickNodes.indexOf(c); if (i >= 0) this.clickNodes.splice(i, 1); g.disconnect(); };
     }
     /** Metronomo acceso o spento subito, anche sui clic già programmati (prima si sentiva dopo 1,5 s). */
     setMetronome(on) {

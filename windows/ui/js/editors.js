@@ -301,7 +301,9 @@
       };
       document.addEventListener("keydown", keys, true);
       const ro = new ResizeObserver(() => draw()); ro.observe(cv);
-      warpCleanup = () => { cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener("keydown", keys, true); };
+      const theme = () => draw();
+      window.addEventListener("isolr-tema", theme);
+      warpCleanup = () => { cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener("keydown", keys, true); window.removeEventListener("isolr-tema", theme); };
       sheet.api = { get marks() { return marks; }, set: (m) => { marks = m.slice(); changed(); }, makeTempo, saveGrid };
       draw(); info(); loop();
     }, () => {
@@ -483,7 +485,9 @@
         else if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); sel = Math.max(0, Math.min(blocks.length - 1, sel + (e.key === "ArrowLeft" ? -1 : 1))); drawStrip(); }
       };
       document.addEventListener("keydown", keys, true);
-      arrangeCleanup = () => { cancelAnimationFrame(raf); stop(); document.removeEventListener("keydown", keys, true); };
+      const theme = () => drawStrip();
+      window.addEventListener("isolr-tema", theme);
+      arrangeCleanup = () => { cancelAnimationFrame(raf); stop(); document.removeEventListener("keydown", keys, true); window.removeEventListener("isolr-tema", theme); };
       sheet.api = { get blocks() { return blocks; }, set: (b) => edit(b, 0), make };
       drawStrip(); loop();
     }, () => { if (arrangeCleanup) arrangeCleanup(); arrangeCleanup = null; IsoApp.transport(); });

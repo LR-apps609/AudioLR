@@ -152,7 +152,7 @@
         <div class="picked">${Icon("note")}${esc(f.name.replace(/\.[^.]+$/, ""))}<button class="btn borderless icon small" data-act="clear-pending" title="Togli">${Icon("x")}</button></div>
         <div class="muted">Scegli la qualità, poi premi «Separa»</div>`
       : `<h2>Trascina qui una canzone</h2><div class="muted">MP3, WAV, FLAC, M4A… oppure <button class="btn small" data-act="choose">Scegli un file</button></div>`}
-      ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}${skippedNote()}
+      ${job.error ? `<div class="rec">Non riuscito: ${failedName()}${esc(job.error)} ${job.failedFile && !f ? `<button class="btn round" data-act="retry">Riprova</button>` : ""}<button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}${skippedNote()}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
         <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}" aria-pressed="${k === q}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k, job.pendingSeconds || undefined)}</span></button>`).join("")}</div>
@@ -228,6 +228,11 @@
     `<i style="height:${30 + ((j * 23 + i * 11) % 40)}px;animation-duration:${(0.45 + ((j + i) % 5) * 0.12).toFixed(2)}s;animation-delay:${(-j * 0.11).toFixed(2)}s"></i>`).join("")}</div>`;
 
   /** Le canzoni della coda che non sono riuscite: restano scritte, con il perché, finché si lavora e dopo. */
+  // Quale canzone non è riuscita, se il messaggio non lo dice già (l'ultima di una coda: dal tester t14)
+  function failedName() {
+    const ff = job.failedFile, n = ff ? ff.name.replace(/\.[^.]+$/, "") : "";
+    return n && !String(job.error || "").includes(n) ? `«${esc(n)}»: ` : "";
+  }
   function skippedNote() {
     const sk = job.skipped || [];
     if (!sk.length) return "";
@@ -257,7 +262,7 @@
           <path class="tape" d="M62 71H158"></path></svg>
           <div class="rbar"><i></i></div><span class="rlabel"></span></div>
         <div class="wfoot"><span class="pct"></span><div class="wtext"><b class="step"></b><span class="detail muted"></span></div>
-          <span class="chip qchip"></span><button class="btn" data-act="cancel">Annulla</button></div>
+          <span class="chip qchip"></span><button class="btn" data-act="cancel"></button></div>
         <div class="stages"></div>
         <div class="wskip"></div>
       </div>`;
@@ -275,6 +280,8 @@
     w.querySelector(".step").textContent = `${job.step} · ${Separation.QUALITY[job.quality || ui.quality].title}`;
     w.querySelector(".detail").textContent = workDetail();
     const q = w.querySelector(".qchip"); q.textContent = queue; q.hidden = !queue;
+    // Come sul Mac: con una coda «Annulla tutto», perché si fermano anche le canzoni in coda (dal tester t14)
+    const cb = w.querySelector('[data-act="cancel"]'), cl = job.queue.length ? "Annulla tutto" : "Annulla"; if (cb.textContent !== cl) cb.textContent = cl;
     w.querySelectorAll(".born .bar i").forEach((i) => { i.style.width = `${Math.round(separated() * 100)}%`; });
     // Finché la separazione non parte, sulle barre scorre un riflesso: si vede che IsoLR sta lavorando
     w.querySelector(".born").classList.toggle("waiting", job.stage !== "separating" && job.stage !== "saving");
@@ -463,7 +470,7 @@
         <button class="btn small" data-act="mark-a" title="Inizio del passaggio da ripetere" aria-label="A, inizio del passaggio${player.loopA != null ? " " + fmt(player.loopA) : ""}">${player.loopA != null ? "A " + fmt(player.loopA) : "A"}</button>
         <button class="btn small" data-act="mark-b" title="Fine del passaggio: da qui si torna ad A" aria-label="B, fine del passaggio${player.loopB != null ? " " + fmt(player.loopB) : ""}">${player.loopB != null ? "B " + fmt(player.loopB) : "B"}</button>
         ${player.loopA != null || player.loopB != null ? `<button class="btn small icon borderless" data-act="clear-loop" title="Togli la ripetizione">${Icon("x")}</button>` : ""}
-        <button class="btn small ${player.ramp ? "on" : ""}" data-act="ramp" ${player.isLooping ? "" : "disabled"} title="Il passaggio A-B riparte ogni volta un po' più veloce: dal 70% al 100%, +5% a giro">${player.ramp ? "Rampa 70→100%" : "Rampa"}</button>
+        <button class="btn small ${player.ramp ? "on" : ""}" data-act="ramp" ${player.isLooping ? "" : "disabled"} title="Il passaggio A–B riparte ogni volta un po' più veloce: dal 70% al 100%, +5% a giro">${player.ramp ? "Rampa 70→100%" : "Rampa"}</button>
         <div class="grow"></div>
         ${player.rate !== 1 || player.semitones || player.loopA != null ? `<button class="btn small" data-act="normal">Normale</button>` : ""}
       </div>
@@ -760,6 +767,8 @@
       case "preview-full": player.stop(); return job.separateFull();
       case "preview-back": player.stop(); return job.backFromPreview();
       case "cancel": return job.cancel();
+      // Come sul Mac: la canzone non riuscita si riprova con la stessa qualità
+      case "retry": if (job.failedFile && !job.busy) { job.pending = job.failedFile; job.failedFile = null; player.stop(); return job.start(ui.quality); } return;
       case "open-root": return Bridge.reveal(await Bridge.outputDir());
       case "reveal": return Bridge.reveal(job.current.folder + "/isolr.json");
       case "play": player.toggle(); return transport();
@@ -964,6 +973,7 @@
   // La rampa alza la velocità a ogni giro: cursore e percentuale la seguono
   player.onRate = () => transport();
   window.addEventListener("resize", () => { if (job.phase === "done") drawWaves(); });
+  window.addEventListener("isolr-tema", () => { if (job.phase === "done" && job.current) drawWaves(); });
 
   // Il giro dei fotogrammi (logo a tempo, posizione, accordi, testo, livelli) gira solo quando serve: mentre
   // suona, registra o il polso è fermato per le schermate. Prima girava sempre a 60 al secondo, anche a riposo
