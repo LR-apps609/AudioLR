@@ -4,7 +4,9 @@
 // Dal giro 2 (tester t10, t1, t2): riquadro «Trascina qui» e Terminale a 320/360 px, nomi delle tracce a 320/360 px,
 // niente «Scarico il modello…» con il modello già nella cache; tester t5: «Scegli una canzone…» con la tastiera,
 // nomi delle tracce sui pulsanti del mixer, onda della Base spenta in «Solo voce»; tester t6: la pagina nella copia
-// offline dalla prima visita, impronta del modello controllata quando cambia.
+// offline dalla prima visita, impronta del modello controllata quando cambia; tester t12: avvisi letti (alert,
+// status, progressbar) e fuoco sul titolo del pannello nuovo; tester t8: pezzi del modello salvati appena arrivano,
+// errore in vista sul telefono, messaggio vero senza rete; tester t13: pulsanti accesi in contrasto elevato.
 //   node site/test/regressioni.test.js http://127.0.0.1:8080/
 const { chromium, devices } = require(process.env.PW || "playwright");
 const fs = require("fs"), os = require("os"), path = require("path");
@@ -107,10 +109,16 @@ async function until(page, fn, ms) {
     check(reached, "con Tab il fuoco arriva su «Scegli una canzone…»");
     const ring = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
     check(reached && ring !== "none", `il fuoco su «Scegli una canzone…» si vede (contorno ${ring})`);
+    // L'ascolto si attiva prima di premere: Playwright intercetta la finestra dei file solo da quando c'è un ascoltatore
+    // (con waitForEvent subito prima del tasto, a volte la prima finestra sfuggiva)
+    let choosers = 0;
+    page.on("filechooser", () => choosers++);
+    await page.waitForTimeout(300);
     for (const key of ["Enter", " "]) {
-      const chooser = page.waitForEvent("filechooser", { timeout: 3000 }).then(() => true, () => false);
+      const before = choosers;
       if (reached) await page.keyboard.press(key);
-      check(await chooser, `${key === " " ? "Spazio" : "Invio"} su «Scegli una canzone…» apre la scelta del file`);
+      for (let i = 0; i < 30 && choosers === before; i++) await page.waitForTimeout(100);
+      check(choosers > before, `${key === " " ? "Spazio" : "Invio"} su «Scegli una canzone…» apre la scelta del file`);
     }
     await context.close();
   }
@@ -140,12 +148,21 @@ async function until(page, fn, ms) {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(url);
+    // Dal tester t12: errori letti, regione di stato, barra con valore, fuoco sul titolo del pannello nuovo
+    const roles = await page.evaluate(() => [document.getElementById("error").getAttribute("role"), document.querySelector('[role="status"]') && "status", document.querySelector(".progress").getAttribute("role")].join(","));
+    check(roles === "alert,status,progressbar", `errore con role=alert, regione role=status, barra role=progressbar (${roles})`);
+    const focus = () => page.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName));
     await page.setInputFiles("#file", long);
+    const f1 = await focus();
     await page.click("#cancel");
+    const f2 = await focus();
+    check(f1 === "song" && f2 === "start", `il fuoco va sul titolo del pannello: al lavoro ${f1}, dopo Annulla ${f2}`);
     await page.setInputFiles("#file", short);
     const ok = await until(page, (s) => s.view === "results" || s.error, 10 * 60 * 1000);
     const s = await state(page);
     check(ok && /\/ 0:02$/.test(s.clock), `Annulla durante «Leggo la canzone…»: i risultati sono della canzone scelta dopo (${s.clock})`);
+    const end = await page.evaluate(() => ({ f: document.activeElement.id || document.activeElement.tagName, st: (document.querySelector('[role="status"]') || {}).textContent || "", v: document.querySelector(".progress").getAttribute("aria-valuenow") }));
+    check(end.f === "title" && /Separata in/.test(end.st) && end.v === "100", `ai risultati: fuoco ${end.f}, annuncio «${end.st}», barra ${end.v}`);
     await page.waitForTimeout(3000);
     const s2 = await state(page);
     check(s2.clock === s.clock, `la canzone annullata non arriva dopo a cambiare il mixer (${s2.clock})`);
@@ -154,6 +171,8 @@ async function until(page, fn, ms) {
     // Con il modello già nella cache non deve comparire «Scarico il modello…» (dal tester t2: «166 di 166 MB»)
     await page.evaluate(() => { window.__steps = []; new MutationObserver(() => window.__steps.push(document.getElementById("step").textContent)).observe(document.getElementById("step"), { childList: true, characterData: true, subtree: true }); });
     await page.click("#again");
+    const f3 = await page.evaluate(() => document.activeElement.id || document.activeElement.tagName);
+    check(f3 === "start", `dopo «Un'altra canzone» il fuoco va sul titolo «Trascina qui una canzone» (${f3})`);
     await page.setInputFiles("#file", short);
     await page.waitForTimeout(300);
     await page.click("#cancel");
@@ -165,6 +184,23 @@ async function until(page, fn, ms) {
     const steps = await page.evaluate(() => window.__steps.filter((t) => /Scarico/.test(t)));
     check(steps.length === 0, `con il modello nella cache non dice che lo scarica (${steps[0] || "nessun «Scarico…»"})`);
     await context.setOffline(false);
+    await context.close();
+  }
+
+  // ── Dal tester t20: un'altra canzone mentre la prima si separa → si vede solo la seconda, e non cambia più da sola ──
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.setInputFiles("#file", long);
+    await until(page, (s) => /Separo/.test(s.step), 5 * 60 * 1000);
+    await page.setInputFiles("#file", short);
+    const ok = await until(page, (s) => s.view === "results" || s.error, 5 * 60 * 1000);
+    const a = await state(page), t1 = await page.textContent("#title");
+    await page.waitForTimeout(90 * 1000);   // il tempo che la canzone di 40 s finisca, se si sta ancora separando
+    const b = await state(page), t2 = await page.textContent("#title");
+    check(ok && /\/ 0:02$/.test(a.clock) && b.clock === a.clock && t1 === t2 && /Cortissima/.test(t2),
+      `un'altra canzone durante la separazione: risultati della seconda (${t1} ${a.clock}) e uguali 90 s dopo (${t2} ${b.clock})`);
     await context.close();
   }
 
@@ -228,6 +264,54 @@ async function until(page, fn, ms) {
     await until(page, (s) => s.view === "results" || s.error, 10 * 60 * 1000);
     const s2 = await state(page);
     check(parts > 0 || /rovinato/.test(s2.error), `con un'impronta nuova i pezzi in cache non si usano senza controllo (pezzi richiesti di nuovo: ${parts}, ${s2.view} ${s2.error})`);
+    await context.close();
+  }
+
+  // ── Dal tester t8 (telefono, rete che cade): il pezzo già arrivato resta nella cache e l'errore si vede ──
+  {
+    const context = await browser.newContext({ ...devices["Pixel 5"] });
+    await context.route(/HTDemucsWeb\.onnx\.part1/, (r) => r.abort("internetdisconnected"));
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.setInputFiles("#file", short);
+    const err = await until(page, (s) => !!s.error, 3 * 60 * 1000);
+    const keys = await page.evaluate(async () => (await (await caches.open("audiolr-modelli-v1")).keys()).map((r) => r.url.split("/").pop()));
+    check(err && keys.includes("HTDemucsWeb.onnx.part0"), `dopo la caduta della rete il primo pezzo resta nella cache (${keys.join(", ")})`);
+    await page.waitForTimeout(1500);   // lo scorrimento è morbido (scroll-behavior: smooth)
+    const box = await page.evaluate(() => { const r = document.getElementById("error").getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: innerHeight }; });
+    check(err && box.top >= 0 && box.bottom <= box.h, `sul telefono l'errore si vede sullo schermo (${box.top}–${box.bottom} su ${box.h})`);
+    await context.close();
+  }
+
+  // ── Dal tester t8: senza rete, prima di aver mai separato, il messaggio dice la verità (non «memoria insufficiente?») ──
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await context.setOffline(true);
+    await context.route(/\/app\/worker\.js|\/vendor\//, (r) => r.abort("internetdisconnected"));
+    await page.reload();
+    await page.setInputFiles("#file", short);
+    const err = await until(page, (s) => !!s.error, 60 * 1000);
+    const s = await state(page);
+    check(err && /internet|connessione|rete/i.test(s.error) && !/memoria/.test(s.error), `senza rete e senza modello: «${s.error}»`);
+    await context.close();
+  }
+
+  // ── Dal tester t13: in contrasto elevato M, S e le scorciatoie accese si distinguono da quelle spente ──
+  {
+    const context = await browser.newContext({ forcedColors: "active" });
+    const page = await context.newPage();
+    await page.goto(url);
+    const d = await page.evaluate(() => {
+      document.getElementById("drop").hidden = true; document.getElementById("results").hidden = false;
+      document.getElementById("stems").innerHTML = '<div class="stem"><button class="ms m" aria-pressed="true">M</button><button class="ms s" aria-pressed="false">S</button></div>';
+      const look = (e) => { const c = getComputedStyle(e); return [c.backgroundColor, c.color, c.borderTopWidth, c.outlineStyle].join(" "); };
+      const on = document.querySelector('[data-preset="all"]'), off = document.querySelector('[data-preset="karaoke"]');
+      return { seg: look(on) !== look(off), ms: look(document.querySelector(".ms.m")) !== look(document.querySelector(".ms.s")), fc: matchMedia("(forced-colors: active)").matches };
+    });
+    check(d.fc && d.seg && d.ms, `contrasto elevato: Tutto acceso diverso da spento (${d.seg}), M acceso diverso da S spento (${d.ms})`);
     await context.close();
   }
 

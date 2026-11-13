@@ -101,7 +101,12 @@ async function fetchModel(onProgress, again = false) {
       done += chunks[0].length;
     } else {
       chunks = await download(url, (n, attempt) => { done += n; retry = attempt > 1 ? attempt : 0; report(done / total); });
-      fresh.push([url, chunks]);
+      fresh.push(url);
+      // Ogni pezzo entra nella cache appena è arrivato tutto: dopo una caduta di rete o una ricarica si riparte dal
+      // pezzo che mancava (prima i pezzi si salvavano solo alla fine e si riscaricavano tutti i 166 MB). Il controllo
+      // resta quello del modello intero qui sotto: con un pezzo appena scaricato l'impronta si ricalcola sempre, e se
+      // non torna la cache si svuota (anche i pezzi salvati qui) e si riscarica
+      if (cache) try { await cache.put(url, new Response(new Blob(chunks))); } catch (e) { /* senza cache si riscarica la prossima volta */ }
     }
     parts.push(...chunks);
   }
@@ -128,9 +133,6 @@ async function fetchModel(onProgress, again = false) {
     if (cache) try { await caches.delete(CACHE); } catch (e) { /* niente */ }
     if (!again) return fetchModel(onProgress, true);
     throw new Error("il modello è arrivato incompleto o rovinato (il controllo non torna): riprova, si scarica di nuovo da capo");
-  }
-  if (cache) for (const [url, chunks] of fresh) {
-    try { await cache.put(url, new Response(new Blob(chunks))); } catch (e) { /* senza cache si riscarica la prossima volta */ }
   }
   if (cache && verified) try { await cache.put(seal, new Response(config.sha256)); } catch (e) { /* si ricontrolla la prossima volta */ }
   return buf;
@@ -184,8 +186,9 @@ self.onmessage = async (e) => {
       // La base senza voce è esattamente la canzone meno la voce, come nell'app: più piena e fedele
       // della somma degli strumenti, e voce + base ridanno la canzone
       const v = config.sources.indexOf("vocals");
-      const n = m.left.length, mix = [m.left, m.right], base = [new Float32Array(n), new Float32Array(n)];
-      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = mix[c][k] - stems[v][c][k];
+      // Calcolata dentro la canzone, che dopo non serve più: un'altra copia intera in meno (212 MB per 10 minuti)
+      const n = m.left.length, base = [m.left, m.right];
+      for (let c = 0; c < 2; c++) for (let k = 0; k < n; k++) base[c][k] = base[c][k] - stems[v][c][k];
       const all = [...stems, base];
       const gain = AudioLREngine.safeGain(all);
       const buffers = all.flat().map((a) => { if (gain !== 1) for (let k = 0; k < a.length; k++) a[k] *= gain; return a; });

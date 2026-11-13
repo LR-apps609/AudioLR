@@ -152,3 +152,10 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: 
 details.alt summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 details.alt code { margin-top: 8px; contain: inline-size; }   /* la riga lunga scorre nel suo riquadro invece di allargare la scheda e la pagina */
 .grid2 .card .chip { justify-self: start; }
+/* Contrasto elevato (Windows): M, S e Tutto/Karaoke/Solo voce accesi si distinguono da quelli spenti anche senza
+   colori di sfondo, come nell'app per Windows */
+@media (forced-colors: active) {
+  .ms[aria-pressed="true"], .seg button[aria-pressed="true"] {
+    forced-color-adjust: none; background: Highlight; color: HighlightText; border: 2px solid HighlightText; outline: 2px solid Highlight;
+  }
+}

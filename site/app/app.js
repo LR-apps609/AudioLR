@@ -26,12 +26,22 @@
   let worker = null, ready = null, forceWasm = false, songName = "", started = 0;
   // Cresce a ogni «Annulla»: una canzone annullata mentre si preparava il modello non riparte da sola
   let generation = 0;
+  // La canzone che il lavoratore sta separando (il suo `generation`): avanzamento e risultati di un'altra si ignorano
+  let running = 0;
 
+  // A ogni cambio di pannello il fuoco va sul suo titolo: prima restava sul pulsante appena nascosto e finiva sul BODY
+  const TITLES = { drop: "start", working: "song", results: "title" };
   function show(view) {
     for (const id of ["drop", "working", "results"]) $(id).hidden = id !== view;
     $("error").hidden = true;
+    $(TITLES[view]).focus({ preventScroll: true });
   }
-  function fail(msg) { show("drop"); $("error").textContent = msg; $("error").hidden = false; }
+  // Il lettore di schermo legge le fasi, la percentuale (al massimo ogni 10%) e la fine del lavoro
+  let spoken = 0;
+  function say(text) { $("status").textContent = text; spoken = 0; }
+  function phase(text) { $("step").textContent = text; say(text); }
+  // L'errore si porta in vista: sul telefono restava sotto il bordo dello schermo, dopo il riquadro iniziale
+  function fail(msg) { show("drop"); $("error").textContent = msg; $("error").hidden = false; $("error").scrollIntoView({ block: "nearest" }); }
   function fmt(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
   // Il lavoratore, creato alla prima canzone (così chi guarda soltanto non scarica niente)
@@ -46,6 +56,7 @@
           const mb = (b) => Math.round(b / 1048576);
           $("step").textContent = m.retry ? `La connessione si è interrotta: riprendo da dove ero (tentativo ${m.retry} di 5)…`
             : m.total ? `Scarico il modello (solo la prima volta)… ${mb(m.done)} di ${mb(m.total)} MB` : "Scarico il modello (solo la prima volta)…";
+          if (!/^Scarico/.test($("status").textContent) && !/^\d+%$/.test($("status").textContent)) say("Scarico il modello (solo la prima volta)…");
           setProgress(m.progress);
         }
         else if (m.type === "fallback") {
@@ -68,7 +79,13 @@
           reject(new Error(m.message));
         }
       };
-      worker.onerror = (e) => { fail("Il browser ha interrotto il lavoro: " + (e.message || "memoria insufficiente?")); ready = null; };
+      // Il lavoratore non parte: senza rete il suo file non arriva (prima diceva sempre «memoria insufficiente?»)
+      worker.onerror = (e) => {
+        ready = null;
+        fetch("app/worker.js", { method: "HEAD", cache: "no-store" })
+          .then(() => fail("Il browser ha interrotto il lavoro: " + (e.message || "memoria insufficiente?")),
+                () => fail("Senza internet: la prima volta serve la rete per scaricare il modello."));
+      };
       worker.postMessage({ type: "load", forceWasm });
     });
     return ready;
@@ -77,8 +94,12 @@
   function setProgress(p) {
     $("bar").style.width = `${Math.round(p * 100)}%`;
     $("percent").textContent = `${Math.round(p * 100)}%`;
+    $("bar").parentElement.setAttribute("aria-valuenow", Math.round(p * 100));
+    const tens = Math.floor(p * 10);
+    if (tens > spoken) { spoken = tens; $("status").textContent = `${tens * 10}%`; }
   }
   function onProgress(p) {
+    if (running !== generation) return;
     setProgress(p);
     const elapsed = (performance.now() - started) / 1000;
     $("eta").textContent = p > 0.03 ? `Mancano circa ${fmt((elapsed / p) * (1 - p))}` : "Calcolo il tempo che manca…";
@@ -86,12 +107,15 @@
 
   async function handle(file) {
     if (!file) return;
+    // Un'altra canzone mentre la prima si separa: come «Annulla», il lavoratore si chiude (prima faceva le due
+    // separazioni insieme e mostrava le tracce della prima con il nome della seconda)
+    if (running && running === generation && worker) { worker.terminate(); worker = null; ready = null; }
     // Questa canzone vale finché non arriva un «Annulla» o un'altra canzone (anche mentre si decodifica)
     const mine = ++generation;
     songName = file.name.replace(/\.[^.]+$/, "");
-    show("working");
     $("song").textContent = songName;
-    $("step").textContent = "Leggo la canzone…";
+    show("working");
+    phase("Leggo la canzone…");
     setProgress(0); $("eta").textContent = "";
     let audio;
     try {
@@ -106,9 +130,10 @@
     const right = new Float32Array(audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0));
     try { await startWorker(); } catch (e) { if (mine === generation && !$("working").hidden) fail("Non ci sono riuscito: " + e.message); return; }
     if (!worker || mine !== generation) return; // annullata mentre si preparava il modello
-    $("step").textContent = "Separo voce e strumenti…";
+    phase("Separo voce e strumenti…");
     setProgress(0);
     started = performance.now();
+    running = mine;
     worker.postMessage({ type: "separate", left, right }, [left.buffer, right.buffer]);
   }
 
@@ -141,6 +166,8 @@
   }
 
   function onDone(m) {
+    if (running !== generation) return;
+    running = 0;
     stop();
     ctx = ctx || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
     tracks = [];
@@ -160,6 +187,7 @@
     renderStems();
     setPreset("all");
     show("results");
+    say(`${songName}: ${$("took").textContent}`);
     clock(); drawAll();
   }
 

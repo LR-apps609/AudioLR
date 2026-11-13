@@ -113,8 +113,15 @@
       const { nfft, hop, bins } = this;
       const le = this.frames(length);
       const total = nfft + hop * (le + 3);
-      const buf = new Float64Array(total), env = new Float64Array(total);
-      const fr = new Float64Array(nfft), fi = new Float64Array(nfft);
+      // Le aree di lavoro restano per il pezzo dopo (8 tracce × canali per pezzo): prima erano circa 45 MB
+      // nuovi a ogni pezzo, che il browser libera tardi. L'inviluppo della finestra dipende solo dalla lunghezza
+      if (!this.inv || this.inv.total !== total) {
+        const env = new Float64Array(total);
+        for (let t = 0; t < le + 4; t++) for (let n = 0; n < nfft; n++) env[t * hop + n] += this.window[n] * this.window[n];
+        this.inv = { total, env, buf: new Float64Array(total), fr: new Float64Array(nfft), fi: new Float64Array(nfft) };
+      }
+      const { env, buf, fr, fi } = this.inv;
+      buf.fill(0);
       const scale = 1 / Math.sqrt(nfft);
       for (let t = 0; t < le + 4; t++) {
         const start = t * hop, j = t - 2;
@@ -129,7 +136,6 @@
           this.fft.inverse(fr, fi);
           for (let n = 0; n < nfft; n++) buf[start + n] += fr[n] * scale * this.window[n];
         }
-        for (let n = 0; n < nfft; n++) env[start + n] += this.window[n] * this.window[n];
       }
       const offset = nfft / 2 + this.pad, out = new Float32Array(length);
       for (let i = 0; i < length; i++) {
@@ -178,13 +184,31 @@
     return { norm, mean: s.mean, std };
   }
 
-  // Il pezzo che comincia a `offset`; l'ultimo è centrato come in Demucs
-  function piece(norm, offset, seg) {
+  // Media e deviazione del mono come normalized(), ma senza tenere il mono e la canzone normalizzata intera
+  // (per 10 minuti erano 212 + 212 MB in più): stessi conti nello stesso ordine, quindi stessi numeri
+  function mixStats(mix) {
+    const n = mix[0].length, a = mix[0], b = mix[1];
+    if (n < 2) { const s = meanStd(Float64Array.from({ length: n }, (_, i) => (a[i] + b[i]) / 2)); return { mean: s.mean, std: s.std < 1e-8 ? 1 : s.std }; }
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += (a[i] + b[i]) / 2;
+    const mean = sum / n;
+    let sq = 0;
+    for (let i = 0; i < n; i++) { const d = (a[i] + b[i]) / 2 - mean; sq += d * d; }
+    const std = Math.sqrt(sq / (n - 1));
+    return { mean, std: std < 1e-8 ? 1 : std };
+  }
+
+  // Il pezzo che comincia a `offset`; l'ultimo è centrato come in Demucs. Con `stats` il pezzo si normalizza
+  // qui, dalla canzone originale (come normalized(), ma solo per questo pezzo)
+  function piece(norm, offset, seg, stats) {
     const length = norm[0].length, chunk = Math.min(seg, length - offset);
     const from = offset - Math.floor((seg - chunk) / 2);
     const out = [new Float32Array(seg), new Float32Array(seg)];
     const lo = Math.max(0, from), hi = Math.min(length, from + seg);
-    for (let c = 0; c < 2; c++) for (let i = lo; i < hi; i++) out[c][i - from] = norm[c][i];
+    if (stats) {
+      const { mean, std } = stats;
+      for (let c = 0; c < 2; c++) for (let i = lo; i < hi; i++) out[c][i - from] = (norm[c][i] - mean) / std;
+    } else for (let c = 0; c < 2; c++) for (let i = lo; i < hi; i++) out[c][i - from] = norm[c][i];
     return out;
   }
 
@@ -204,11 +228,11 @@
     const out = await runCore(spec, wave, le, seg);
     if (out.spec.length !== S * 4 * plane || out.wave.length !== S * 2 * seg) throw new Error("misure inattese dal modello");
     const result = [];
+    const re = new Float32Array(plane), im = new Float32Array(plane);   // riscritti per intero a ogni traccia
     for (let s = 0; s < S; s++) {
       const channels = [];
       for (let c = 0; c < 2; c++) {
         const base = (s * 4 + c * 2) * plane;
-        const re = new Float32Array(plane), im = new Float32Array(plane);
         for (let i = 0; i < plane; i++) {
           re[i] = out.spec[base + i] * s1.std + s1.mean;
           im[i] = out.spec[base + plane + i] * s1.std + s1.mean;
@@ -226,14 +250,14 @@
   // La canzone intera (2 canali, 44,1 kHz) → strumenti × canali
   async function separate(mix, { segment, sources, runCore, onProgress = () => {}, isCancelled = () => false, overlap = 0.25 }) {
     const length = mix[0].length, S = sources.length, stft = new Spectrogram();
-    const { norm, mean, std } = normalized(mix);
+    const stats = mixStats(mix), { mean, std } = stats;
     const out = Array.from({ length: S }, () => [new Float32Array(length), new Float32Array(length)]);
     const total = new Float32Array(length), w = weights(segment);
     const starts = offsets(length, segment, overlap);
     for (let n = 0; n < starts.length; n++) {
       if (isCancelled()) throw new Error("annullato");
       const offset = starts[n], chunk = Math.min(segment, length - offset), trim = Math.floor((segment - chunk) / 2);
-      const result = await runSegment(stft, piece(norm, offset, segment), S, runCore);
+      const result = await runSegment(stft, piece(mix, offset, segment, stats), S, runCore);
       for (let s = 0; s < S; s++) for (let c = 0; c < 2; c++) {
         const r = result[s][c], o = out[s][c];
         for (let i = 0; i < chunk; i++) o[offset + i] += w[i] * r[trim + i];
@@ -275,7 +299,7 @@
     return top > 0.98 ? 0.98 / top : 1;
   }
 
-  const api = { FFT, Spectrogram, meanStd, offsets, weights, normalized, piece, runSegment, separate, wav24, safeGain };
+  const api = { FFT, Spectrogram, meanStd, offsets, weights, normalized, mixStats, piece, runSegment, separate, wav24, safeGain };
   root.AudioLREngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof self !== "undefined" ? self : globalThis);

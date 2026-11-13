@@ -54,7 +54,7 @@
       <!-- Inizio -->
       <div class="drop" id="drop">
         <div class="bars" id="bars" aria-hidden="true"></div>
-        <h3>Trascina qui una canzone</h3>
+        <h3 id="start" tabindex="-1">Trascina qui una canzone</h3>
         <p class="muted web-only">MP3, M4A, WAV, FLAC · fino a 10 minuti · la canzone resta sul tuo computer</p>
         <p class="muted desktop-only">MP3, M4A, WAV, FLAC · fino a 30 minuti · la canzone resta sul tuo computer</p>
         <label class="btn" for="file" id="pick" tabindex="0" role="button">Scegli una canzone…</label>
@@ -72,16 +72,16 @@
       <!-- Al lavoro -->
       <div class="working" id="working" hidden>
         <div class="row" style="justify-content:space-between">
-          <div><b id="song"></b><div class="muted" id="step"></div></div>
+          <div><b id="song" tabindex="-1"></b><div class="muted" id="step"></div></div>
           <button class="btn ghost small" id="cancel">Annulla</button>
         </div>
         <div class="row" style="align-items:baseline;gap:14px"><span class="big" id="percent">0%</span><span class="muted" id="eta"></span></div>
-        <div class="progress"><i id="bar"></i></div>
+        <div class="progress" role="progressbar" aria-label="Avanzamento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bar"></i></div>
       </div>
       <!-- Risultati -->
       <div id="results" hidden>
         <div class="row" style="justify-content:space-between;margin-bottom:12px">
-          <div><b id="title"></b><div class="muted" id="took"></div></div>
+          <div><b id="title" tabindex="-1"></b><div class="muted" id="took"></div></div>
           <button class="btn small" id="again">Un'altra canzone</button>
         </div>
         <div class="transport">
@@ -96,7 +96,9 @@
         <div id="stems"></div>
         <p class="muted" style="font-size:13.5px;margin-top:12px">Clic sull'onda per ascoltare da quel punto. I file WAV (24 bit) si salvano sul tuo computer, senza passare da nessun server.</p>
       </div>
-      <p class="err" id="error" hidden></p>
+      <p class="err" id="error" role="alert" hidden></p>
+      <!-- Per il lettore di schermo: fase, percentuale ogni 10% e fine del lavoro (invisibile) -->
+      <p id="status" role="status" style="position:absolute;width:1px;height:1px;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></p>
     </div>
   </div>
 </section>
