@@ -229,7 +229,8 @@ ${locators}
     parts.forEach((s, i) => lines.push(`  TRACK ${String(i + 1).padStart(2, "0")} AUDIO`, `    TITLE "${s.label.replace(/"/g, "'")}"`, `    INDEX 01 ${cueTime(s.start)}`));
     return lines.join("\r\n") + "\r\n";
   }
-  const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}.${String(Math.floor((sec % 1) * 10))}`;
+  // In decimi interi, arrotondati come nel .rpp e nel .cue: con Math.floor((sec % 1) * 10) 2,4 s diventava «0:02.3» (dal tester t4)
+  const clock = (sec) => { const d = Math.round(sec * 10); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, "0")}.${d % 10}`; };
   function partsText(p) {
     return [[p.title, head(p, " · ")].filter(Boolean).join(" · "), "", ...p.sections.map((s) => `${clock(s.start)}  ${s.label}`)].join("\r\n") + "\r\n";
   }

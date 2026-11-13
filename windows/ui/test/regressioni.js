@@ -450,6 +450,121 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     check(page.errors.length === 0, "nessun errore nella pagina (t10): " + page.errors.join(" | "));
     await page.close();
   }
+  {
+    // t4: canzoni con il punto davanti, voce pulita in «Le N selezionate» e in «Progetto per…», decimi di Parti.txt
+    const page = await fresh(browser);
+    const lib = await page.evaluate(async () => {
+      const root = await Bridge.outputDir(), meta = JSON.parse(await Bridge.readText(IsoApp.ui.library[0].folder + "/isolr.json"));
+      await Bridge.writeText(`${root}/...And Justice for All/isolr.json`, JSON.stringify({ ...meta, title: "...And Justice for All", created: new Date().toISOString() }));
+      await Bridge.writeText(`${root}/.anteprima/isolr.json`, JSON.stringify({ ...meta, title: "Anteprima" }));
+      await IsoApp.refreshLibrary();
+      return IsoApp.ui.library.map((e) => e.meta.title);
+    });
+    check(lib.includes("...And Justice for All") && !lib.includes("Anteprima"), `una canzone col punto davanti è in libreria, l'anteprima no (${JSON.stringify(lib)})`);
+    // La voce pulita come la fa «Pulisci la voce»: una traccia in più, che nel mixer prende il posto della Voce
+    await page.evaluate(async () => {
+      const e = IsoApp.ui.library.find((x) => x.meta.title !== "...And Justice for All"), v = e.meta.stems.find((s) => s.key === "vocals");
+      await Bridge.writeFile(`${e.folder}/TENDER – Voce pulita.wav`, await Bridge.readFile(`${e.folder}/${v.file}`));
+      e.meta.stems.splice(1, 0, { ...v, key: "clean", name: "Voce pulita", file: "TENDER – Voce pulita.wav", export: "TENDER – Voce pulita.wav", share: null });
+      await Bridge.writeText(`${e.folder}/isolr.json`, JSON.stringify(e.meta));
+      await IsoApp.refreshLibrary();
+      await IsoApp.openEntry(IsoApp.ui.library.find((x) => x.meta.title !== "...And Justice for All"));
+    });
+    await page.waitForTimeout(400);
+    // Tolta la spunta alla Batteria: l'etichetta conta le caselle che si vedono e scarica solo quelle
+    await page.click('input[data-sel="drums"]');
+    const sel = await page.evaluate(async () => {
+      const boxes = [...document.querySelectorAll("input[data-sel]")], label = document.querySelector('[data-act="dl-sel"]').textContent;
+      const written = [], wf = Bridge.writeFile; Bridge.writeFile = async (p, b) => { written.push(p); return wf(p, b); };
+      document.querySelector('[data-act="dl-sel"]').click();
+      for (let i = 0; i < 100 && !written.some((p) => /Altri strumenti/.test(p)); i++) await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 300));
+      Bridge.writeFile = wf;
+      return { checked: boxes.filter((b) => b.checked).length, label, files: written.map((p) => p.split("/").pop()) };
+    });
+    check(sel.label === `Le ${sel.checked} selezionate` && sel.files.length === sel.checked && !sel.files.some((f) => /– Voce\./.test(f)),
+      `dopo «Pulisci» «Le N selezionate» conta e scarica solo le tracce che si vedono (${JSON.stringify(sel)})`);
+    // «Progetto per…» › altri programmi: la voce pulita al posto della voce, e i decimi giusti in Parti.txt
+    await page.evaluate(() => { IsoApp.ui.lastProject = null; });
+    await page.selectOption('select[data-input="project"]', "daw");
+    for (let i = 0; i < 100 && !(await page.evaluate(() => IsoApp.ui.lastProject)); i++) await page.waitForTimeout(100);
+    const proj = await page.evaluate(async () => {
+      const d = IsoApp.ui.lastProject; if (!d) return null;
+      const files = (await Bridge.listFiles(d, "wav")).map((p) => p.split("/").pop());
+      return { files, parti: await Bridge.readText(d + "/Parti.txt") };
+    });
+    check(proj && proj.files.some((f) => /Voce pulita/.test(f)) && !proj.files.some((f) => / Voce\.wav$/.test(f)),
+      `dopo «Pulisci» «Progetto per…» mette la voce pulita al posto della voce, non tutte e due (${JSON.stringify(proj && proj.files)})`);
+    check(proj && /0:02\.4  Ritornello/.test(proj.parti) && /0:05\.3  Ritornello/.test(proj.parti),
+      `Parti.txt ha gli stessi decimi del .rpp e del .cue (${JSON.stringify(proj && proj.parti)})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t4): " + page.errors.join(" | "));
+    await page.close();
+  }
+  {
+    // Parità con il Mac (t16): Separa mentre si taglia l'anteprima non parte; un'anteprima non riuscita non blocca la coda
+    const page = await fresh(browser);
+    const r = await page.evaluate(async () => {
+      const J = IsoApp.job, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const bad = (n) => new File([new Uint8Array(2000).fill(7)], n, { type: "audio/wav" });
+      J.add([bad("A.wav")]);
+      J.startPreview("studio");
+      const busy = J.busy;
+      J.start("studio");                       // «Separa» mentre si taglia: niente secondo lavoro
+      J.add([bad("B.wav")]);                   // trascinata durante l'anteprima: in coda
+      const queued = J.queue.map((f) => f.name);
+      for (let i = 0; i < 200 && (J.busy || J.queue.length); i++) await wait(50);
+      return { busy, queued, phase: J.phase, preview: !!J.preview, queue: J.queue.length, skipped: J.skipped.map((s) => s.name) };
+    });
+    check(r.busy && r.queued.join() === "B.wav" && !r.preview && r.queue === 0 && r.skipped.join() === "A.wav (anteprima)",
+      `un'anteprima non riuscita si chiude e la canzone in coda parte, con il perché scritto (${JSON.stringify(r)})`);
+    await page.close();
+  }
+  {
+    // t3: Esercitati con velocità o tono cambiati deve suonare (si misura l'uscita), e A–B, muto/solo, tasti
+    const page = await fresh(browser);
+    await openSong(page);
+    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b && !IsoApp.ui.practice) b.click(); });
+    await page.waitForTimeout(300);
+    const level = await page.evaluate(async () => {
+      const P = IsoApp.player, a = P.ctx.createAnalyser(), wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      a.fftSize = 2048; P.master.connect(a);
+      const db = () => { const d = new Float32Array(a.fftSize); a.getFloatTimeDomainData(d); let s = 0; for (const v of d) s += v * v; return 10 * Math.log10(s / d.length + 1e-12); };
+      const made = [], orig = window.SignalsmithStretch;
+      window.SignalsmithStretch = async (...x) => { const n = await orig(...x); made.push(n); n.onprocessorerror = () => made.push("errore"); return n; };
+      P.dropStretch(); P.setRate(0.8); P.setSemitones(1); await P.play(0);
+      let top = -120;
+      for (let i = 0; i < 15; i++) { await wait(100); top = Math.max(top, db()); }
+      P.pause(); window.SignalsmithStretch = orig; P.setRate(1); P.setSemitones(0);
+      return { db: Math.round(top), motors: made.filter((m) => m !== "errore").length, errors: made.filter((m) => m === "errore").length };
+    });
+    check(level.db > -40 && level.motors === 1 && level.errors === 0, `Esercitati a velocità 80% e tono +1 si sente (sopra −40 dB), con un solo motore (${JSON.stringify(level)})`);
+    // Clic su una parte: A–B segnato e «Il passaggio A–B» si accende
+    const ab = await page.evaluate(async () => {
+      document.querySelector('#sections button[data-section="2"]').click();
+      await new Promise((ok) => setTimeout(ok, 200));
+      const on = !document.querySelector('[data-act="dl-ab"]').disabled;
+      // Ctrl+[ con la testina dopo B: B si toglie e il pulsante si spegne (prima ridisegnato tutto con il passaggio segnato)
+      const P = IsoApp.player; P.pause();
+      document.querySelector('[data-preset="all"]').click();
+      await new Promise((ok) => setTimeout(ok, 200));
+      const before = !document.querySelector('[data-act="dl-ab"]').disabled;
+      P.seek(6 / P.duration);
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "[", ctrlKey: true, bubbles: true }));
+      await new Promise((ok) => setTimeout(ok, 200));
+      return { on, before, b: P.loopB, off: document.querySelector('[data-act="dl-ab"]').disabled };
+    });
+    check(ab.on, `«Il passaggio A–B» si accende col clic su una parte (${JSON.stringify(ab)})`);
+    check(ab.before && ab.b == null && ab.off, `«Il passaggio A–B» si spegne quando Ctrl+[ toglie B (${JSON.stringify(ab)})`);
+    const ms = await page.evaluate(() => {
+      const P = IsoApp.player; P.preset("all"); P.toggleSolo("bass"); P.toggleMute("bass");
+      const g = P.effectiveGain("bass"); P.preset("all"); return g;
+    });
+    check(ms === 0, `muto e solo sulla stessa traccia: vince il muto, come sul Mac e sul sito (${ms})`);
+    const keys = await page.evaluate(async () => { Sheets.help(); await new Promise((ok) => setTimeout(ok, 200)); const t = document.querySelector("#overlay").textContent; document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return t; });
+    check(/Ctrl\+Alt\+↑/.test(keys) && /Ctrl\+Maiusc\+P/.test(keys), "Aiuto › Tasti elenca Ctrl+Alt+↑/↓ e Ctrl+Maiusc+P");
+    check(page.errors.length === 0, "nessun errore nella pagina (t3): " + page.errors.join(" | "));
+    await page.close();
+  }
 
   await browser.close();
   server.close();

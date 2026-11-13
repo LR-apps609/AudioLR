@@ -136,8 +136,9 @@ fn library(app: AppHandle) -> Result<Vec<serde_json::Value>, String> {
     let root = output_root(&app)?;
     let mut out = vec![];
     for e in std::fs::read_dir(&root).map_err(|e| e.to_string())?.flatten() {
-        // Le cartelle con il punto davanti (l'anteprima di 20 s) non sono canzoni della libreria
-        if e.file_name().to_string_lossy().starts_with('.') {
+        // La cartella dell'anteprima di 20 s non è una canzone della libreria. Solo lei, per nome: prima si saltava
+        // ogni cartella con il punto davanti, anche le canzoni vere come «...And Justice for All» (dal tester t4)
+        if e.file_name().to_string_lossy() == ".anteprima" {
             continue;
         }
         let meta = e.path().join("isolr.json");

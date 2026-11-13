@@ -307,6 +307,13 @@
     return parts.join(" · ");
   }
 
+  /** Le tracce con una riga nel mixer (la base compresa): una traccia pulita o divisa nasconde quella d'origine,
+   *  che quindi non si conta né si scarica tra «Le N selezionate» (dal tester t4) */
+  function shownStems(m) {
+    const mix = MixPlayer.mixable(m.stems);
+    return m.stems.filter((s) => s.key === "instrumental" || mix.includes(s));
+  }
+
   function results(p) {
     const cur = job.current, m = cur.meta;
     const keys = m.stems.map((s) => s.key);
@@ -314,7 +321,7 @@
     const replaced = Object.values(Separation.EXTRA).filter((x) => x.parts.some((pp) => keys.includes(pp))).map((x) => x.source);
     const stems = m.stems.filter((s) => s.key !== "instrumental" && !replaced.includes(s.key)), base = m.stems.find((s) => s.key === "instrumental");
     const splits = Object.entries(Separation.EXTRA).filter(([k, x]) => keys.includes(x.source) && !Object.values(Separation.EXTRA).filter((y) => y.source === x.source).some((y) => y.parts.some((pp) => keys.includes(pp))));
-    const sel = m.stems.filter((s) => !ui.unselected.has(s.key));
+    const sel = shownStems(m).filter((s) => !ui.unselected.has(s.key));
     p.innerHTML = `<div class="results">
       <div class="col">
         <div class="song"><span class="ic">${Icon("note")}</span><div style="min-width:0"><b>${esc(m.title)}</b><span>${esc(infoLine(m))}</span></div></div>
@@ -339,9 +346,9 @@
           <div class="form-line">Formato <select class="pop" data-input="format">${Object.entries(Encode.FORMATS).map(([k, f]) => `<option value="${k}" ${k === Prefs.get("downloadFormat", "wav24") ? "selected" : ""}>${f.title}</option>`).join("")}</select></div>
           ${player.semitones ? `<label class="form-line" style="font-size:12px"><input type="checkbox" data-act="dl-transposed" ${ui.downloadTransposed ? "checked" : ""}> ${esc(m.analysis && m.analysis.keyRoot != null ? "In " + Transpose.keyName(m.analysis.keyRoot, m.analysis.minor, player.semitones) : "Nella tonalità scelta")} (${Transpose.label(player.semitones)})</label>` : ""}
           <button class="btn" data-act="dl-all">${Icon("download")}Tutte le tracce</button>
-          <button class="btn" data-act="dl-sel" ${sel.length && sel.length < m.stems.length ? "" : "disabled"}>Le ${sel.length} selezionate</button>
+          <button class="btn" data-act="dl-sel" ${sel.length && sel.length < shownStems(m).length ? "" : "disabled"}>Le ${sel.length} selezionate</button>
           <button class="btn" data-act="dl-mix">Il mix che senti</button>
-          <button class="btn" data-act="dl-ab" ${player.isLooping ? "" : "disabled"} title="${player.isLooping ? "Solo il passaggio tra A e B, con il mix che senti" : "Prima segna A e B in «Esercitati»"}">Il passaggio A–B</button>
+          <button class="btn" data-act="dl-ab" ${player.isLooping ? "" : "disabled"} title="${abTitle()}">Il passaggio A–B</button>
           <button class="btn" data-act="dl-stem">File per DJ (.stem.mp4)</button>
           <select class="pop" data-input="project" title="Le tracce pronte da aprire nel tuo programma musicale, con tempo e parti"><option value="">Progetto per…</option><option value="ableton">Ableton Live</option><option value="reaper">REAPER</option><option value="daw">Logic, GarageBand, FL Studio, altri</option></select>
           <p>Scegli tu dove salvare. Le tracce restano anche in Musica › IsoLR.</p>
@@ -400,6 +407,11 @@
   }
 
   // Il trasporto: suona, tempo, scorciatoie, «Senza…», Esercitati; sotto, quando è aperto, la Sala prove
+  // «Il passaggio A–B» nel riquadro Scarica: si aggiorna anche quando si ridisegna solo il trasporto
+  // (clic su una parte, Ctrl+[): prima restava spento con il passaggio segnato, o acceso senza B (dal tester t3)
+  const abTitle = () => player.isLooping ? "Solo il passaggio tra A e B, con il mix che senti" : "Prima segna A e B in «Esercitati»";
+  function syncAB() { const b = $('[data-act="dl-ab"]'); if (b) { b.disabled = !player.isLooping; b.title = abTitle(); } }
+
   function transport() {
     const t = $("#transport");
     if (!t) return;
@@ -612,7 +624,8 @@
     if (!dir) return;
     try {
       toast("Preparo il progetto…");
-      const stems = m.stems.filter((s) => s.key !== "instrumental");
+      // Come il mixer: la voce pulita o le parti divise prendono il posto della traccia d'origine (prima c'erano tutte e due e la voce suonava doppia)
+      const stems = MixPlayer.mixable(m.stems);
       // Tutte le tracce lunghe uguali e dall'inizio: messe una sotto l'altra sono allineate
       const chs = [];
       let len = 0;
@@ -703,7 +716,7 @@
     if (d.solo) { player.toggleSolo(d.solo); return panel(); }
     if (d.dl) return downloadStems(job.current.meta.stems.filter((s) => s.key === d.dl));
     if (d.split) { ui.lastSplit = d.split; player.stop(); await job.split(d.split); await player.load(job.current); return render(); }
-    if (d.section != null) { const x = player.structure.sections[+d.section]; player.practice(x.start, x.end); return transport(); }
+    if (d.section != null) { const x = player.structure.sections[+d.section]; player.practice(x.start, x.end); transport(); return syncAB(); }
     if (d.chordnames) { ui.italian = d.chordnames === "it"; Prefs.set("italianChords", ui.italian); const b = $("#chords"); if (b) b.dataset.last = ""; return; }
     if (d.tab) return window.Sheets && window.Sheets.tab(d.tab);
     switch (d.act) {
@@ -736,7 +749,7 @@
       case "ramp": player.setRamp(!player.ramp); return transport();
       case "normal": player.resetPractice(); if (player.playing) player.play(player.position, { counting: false }); return panel();
       case "dl-all": return downloadStems(job.current.meta.stems);
-      case "dl-sel": return downloadStems(job.current.meta.stems.filter((s) => !ui.unselected.has(s.key)));
+      case "dl-sel": return downloadStems(shownStems(job.current.meta).filter((s) => !ui.unselected.has(s.key)));
       case "dl-mix": return downloadMix(null);
       case "dl-ab": return downloadMix([player.loopA, player.loopB]);
       case "dl-stem": return downloadStemFile();
@@ -764,7 +777,7 @@
   document.addEventListener("input", async (ev) => {
     const el = ev.target, d = el.dataset;
     if (d.gain) { player.setGain(d.gain, +el.value); return; }
-    if (d.sel) { el.checked ? ui.unselected.delete(d.sel) : ui.unselected.add(d.sel); const st = job.current.meta.stems; const sel = st.filter((s) => !ui.unselected.has(s.key)); const b = $('[data-act="dl-sel"]'); if (b) { b.textContent = `Le ${sel.length} selezionate`; b.disabled = !(sel.length && sel.length < st.length); } return; }
+    if (d.sel) { el.checked ? ui.unselected.delete(d.sel) : ui.unselected.add(d.sel); const st = shownStems(job.current.meta); const sel = st.filter((s) => !ui.unselected.has(s.key)); const b = $('[data-act="dl-sel"]'); if (b) { b.textContent = `Le ${sel.length} selezionate`; b.disabled = !(sel.length && sel.length < st.length); } return; }
     switch (d.input) {
       case "search": ui.filter = { ...ui.filter, text: el.value }; { const pos = el.selectionStart; library(); const s = $('[data-input="search"]'); s.focus(); s.setSelectionRange(pos, pos); } return;
       case "format": Prefs.set("downloadFormat", el.value); return;
@@ -835,7 +848,7 @@
     if (e.code === "Space" && job.phase === "done" && (spacePlays || !tg.closest("button,a,[role=button],input,select,textarea,[contenteditable]"))) { e.preventDefault(); player.toggle(); transport(); return; }
     // Invio e Spazio su una canzone della libreria la aprono, come il clic
     if ((e.key === "Enter" || e.code === "Space") && tg.matches(".lib-item[data-open]")) { e.preventDefault(); tg.click(); }
-    if (e.ctrlKey && e.key === "[") { player.markA(); transport(); }
+    if (e.ctrlKey && e.key === "[") { player.markA(); transport(); syncAB(); }
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowDown") { e.preventDefault(); transposeBy(-1); }

@@ -6,7 +6,9 @@ pub fn clean_name(s: &str) -> String {
     let t: String = s.chars().map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '-' } else { c }).collect();
     // Prima si accorcia, poi si tolgono spazi e punti in fondo: Windows non accetta un nome che finisce con «.»
     let t: String = t.trim().chars().take(120).collect();
-    let t = t.trim_end().trim_end_matches(['.', ' ']).to_string();
+    // e anche i punti all'inizio: «...And Justice for All» diventa «And Justice for All», una cartella che non
+    // si confonde con quella dell'anteprima (.anteprima) né si nasconde (dal tester t4)
+    let t = t.trim_end().trim_end_matches(['.', ' ']).trim_start_matches(['.', ' ']).to_string();
     if t.is_empty() { "Canzone".into() } else { t }
 }
 
@@ -19,6 +21,14 @@ mod tests {
         assert_eq!(clean_name("AC/DC: Back?"), "AC-DC- Back-");
         assert_eq!(clean_name("   "), "Canzone");
         assert_eq!(clean_name("..."), "Canzone");
+    }
+
+    #[test]
+    fn niente_punti_all_inizio() {
+        // Dal tester t4: «...And Justice for All» finiva in una cartella con il punto davanti, che la libreria salta
+        assert_eq!(clean_name("...And Justice for All"), "And Justice for All");
+        assert_eq!(clean_name(".anteprima"), "anteprima");
+        assert_eq!(clean_name(" . . Canzone"), "Canzone");
     }
 
     #[test]

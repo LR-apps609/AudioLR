@@ -95,3 +95,12 @@ test("dai tester (t15): senza tempo misurato niente «120 BPM» inventato nei no
   assert.strictEqual(D.folderName(q, "daw"), "Vera – Tracce per DAW (98 BPM, La minore)");
   assert.match(D.cueSheet(q, "a.wav"), /REM BPM 98/);
 });
+
+test("Parti.txt: i decimi come nel .rpp e nel .cue (2,4 s è «0:02.4», non «0:02.3»; dal tester t4)", () => {
+  const q = D.project({ title: "T", bpm: 115, seconds: 70, tracks: [],
+    structure: { beats: [], firstDownbeat: 0, beatsPerBar: 4, sections: [{ start: 0, end: 2.4, label: "Intro" }, { start: 2.4, end: 5.3, label: "Strofa" }, { start: 5.3, end: 59.97, label: "Ritornello" }, { start: 59.97, end: 70, label: "Finale" }] } });
+  const txt = D.partsText(q);
+  assert.match(txt, /0:02\.4  Strofa/);
+  assert.match(txt, /0:05\.3  Ritornello/);
+  assert.match(txt, /1:00\.0  Finale/);
+});

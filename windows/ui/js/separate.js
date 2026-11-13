@@ -403,7 +403,9 @@
         }
         this.error = String(e.message || e); this.phase = "failed"; this.batch.failed++;
         // In una coda la prossima canzone parte subito: chi non riesce resta scritta, con il perché
-        if (this.queue.length && !this.preview) this.skipped.push({ name: file.name, error: this.error });
+        if (this.queue.length) this.skipped.push({ name: this.preview ? `${file.name} (anteprima)` : file.name, error: this.error });
+        // Un'anteprima non riuscita si chiude, come sul Mac: le canzoni trascinate intanto partono (prima la coda restava ferma)
+        this.preview = null;
         this.record({ quality, seconds: songSeconds, total: (performance.now() - tAll) / 1000, laps, backend, preview: !!opts.preview, ok: false, error: this.error.slice(0, 200) });
         this.emit();
       }
@@ -631,9 +633,10 @@
   async function library() {
     const list = await Bridge.library();
     const out = [];
-    // Le cartelle che iniziano con un punto (l'anteprima) non sono canzoni della libreria
+    // La cartella dell'anteprima (.anteprima) non è una canzone della libreria. Solo lei: prima si saltava ogni
+    // cartella con il punto davanti, anche le canzoni vere come «...And Justice for All» (dal tester t4)
     for (const it of list) {
-      if (/[\\/]\.[^\\/]*$/.test(it.folder)) continue;
+      if (/[\\/]\.anteprima$/.test(it.folder)) continue;
       try { out.push({ folder: it.folder, meta: JSON.parse(it.meta) }); } catch {}
     }
     out.sort((a, b) => String(b.meta.created).localeCompare(String(a.meta.created)));

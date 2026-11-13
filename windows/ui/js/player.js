@@ -99,9 +99,10 @@
 
     // ── Stato del mix ──
     effectiveGain(k) {
-      const g = this.gains[k] ?? 1;
-      if (this.solo.size) return this.solo.has(k) ? g : 0;
-      return this.muted.has(k) ? 0 : g;
+      // Come il Mac (MixState.effectiveGain) e il sito: una traccia muta tace anche se è in «solo» (prima vinceva il solo)
+      if (this.muted.has(k)) return 0;
+      if (this.solo.size && !this.solo.has(k)) return 0;
+      return this.gains[k] ?? 1;
     }
     setGain(k, v) { this.gains[k] = v; this.applyGains(); this.emit(); }
     toggleMute(k) { this.muted.has(k) ? this.muted.delete(k) : this.muted.add(k); this.applyGains(); this.emit(); }
@@ -213,7 +214,9 @@
         if (typeof SignalsmithStretch !== "function") throw new Error("velocità e tono non disponibili");
         const all = this.take && this.takeBuffer ? [...this.keys, "__take"] : [...this.keys];
         const C = all.length * 2;
-        const node = await SignalsmithStretch(this.ctx, { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [C] });
+        // Un ingresso (anche se non collegato), come le opzioni predefinite del motore: con 0 ingressi il suo process()
+        // legge inputList[0], che non c'è, si ferma con un errore e con velocità o tono cambiati non si sentiva niente (dal tester t3)
+        const node = await SignalsmithStretch(this.ctx, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [C] });
         const split = this.ctx.createChannelSplitter(C);
         node.connect(split);
         const outs = all.map((k, i) => {

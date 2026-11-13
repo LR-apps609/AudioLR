@@ -21,6 +21,14 @@ Novità di IsoLR per Windows 0.16.0 (in preparazione):
 • Esercitati: rimarcando A mentre il passaggio suona si sente subito il passaggio nuovo; la Rampa accesa mentre suona cambia davvero la velocità e il cursore la segue; togliendo il passaggio la Rampa si spegne; «Il passaggio A–B» senza B dice cosa manca invece di un errore
 • Finestre piccole (anche la minima, 930×640): le righe del mixer non escono più dal riquadro, il mixer resta visibile con «Esercitati» aperto, «Annulla» si raggiunge sempre, le schede delle qualità vanno a capo e la libreria con i filtri aperti scorre
 • Finestra minima (930×640): in Esercitati la barra delle parti (Intro, Strofa, Ritornello…) va a capo sopra Metronomo e Conteggio invece di restringersi a 48 px con le parti illeggibili e accavallate; nel mixer i nomi lunghi («Pianoforte», «Altri strumenti») finiscono con «…» invece di passare sotto Silenzia, e il nome intero compare passandoci sopra
+• Corretto: una canzone il cui nome inizia con un punto («...And Justice for All») veniva separata ma non compariva mai in libreria; ora la cartella si chiama senza i punti davanti, e anche quelle già fatte tornano in libreria
+• Dopo «Pulisci la voce»: «Progetto per…» mette la voce pulita al posto della voce (prima c'erano tutte e due e la voce suonava doppia); «Le N selezionate» conta e scarica solo le tracce che si vedono (prima anche la «Voce» nascosta)
+• Parti.txt: i tempi delle parti coincidono con quelli del progetto REAPER e del foglio CUE (prima 2,4 s diventava «0:02.3»)
+• Anteprima 20 s: se non riesce, le canzoni trascinate intanto partono e resta scritto perché l'anteprima non è riuscita (prima la coda restava ferma)
+• Corretto: in Esercitati, con la velocità o il tono cambiati non si sentiva niente (il motore di velocità e tono si fermava con un errore appena creato)
+• Esercitati: con un clic su una parte della canzone «Il passaggio A–B» si accende subito; se Ctrl+[ toglie B, si spegne invece di dare errore
+• Muto e solo sulla stessa traccia: vince il muto, come sul Mac (prima vinceva il solo)
+• Aiuto › Tasti: ci sono anche Ctrl+Alt+↑ e ↓ (un semitono sopra o sotto) e Ctrl+Maiusc+P (Pulisci la voce)
 • Contrasto elevato di Windows: «solo», «muto», Esercitati, Metronomo, Conteggio, Rampa e la parte scelta si vedono accesi; con «Riduci movimento» anche le barre della schermata iniziale stanno ferme
 • Un file vuoto (0 byte) trascinato dice che è vuoto invece di non fare niente; durante una separazione una canzone della libreria dice che si apre alla fine; la ricerca senza risultati non dice più che la libreria è vuota; la Cronologia aperta durante una separazione si aggiorna alla fine
 • Warp: «Togli il segnaposto» per toglierlo anche dal tablet, senza tastiera
