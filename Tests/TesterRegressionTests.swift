@@ -206,4 +206,27 @@ final class TesterRegressionTests: XCTestCase {
         XCTAssertTrue(help.contains("circa 330 MB per Massima, 630 MB per Studio, 80 MB per Rapida"))
         XCTAssertFalse(help.contains("310 MB"))
     }
+
+    func testSongFolderDoesNotStartWithADot() {
+        // Giro 2, parità con Windows (t4): «...And Justice for All» finiva in una cartella nascosta dal Finder
+        XCTAssertEqual(SeparationJob.folderName("...And Justice for All"), "And Justice for All")
+        XCTAssertEqual(SeparationJob.folderName(" . . Canzone"), "Canzone")
+        XCTAssertEqual(SeparationJob.folderName("..."), "Canzone")
+        XCTAssertEqual(SeparationJob.folderName("Canzone. Fine."), "Canzone. Fine.")
+    }
+
+    func testDawProjectHasTheMixerTracks() throws {
+        // Giro 2, parità con Windows (t4): dopo «Pulisci la voce» il progetto aveva Voce e Voce pulita, tutte e due attive
+        let daw = try source("DawExport.swift")
+        XCTAssertTrue(daw.contains("let list = MixPlayer.mixable(stems)"))
+        XCTAssertFalse(daw.contains("let list = stems.filter { $0.key != \"instrumental\" }"))
+    }
+
+    func testPartsTextTenthsAreRounded() {
+        // Giro 2, parità con Windows (t4): 2,4 s diventava «0:02.3»
+        XCTAssertEqual(DawExport.partsClock(2.4), "0:02.4")
+        XCTAssertEqual(DawExport.partsClock(0), "0:00.0")
+        XCTAssertEqual(DawExport.partsClock(59.96), "1:00.0")
+        XCTAssertEqual(DawExport.partsClock(125.26), "2:05.3")
+    }
 }

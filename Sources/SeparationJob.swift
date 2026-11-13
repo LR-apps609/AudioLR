@@ -1530,16 +1530,24 @@ final class SeparationJob: ObservableObject {
     }
 
     /// Un WAV per strumento, più la base senza voce, in Musica/IsoLR/<canzone>/.
+    /// Il nome della cartella di una canzone: senza punti e spazi all'inizio. «...And Justice for All» finiva in una
+    /// cartella con il punto davanti, che il Finder nasconde (come su Windows; dal tester t4 del giro 2).
+    nonisolated static func folderName(_ title: String) -> String {
+        let t = String(title.drop(while: { $0 == "." || $0 == " " }))
+        return t.isEmpty ? "Canzone" : t
+    }
+
     nonisolated static func save(_ out: [[[Float]]], sources: [String], song: URL,
                                  into root: URL = Prefs.folder, format: OutputFormat = Prefs.format,
                                  instrumental: Bool = Prefs.makeInstrumental,
                                  base given: [[Float]]? = nil) throws -> (URL, [Stem]) {
         let fm = FileManager.default
         let title = song.deletingPathExtension().lastPathComponent
-        var dir = root.appendingPathComponent(title, isDirectory: true)
+        let folderName = Self.folderName(title)
+        var dir = root.appendingPathComponent(folderName, isDirectory: true)
         var n = 2
         while fm.fileExists(atPath: dir.path) {
-            dir = root.appendingPathComponent("\(title) \(n)", isDirectory: true)
+            dir = root.appendingPathComponent("\(folderName) \(n)", isDirectory: true)
             n += 1
         }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)

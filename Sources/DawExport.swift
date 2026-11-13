@@ -342,8 +342,15 @@ enum DawExport {
         return lines.joined(separator: "\r\n") + "\r\n"
     }
 
+    /// «0:02.4»: in decimi interi, arrotondati. Con `Int((s - s.rounded(.down)) * 10)` 2,4 s diventava «0:02.3»
+    /// (0,3999…), come su Windows (dal tester t4 del giro 2).
+    static func partsClock(_ s: Double) -> String {
+        let d = Int((max(0, s) * 10).rounded())
+        return String(format: "%d:%02d.%d", d / 600, (d / 10) % 60, d % 10)
+    }
+
     static func partsText(_ p: Project) -> String {
-        func clock(_ s: Double) -> String { String(format: "%d:%02d.%d", Int(s) / 60, Int(s) % 60, Int((s - s.rounded(.down)) * 10)) }
+        func clock(_ s: Double) -> String { partsClock(s) }
         let head = [p.title, heading(p, " · ")].filter { !$0.isEmpty }.joined(separator: " · ")
         return ([head, ""] + p.sections.map { "\(clock($0.start))  \($0.label)" }).joined(separator: "\r\n") + "\r\n"
     }
@@ -394,7 +401,9 @@ enum DawExport {
 
     /// Scrive il progetto dentro `folder`: tracce allineate in WAV 24 bit, il file del programma, il MIDI del tempo.
     nonisolated static func write(kind: Kind, stems: [Stem], title: String, analysis: SongAnalysis?, shift: Int, into folder: URL) throws -> URL {
-        let list = stems.filter { $0.key != "instrumental" }
+        // Come il mixer: la voce pulita o le parti divise prendono il posto della traccia d'origine (prima c'erano
+        // tutte e due, attive, e la voce suonava doppia; come su Windows, dal tester t4 del giro 2)
+        let list = MixPlayer.mixable(stems)
         var audio: [[[Float]]] = []
         var length = 0
         for s in list {
