@@ -37,6 +37,11 @@
     },
     async readText(path) { return new TextDecoder().decode(await Bridge.readFile(path)); },
 
+    /** La dimensione di un file in byte, senza leggerlo. */
+    async fileSize(path) {
+      if (DESKTOP) return invoke("file_size", { path });
+      const b = mem.get(path); if (!b) throw new Error("file non trovato"); return b.length;
+    },
     async exists(path) { return DESKTOP ? invoke("exists", { path }) : mem.has(path); },
     async remove(path) { if (DESKTOP) return invoke("trash", { path }); for (const k of [...mem.keys()]) if (k === path || k.startsWith(path + "/")) mem.delete(k); },
 

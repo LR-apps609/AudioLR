@@ -33,9 +33,48 @@
     return IsoLR.Load.estimate(q, { library: lib, webgpu: "gpu" in navigator, seconds });
   }
 
+  // Oltre questa dimensione un file non si legge nemmeno: decodificato occuperebbe molti GB e WebView2 si poteva chiudere
+  // prima del controllo dell'ora (dal tester t9). Un'ora di WAV a 48 kHz e 24 bit pesa circa 1 GB.
+  const MAX_BYTES = 1.5 * 1024 ** 3;
+  const gb = (n) => (n / 1024 ** 3).toLocaleString("it-IT", { maximumFractionDigits: 1 });
+  const tooBig = (size) => `il file è troppo grande (${gb(size)} GB): IsoLR separa canzoni fino a un'ora`;
+
+  /** La durata di un WAV dall'intestazione, senza decodificarlo (null se non è un WAV o non si capisce). */
+  async function wavSeconds(file) {
+    try {
+      const v = new DataView(await file.slice(0, 1 << 16).arrayBuffer()), tag = (o) => String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3));
+      if (v.byteLength < 12 || tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+      let byteRate = 0;
+      for (let o = 12; o + 8 <= v.byteLength;) {
+        const id = tag(o), size = v.getUint32(o + 4, true);
+        if (id === "fmt " && o + 16 <= v.byteLength) byteRate = v.getUint32(o + 16, true);
+        if (id === "data") {
+          // 0 o 0xFFFFFFFF: scritto mentre si registrava, i dati arrivano fino in fondo al file
+          const bytes = size && size !== 0xffffffff ? Math.min(size, file.size - o - 8) : file.size - o - 8;
+          return byteRate > 0 ? bytes / byteRate : null;
+        }
+        o += 8 + size + (size & 1);
+      }
+    } catch { /* un file che non si legge: lo dirà la decodifica */ }
+    return null;
+  }
+  /** Prima di decodificare: un WAV più lungo di un'ora o un file enorme si rifiutano subito, con poca memoria. */
+  async function checkLength(file) {
+    const secs = await wavSeconds(file);
+    if (secs != null && secs > 60 * 60) throw new Error("la canzone è più lunga di un'ora");
+    if (file.size > MAX_BYTES) throw new Error(tooBig(file.size));
+    return secs;
+  }
+
   /** Legge e decodifica un file audio in stereo a 44,1 kHz (come AudioIO.read). */
   async function decode(file) {
-    const bytes = await file.arrayBuffer();
+    let bytes;
+    // L'errore del browser era in inglese («A requested file or directory could not be found…») (dal tester t7)
+    try { bytes = await file.arrayBuffer(); } catch (e) {
+      const name = file.name.replace(/\.[^.]+$/, "");
+      if (e && e.name === "NotFoundError") throw new Error(`non trovo più «${name}»: è stato spostato o cancellato, oppure è una cartella (trascina le canzoni che contiene)`);
+      throw new Error(`non riesco a leggere «${name}»: forse è aperto in un altro programma, è solo nel cloud o è una cartella`);
+    }
     const ctx = new OfflineAudioContext(2, 1, RATE);
     let buf;
     try { buf = await ctx.decodeAudioData(bytes); } catch { throw new Error("non riesco ad aprire questo file come audio"); }
@@ -72,6 +111,7 @@
       this.phase = "idle";        // idle · pending · working · done · failed
       this.current = null;        // la canzone aperta: { folder, meta }
       this.pending = null;        // canzone scelta ma non ancora separata
+      this.seconds = new WeakMap(); // file → durata letta dall'intestazione (solo i WAV), per la stima del tempo
       this.progress = 0; this.step = ""; this.error = null;
       this.worker = null; this.loaded = new Set(); this.batch = null;
       this.cpu = false;           // la scheda grafica qui non riesce a calcolare: si lavora con il processore
@@ -127,7 +167,11 @@
       }
       for (const f of list) this.queue.push(f);
       this.emit();
+      // La durata dei WAV, letta dall'intestazione: le schede delle qualità stimano il tempo per questa canzone
+      for (const f of [this.pending, ...list]) if (f && !this.seconds.has(f)) wavSeconds(f).then((t) => { this.seconds.set(f, t); if (t && f === this.pending) this.emit(); });
     }
+    /** La durata della canzone pronta, se si conosce senza decodificarla (WAV); altrimenti null. */
+    get pendingSeconds() { return (this.pending && this.seconds.get(this.pending)) || null; }
     /** «Togli» sulla canzone pronta: passa pronta la prossima della coda (prima la coda restava ferma e Separa spento). */
     clearPending() {
       this.pending = this.queue.length ? this.queue.shift() : null;
@@ -322,8 +366,11 @@
       let songSeconds = null, backend = null;
       this.emit();
       try {
+        await this.guard(checkLength(file));
         let song = await this.guard(decode(file));
         stop();
+        // Come sul Mac: sotto il secondo non c'è niente da separare (prima si separava e poi si leggeva «0:00 / 0:00») (dal tester t7)
+        if (song.seconds < 1) throw new Error("la canzone è troppo corta (almeno 1 secondo)");
         if (this.preview) {
           // Solo 20 secondi: il tratto si taglia qui, il resto del lavoro è identico
           const [a, b] = IsoLR.Library.previewRange(song.seconds, opts.at ?? 0.5);
@@ -655,5 +702,5 @@
     } catch {}
   }
 
-  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, loadInfo, library, decode, measure, save, saveVersion };
+  window.Separation = { Job, QUALITY, EXTRA, NAMES, ORDER, estimate, MAX_BYTES, tooBig, loadInfo, library, decode, measure, save, saveVersion };
 })();

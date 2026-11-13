@@ -566,6 +566,69 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await page.close();
   }
 
+  {
+    // t9 e t7: controlli prima di decodificare, letture che non riescono, canzoni troppo corte
+    const page = await fresh(browser);
+    const r = await page.evaluate(async () => {
+      const J = IsoApp.job, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      // Un WAV a 8 kHz mono 8 bit (come lo fa ffmpeg), con la durata scritta nell'intestazione
+      const wavOf = (seconds, rate = 8000) => {
+        const n = Math.round(seconds * rate), b = new Uint8Array(44 + n).fill(128), v = new DataView(b.buffer);
+        const tag = (o, t) => [...t].forEach((c, i) => (b[o + i] = c.charCodeAt(0)));
+        tag(0, "RIFF"); v.setUint32(4, 36 + n, true); tag(8, "WAVE"); tag(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+        v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+        tag(36, "data"); v.setUint32(40, n, true);
+        for (let i = 0; i < n; i++) b[44 + i] = 128 + Math.round(60 * Math.sin(i / 3));
+        return b;
+      };
+      const run = async (file, ms = 20000) => {
+        J.reset(); J.add([file]); const t0 = performance.now(); J.start("fast");
+        while (J.busy && performance.now() - t0 < ms) await wait(50);
+        const out = { error: J.error, s: +((performance.now() - t0) / 1000).toFixed(1), busy: J.busy };
+        if (J.busy) { J.cancel(); for (let i = 0; i < 100 && J.busy; i++) await wait(50); }
+        return out;
+      };
+      const out = {};
+      // t9: 61 minuti si rifiutano subito, guardando l'intestazione, senza decodificare 29 MB
+      const long = new File([wavOf(3660)], "Un'ora e un minuto.wav");
+      J.reset(); J.add([long]); await wait(300);
+      out.card = document.querySelector('.qcard[data-quality="studio"]').textContent;
+      out.estimate = Separation.estimate("studio", 3660);
+      out.long = await run(long);
+      // t9: un file enorme (qui la dimensione è finta) si rifiuta prima di leggerlo
+      const big = new File([new Uint8Array(1000)], "Enorme.flac"); Object.defineProperty(big, "size", { value: 2.2 * 1024 ** 3 });
+      out.big = await run(big);
+      // t7: file spostato dopo averlo trascinato
+      const gone = new File([wavOf(5)], "Da spostare.mp3"); gone.arrayBuffer = () => Promise.reject(new DOMException("A requested file or directory could not be found at the time an operation was processed.", "NotFoundError"));
+      out.gone = await run(gone);
+      // t7: mezzo secondo, come sul Mac non si separa
+      out.short = await run(new File([wavOf(0.5, 44100)], "Mezzo secondo.wav"), 4000);
+      // t9: Ctrl+O con una lettura che non riesce dice qualcosa
+      J.reset(); await wait(100);
+      const ao = Bridge.askOpen, rf = Bridge.readFile, fs = Bridge.fileSize;
+      Bridge.askOpen = async () => "C:/Users/prova/Downloads/Bloccata.mp3";
+      Bridge.readFile = async () => { throw new Error("memoria esaurita"); };
+      Bridge.fileSize = async () => 5e6;
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "o", ctrlKey: true, bubbles: true }));
+      await wait(400);
+      out.toasts = [...document.querySelectorAll(".toast")].map((t) => t.textContent);
+      Bridge.askOpen = ao; Bridge.readFile = rf; Bridge.fileSize = fs;
+      return out;
+    });
+    check(r.long.error === "la canzone è più lunga di un'ora" && r.long.s < 3, `una canzone di 61 minuti si rifiuta subito, senza decodificarla (${JSON.stringify(r.long)})`);
+    check(/troppo grande \(2,2 GB\)/.test(r.big.error || ""), `un file enorme si rifiuta prima di leggerlo (${JSON.stringify(r.big)})`);
+    check(r.card.includes(r.estimate), `con una canzone pronta di 61 minuti le schede stimano il tempo per 61 minuti (${JSON.stringify([r.card, r.estimate])})`);
+    check(/non trovo più «Da spostare»: è stato spostato o cancellato/.test(r.gone.error || ""), `un file spostato dopo il trascinamento dà un messaggio in italiano (${JSON.stringify(r.gone)})`);
+    check(r.short.error === "la canzone è troppo corta (almeno 1 secondo)", `mezzo secondo non si separa, come sul Mac (${JSON.stringify(r.short)})`);
+    check(r.toasts.some((t) => /Bloccata\.mp3» non si apre: memoria esaurita/.test(t)), `Ctrl+O con una lettura che non riesce lo dice (${JSON.stringify(r.toasts)})`);
+    // t7: la finestra «Scegli un file» non propone formati che WebView2 non apre (il Rust qui non si compila: si legge il filtro)
+    const rs = fs.readFileSync(path.join(__dirname, "../../src-tauri/src/main.rs"), "utf8");
+    const filt = (rs.match(/add_filter\("Audio", &\[([^\]]*)\]/) || [])[1] || "";
+    check(filt && !/aiff|"aif"|wma/.test(filt), `«Scegli un file» propone solo formati che si aprono (${filt})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t9, t7): " + page.errors.join(" | "));
+    await page.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");

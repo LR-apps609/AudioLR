@@ -155,7 +155,7 @@
       ${job.error ? `<div class="rec">Non riuscito: ${esc(job.error)} <button class="btn round" data-act="report">${Icon("bug")}Segnala il problema…</button></div>` : ""}${skippedNote()}
       <div class="label">Come la vuoi?</div>
       <div class="cards">${Object.entries(Separation.QUALITY).map(([k, v]) => `
-        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}" aria-pressed="${k === q}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k)}</span></button>`).join("")}</div>
+        <button class="qcard ${k === q ? "on" : ""}" data-quality="${k}" aria-pressed="${k === q}"><b>${Icon(v.icon)}${v.title}</b><span>${v.line}</span><span>${Separation.estimate(k, job.pendingSeconds || undefined)}</span></button>`).join("")}</div>
       <div class="go">
         ${f && q !== "fast" ? `<button class="btn round" data-act="preview" title="Separa solo 20 secondi dal centro della canzone con la qualità scelta, per sentire com'è prima di separarla tutta">${Icon("headphones")}Anteprima 20 s</button>` : ""}
         <button class="btn prominent round" data-act="separate" ${f ? "" : "disabled"}>${IconFill("play").replace("<svg", '<svg class="i" style="fill:currentColor;stroke:none"')}Separa · ${Separation.QUALITY[q].title === "Massima" ? "Massima qualità" : Separation.QUALITY[q].title}</button>
@@ -680,7 +680,15 @@
 
   async function chooseFile() {
     const p = await Bridge.askOpen();
-    if (p) { const bytes = await Bridge.readFile(p); job.add([new File([bytes], p.split(/[\\/]/).pop())]); }
+    if (!p) return;
+    const name = p.split(/[\\/]/).pop();
+    // Un file enorme non si legge nemmeno (prima si leggeva tutto e poi si decodificava: molti GB); se la lettura
+    // non riesce lo si dice (prima non succedeva niente) (dal tester t9)
+    try {
+      const size = await Bridge.fileSize(p).catch(() => 0);   // senza la dimensione si legge come prima
+      if (size > Separation.MAX_BYTES) { toast(`«${name}»: ${Separation.tooBig(size)}`); return; }
+      job.add([new File([await Bridge.readFile(p)], name)]);
+    } catch (e) { toast(`«${name}» non si apre: ${e.message || e}`); }
   }
 
   async function openEntry(e, keepPreview = false) {
@@ -873,7 +881,11 @@
     const files = [], bad = [];
     for (const p of list) {
       const name = p.split(/[\\/]/).pop();
-      try { files.push(new File([await Bridge.readFile(p)], name)); } catch (e) { bad.push(name); }
+      try {
+        const size = await Bridge.fileSize(p).catch(() => 0);
+        if (size > Separation.MAX_BYTES) { toast(`«${name}»: ${Separation.tooBig(size)}`); continue; }
+        files.push(new File([await Bridge.readFile(p)], name));
+      } catch (e) { bad.push(name); }
     }
     if (bad.length) toast(`${bad.length === 1 ? `«${bad[0]}» non si apre` : `${bad.length} canzoni non si aprono`}: forse è aperta in un altro programma o è solo nel cloud`);
     if (!files.length) return;
@@ -900,6 +912,8 @@
       }
       render(); return;
     }
+    // La durata della canzone pronta arriva dopo (intestazione del WAV): le schede delle qualità si aggiornano
+    if (job.phase === "pending" && job.pendingSeconds !== ui.shownSeconds) { ui.shownSeconds = job.pendingSeconds; panel(); return; }
     // Durante il lavoro gli aggiornamenti si raccolgono e la schermata si ridisegna una volta per fotogramma
     if (job.phase === "working" || job.splitting) schedulePanel();
   });

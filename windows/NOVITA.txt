@@ -29,6 +29,9 @@ Novità di IsoLR per Windows 0.16.0 (in preparazione):
 • Esercitati: con un clic su una parte della canzone «Il passaggio A–B» si accende subito; se Ctrl+[ toglie B, si spegne invece di dare errore
 • Muto e solo sulla stessa traccia: vince il muto, come sul Mac (prima vinceva il solo)
 • Aiuto › Tasti: ci sono anche Ctrl+Alt+↑ e ↓ (un semitono sopra o sotto) e Ctrl+Maiusc+P (Pulisci la voce)
+• Le canzoni più lunghe di un'ora si rifiutano subito: per i WAV la durata si legge dall'intestazione (prima si decodificava tutto, 13 s e 3 GB per un file di 29 MB) e un file oltre 1,5 GB non si legge nemmeno; con la canzone pronta le schede delle qualità stimano il tempo per la sua durata vera quando si conosce (WAV)
+• «Scegli una canzone» (anche Ctrl+O): se il file non si legge lo dice (prima non succedeva niente); la finestra non propone più AIFF e WMA, che poi non si aprivano
+• Un file spostato o cancellato dopo averlo trascinato, o una cartella trascinata, danno un messaggio in italiano invece dell'errore del browser in inglese; come sul Mac, una canzone sotto il secondo non si separa («la canzone è troppo corta (almeno 1 secondo)»)
 • Contrasto elevato di Windows: «solo», «muto», Esercitati, Metronomo, Conteggio, Rampa e la parte scelta si vedono accesi; con «Riduci movimento» anche le barre della schermata iniziale stanno ferme
 • Un file vuoto (0 byte) trascinato dice che è vuoto invece di non fare niente; durante una separazione una canzone della libreria dice che si apre alla fine; la ricerca senza risultati non dice più che la libreria è vuota; la Cronologia aperta durante una separazione si aggiorna alla fine
 • Warp: «Togli il segnaposto» per toglierlo anche dal tablet, senza tastiera

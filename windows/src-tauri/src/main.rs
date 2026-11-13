@@ -117,6 +117,14 @@ async fn read_file(app: AppHandle, allowed: State<'_, Allowed>, path: String) ->
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// La dimensione di un file, senza leggerlo: una canzone enorme si rifiuta prima di leggerla tutta (dal tester t9).
+#[tauri::command]
+fn file_size(app: AppHandle, allowed: State<Allowed>, path: String) -> Result<u64, String> {
+    let p = PathBuf::from(&path);
+    check(&app, &allowed, &p)?;
+    std::fs::metadata(&p).map(|m| m.len()).map_err(|e| format!("non riesco a leggere il file: {e}"))
+}
+
 #[tauri::command]
 fn exists(path: String) -> bool {
     Path::new(&path).exists()
@@ -190,7 +198,8 @@ async fn ask_open(app: AppHandle, allowed: State<'_, Allowed>) -> Result<Option<
     let picked = app
         .dialog()
         .file()
-        .add_filter("Audio", &["mp3", "wav", "flac", "m4a", "aac", "ogg", "opus", "aiff", "aif", "wma", "mp4"])
+        // Solo i formati che WebView2 sa decodificare: AIFF e WMA si potevano scegliere ma poi non si aprivano (dal tester t7)
+        .add_filter("Audio", &["mp3", "wav", "flac", "m4a", "aac", "ogg", "opus", "mp4"])
         .blocking_pick_file();
     let Some(p) = picked.and_then(|f| f.into_path().ok()) else { return Ok(None) };
     allowed.0.lock().unwrap().insert(p.clone());
@@ -944,7 +953,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            app_version, output_dir, new_song_dir, write_file, read_file, exists, trash, library, list_files,
+            app_version, output_dir, new_song_dir, write_file, read_file, file_size, exists, trash, library, list_files,
             ask_file, ask_folder, ask_open, reveal, open_report, keep_awake, sleep_now, notify, bring_to_front,
             prepare_model, cancel_downloads, read_model, models_ready, check_update, install_update,
             native_cancel, timing_add, timing_last, peak_memory, memory_gb,
