@@ -289,7 +289,7 @@ struct WarpView: View {
                 onClose()
                 job.addVersion(folder: dir, duration: seconds, analysis: analysis)
             } catch {
-                AppLog.write("Metti a tempo non riuscito: \(error.localizedDescription)")
+                AppLog.write("Messa a tempo non riuscita: \(error.localizedDescription)")
                 working = nil
                 self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }

@@ -59,7 +59,7 @@ struct TracksSettings: View {
                 }
                 Toggle("Crea anche la base senza voce (karaoke)", isOn: $instrumental)
                 Toggle("Crea anche il file per DJ (.stem.mp4: Traktor, Mixxx)", isOn: $stemFile)
-                Toggle("Chitarra e pianoforte in tracce proprie (Massima)", isOn: $split)
+                Toggle("Chitarra e pianoforte in tracce proprie (Massima e Studio)", isOn: $split)
             }
             Section {
                 Toggle("Suono quando ha finito", isOn: $sound)

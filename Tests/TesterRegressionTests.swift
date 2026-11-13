@@ -295,4 +295,28 @@ final class TesterRegressionTests: XCTestCase {
         XCTAssertTrue(help.contains("Health.hideSongs(Health.redact("))
         XCTAssertTrue(help.contains("report.issueURL(system: system, titles: Health.knownTitles)"))
     }
+
+    func testHelpTextsMatchTheApp() throws {
+        // Giro 2, t19: le Domande frequenti rimandavano a cose che non ci sono e davano numeri sbagliati
+        let all = FAQ.all.map(\.answer).joined(separator: "\n")
+        for gone in ["«Precisione»", "menu «MIDI»", "tasto con la casetta", "dal tasto «Esporta il mix»", "Premi «Esporta il mix»",
+                     "il mix esportato resta originale", "Clic destro sull'app › Apri › Apri",
+                     "circa 2–3 volte il tempo di Massima", "circa 4 volte più veloce", "circa 2–3 volte più rapida",
+                     "Sì, in Massima qualità:", "⌥⌘1, ⌥⌘2 e ⌥⌘3 per sceglierle"] {
+            XCTAssertFalse(all.contains(gone), gone)
+        }
+        for now in ["«File: MIDI, spartito e tab»", "«Il mix che senti»", "«File per DJ (.stem.mp4)»", "Privacy e sicurezza › «Apri comunque»",
+                    "Il tono invece segue anche i file scaricati", "⌥⌘1 per Massima, ⌥⌘2 per Rapida, ⌥⌘3 per Studio", "in Massima e in Studio"] {
+            XCTAssertTrue(all.contains(now), now)
+        }
+        // Le scorciatoie dicono le stesse qualità del menu
+        let main = try source("Main.swift")
+        XCTAssertTrue(main.contains("Toggle(\"Qualità Massima\""))
+        XCTAssertTrue(main.contains(".keyboardShortcut(\"2\", modifiers: [.command, .option])"))
+        let settings = try source("SettingsView.swift"), slice = try source("SliceView.swift"), warp = try source("WarpView.swift"), view = try source("ContentView.swift")
+        XCTAssertTrue(settings.contains("Chitarra e pianoforte in tracce proprie (Massima e Studio)"))
+        XCTAssertTrue(slice.contains("slices.count == 1 ? \"1 fetta\""))
+        XCTAssertTrue(warp.contains("Messa a tempo non riuscita"))
+        XCTAssertFalse(view.contains("Il passaggio A-B"))
+    }
 }

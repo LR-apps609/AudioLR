@@ -248,7 +248,7 @@ struct SliceView: View {
     }
 
     private var info: String {
-        var s = "\(slices.count) fette"
+        var s = slices.count == 1 ? "1 fetta" : "\(slices.count) fette"
         if let i = selected, i < slices.count {
             let f = slices[i]
             s += " · scelta la \(i + 1) (\(formatTime(Double(f.start) / rate)), \(Int((Double(f.end - f.start) / rate * 1000).rounded())) ms)"
