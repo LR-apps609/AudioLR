@@ -3,7 +3,8 @@
 // etichette sotto la barra in alto, tabella del confronto, download che riparte dopo un errore, offline con la cache.
 // Dal giro 2 (tester t10, t1, t2): riquadro «Trascina qui» e Terminale a 320/360 px, nomi delle tracce a 320/360 px,
 // niente «Scarico il modello…» con il modello già nella cache; tester t5: «Scegli una canzone…» con la tastiera,
-// nomi delle tracce sui pulsanti del mixer, onda della Base spenta in «Solo voce».
+// nomi delle tracce sui pulsanti del mixer, onda della Base spenta in «Solo voce»; tester t6: la pagina nella copia
+// offline dalla prima visita, impronta del modello controllata quando cambia.
 //   node site/test/regressioni.test.js http://127.0.0.1:8080/
 const { chromium, devices } = require(process.env.PW || "playwright");
 const fs = require("fs"), os = require("os"), path = require("path");
@@ -181,6 +182,52 @@ async function until(page, fn, ms) {
     const moved = await until(page, (s) => s.view === "results" || /Scarico|Separo/.test(s.step), 30 * 1000);
     const s = await state(page);
     check(moved, `scegliendo di nuovo la canzone il download riparte («${s.step}» ${s.error})`);
+    await context.close();
+  }
+
+  // ── Dal tester t6: dopo UNA visita la pagina e i suoi file sono già nella copia per l'offline (sw.js) ──
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(url);
+    const keys = await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      const c = await caches.open("isolr-sito-v1");
+      return (await c.keys()).map((r) => new URL(r.url).pathname);
+    });
+    const want = ["/", "/style.css", "/app/app.js"].map((p) => new URL(p, url).pathname);
+    const missing = want.filter((p) => !keys.includes(p));
+    check(missing.length === 0, `dopo una sola visita la copia offline ha la pagina, lo stile e app.js (mancano: ${missing.join(", ") || "niente"})`);
+    await context.close();
+  }
+
+  // ── Dal tester t6: un modello aggiornato con la stessa dimensione (impronta diversa nel JSON) non resta quello vecchio ──
+  {
+    const crypto = require("crypto");
+    const json = await (await fetch(new URL("models/HTDemucsWeb.json", url))).json();
+    const h = crypto.createHash("sha256");
+    for (const part of json.parts) h.update(Buffer.from(await (await fetch(new URL("models/" + part, url))).arrayBuffer()));
+    let sha = h.digest("hex");
+    const context = await browser.newContext();
+    await context.route(/HTDemucsWeb\.json/, async (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ ...json, sha256: sha }) }));
+    let parts = 0;
+    context.on("request", (r) => { if (/HTDemucsWeb\.onnx\.part/.test(r.url())) parts++; });
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.setInputFiles("#file", short);
+    const first = await until(page, (s) => s.view === "results" || s.error, 10 * 60 * 1000);
+    const s1 = await state(page);
+    check(first && s1.view === "results", `con l'impronta giusta nel JSON il modello si scarica e si separa (${s1.view} ${s1.error})`);
+    // L'impronta controllata resta salvata: alle visite dopo non si ricalcola su 166 MB
+    const sealed = await page.evaluate(async () => (await (await caches.open("audiolr-modelli-v1")).keys()).some((r) => /\?impronta$/.test(r.url)));
+    check(sealed, "l'impronta controllata resta nella cache accanto ai pezzi");
+    // Il «sito si aggiorna»: stessa dimensione, impronta diversa. Pagina ricaricata = lavoratore nuovo
+    sha = "0".repeat(64); parts = 0;
+    await page.reload();
+    await page.setInputFiles("#file", short);
+    await until(page, (s) => s.view === "results" || s.error, 10 * 60 * 1000);
+    const s2 = await state(page);
+    check(parts > 0 || /rovinato/.test(s2.error), `con un'impronta nuova i pezzi in cache non si usano senza controllo (pezzi richiesti di nuovo: ${parts}, ${s2.view} ${s2.error})`);
     await context.close();
   }
 

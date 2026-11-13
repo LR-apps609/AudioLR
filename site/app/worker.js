@@ -111,10 +111,18 @@ async function fetchModel(onProgress, again = false) {
   for (const c of parts) { buf.set(c, o); o += c.length; }
   // Controllo: dimensione giusta e, se il sito la dà, l'impronta. Se non torna, la cache si svuota e si
   // riscarica una volta (per esempio un modello vecchio rimasto nel browser dopo un aggiornamento del sito)
-  let bad = config.bytes && done !== config.bytes;
-  if (!bad && config.sha256 && (fresh.length || again)) {
-    const h = await sha256(buf);
-    bad = h != null && h !== config.sha256;
+  // L'impronta già controllata resta nella cache accanto ai pezzi («?impronta»): se il JSON ne porta una diversa
+  // (modello aggiornato, anche della stessa dimensione) i pezzi in cache si ricontrollano. Prima l'impronta si
+  // controllava solo con pezzi appena scaricati e un modello nuovo della stessa dimensione non arrivava mai (tester t6)
+  const seal = modelUrl + "?impronta";
+  let bad = config.bytes && done !== config.bytes, verified = false;
+  if (!bad && config.sha256) {
+    const sealed = cache && !fresh.length && !again ? await cache.match(seal) : undefined;
+    if (!sealed || (await sealed.text()) !== config.sha256) {
+      const h = await sha256(buf);
+      bad = h != null && h !== config.sha256;
+      verified = h === config.sha256;
+    }
   }
   if (bad) {
     if (cache) try { await caches.delete(CACHE); } catch (e) { /* niente */ }
@@ -124,6 +132,7 @@ async function fetchModel(onProgress, again = false) {
   if (cache) for (const [url, chunks] of fresh) {
     try { await cache.put(url, new Response(new Blob(chunks))); } catch (e) { /* senza cache si riscarica la prossima volta */ }
   }
+  if (cache && verified) try { await cache.put(seal, new Response(config.sha256)); } catch (e) { /* si ricontrolla la prossima volta */ }
   return buf;
 }
 
