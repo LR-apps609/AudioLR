@@ -419,6 +419,37 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     check(page.errors.length === 0, "nessun errore nella pagina (giro 2): " + page.errors.join(" | "));
     await page.close();
   }
+  {
+    // t10: finestra minima 930×640, mixer e Sala prove
+    const page = await fresh(browser, { viewport: { width: 930, height: 640 } });
+    await openSong(page);
+    await page.waitForTimeout(500);
+    // Bug 5: il nome lungo («Pianoforte», «Altri strumenti») non deve finire sotto Silenzia
+    const names = await page.evaluate(() => [...document.querySelectorAll(".row")].map((r) => {
+      const b = r.querySelector(".name b"), m = r.querySelector(".btn.mute");
+      if (!b || !m) return null;
+      const rb = b.getBoundingClientRect(), cs = getComputedStyle(b);
+      // Fin dove arriva il testo che si vede: se il nome non è tagliato, tutta la sua larghezza
+      const end = cs.overflowX === "visible" ? rb.left + b.scrollWidth : rb.right;
+      return { n: b.textContent, end: Math.round(end), mute: Math.round(m.getBoundingClientRect().left), title: b.title };
+    }).filter(Boolean));
+    check(names.length >= 6 && names.every((x) => x.end <= x.mute && x.title === x.n),
+      `930×640: i nomi del mixer finiscono prima di Silenzia e hanno il nome intero nel suggerimento (${JSON.stringify(names)})`);
+    // Bug 4: la barra delle parti in Sala prove non deve schiacciarsi a 48 px con pulsanti da 10 px accavallati
+    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b && !IsoApp.ui.practice) b.click(); });
+    await page.waitForTimeout(400);
+    const sec = await page.evaluate(() => {
+      const s = document.querySelector("#sections"); if (!s) return null;
+      const bs = [...s.querySelectorAll("button")].map((b) => b.getBoundingClientRect());
+      const met = document.querySelector('[data-act="metronome"]').getBoundingClientRect();
+      return { w: Math.round(s.getBoundingClientRect().width), min: Math.round(Math.min(...bs.map((r) => r.width))),
+        overlap: bs.some((r, i) => i && r.left < bs[i - 1].right - 0.5), coversMet: s.getBoundingClientRect().right > met.left && s.getBoundingClientRect().bottom > met.top };
+    });
+    check(sec && sec.w >= 240 && sec.min >= 24 && !sec.overlap && !sec.coversMet,
+      `930×640: la barra delle parti in Sala prove è larga e le parti non si accavallano (${JSON.stringify(sec)})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t10): " + page.errors.join(" | "));
+    await page.close();
+  }
 
   await browser.close();
   server.close();

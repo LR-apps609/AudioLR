@@ -152,7 +152,9 @@ input[type=checkbox] { accent-color: var(--brass); width: 15px; height: 15px; ma
 .row .stem-ic svg { width: 16px; height: 16px; }
 .row .stem-ic { position: relative; box-shadow: 0 0 calc(var(--lv, 0) * 18px) color-mix(in srgb, var(--c) 70%, transparent); transition: box-shadow .08s; }
 .row .stem-ic .lvl { position: absolute; right: -6px; bottom: 1px; width: 3px; height: calc(var(--lv, 0) * 28px); border-radius: 2px; background: var(--c); box-shadow: 0 0 6px var(--c); }
-.row .name b { display: block; font-weight: 600; }
+.row .name { min-width: 0; }
+/* Con il mixer stretto (finestra minima) il nome lungo finisce con «…» invece di passare sotto Silenzia; il nome intero è nel suggerimento */
+.row .name b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .row .name span { font-size: 11px; color: var(--muted); }
 .row .ms { display: flex; gap: 6px; }
 .row .ms .btn { width: 26px; height: 24px; padding: 0; background: color-mix(in srgb, var(--ink) 6%, transparent); border-color: transparent; }
@@ -167,7 +169,8 @@ input[type=checkbox] { accent-color: var(--brass); width: 15px; height: 15px; ma
 
 /* Esercitati */
 .practice { display: grid; gap: 8px; padding: 0 4px; }
-.sections { position: relative; height: 28px; flex: 1; }
+/* Base 280 px: se accanto a Metronomo e Conteggio la barra resterebbe più stretta, va a capo come le altre righe (.trow va già a capo) invece di schiacciare le parti a 10 px */
+.sections { position: relative; height: 28px; flex: 1 1 280px; }
 .sections button { position: absolute; top: 2px; height: 24px; border: 0; border-radius: 5px; padding: 0 5px; text-align: left; font-size: 10.5px; font-weight: 600;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; color: color-mix(in srgb, var(--ink) 80%, transparent); }
 .sections button.on { background: linear-gradient(180deg, var(--brass), var(--brass2)); color: #fff; }

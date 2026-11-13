@@ -374,7 +374,7 @@
     return `<div class="row ${muted ? "muted" : ""}" style="--c:var(--c-${k})">
       <input type="checkbox" ${on ? "checked" : ""} data-sel="${k}" title="Tra le tracce da scaricare">
       <span class="stem-ic" data-lvl="${k}">${Icon(ICON[k] || "note")}<i class="lvl"></i></span>
-      <div class="name"><b>${esc(s.name)}</b><span>${share}</span></div>
+      <div class="name"><b title="${esc(s.name)}">${esc(s.name)}</b><span>${share}</span></div>
       ${isBase ? `<span></span><span></span>` : `<div class="ms">
         <button class="btn mute ${player.muted.has(k) ? "on" : ""}" data-mute="${k}" aria-pressed="${player.muted.has(k)}" title="Silenzia ${esc(s.name)}">${Icon(player.muted.has(k) ? "speakerOff" : "speaker")}</button>
         <button class="btn solo ${player.solo.has(k) ? "on" : ""}" data-solo="${k}" aria-pressed="${player.solo.has(k)}" title="Ascolta solo ${esc(s.name)}">${Icon("headphones")}</button></div>
