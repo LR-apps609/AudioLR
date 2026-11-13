@@ -242,4 +242,17 @@ final class TesterRegressionTests: XCTestCase {
         XCTAssertTrue(up.contains("appendingPathComponent(\"AudioLR \\(rel.version).audiolr\")"))
         XCTAssertFalse(up.contains("Range"))
     }
+
+    func testQueueAfterPreviewAndCancelInThePause() throws {
+        // Giro 2, t14 (rilettura del commit di anteprima e coda): ⌘. nella pausa tra due canzoni ferma la prossima;
+        // un'anteprima non riuscita rimette pronta la canzone vera; dopo un'anteprima «Nuova separazione» non lascia una coda nascosta
+        let job = try source("SeparationJob.swift")
+        XCTAssertTrue(job.contains("guard let self, self.startingNext else { return }"))
+        let cancel = job.components(separatedBy: "    func cancel() {")[1].components(separatedBy: "    private func startNextInQueue()")[0]
+        XCTAssertTrue(cancel.contains("startingNext = false"))
+        let failure = job.components(separatedBy: "private func afterFailure(")[1].components(separatedBy: "private func loaded(")[0]
+        XCTAssertTrue(failure.contains("pending.insert(p.source, at: 0)"))
+        let reset = job.components(separatedBy: "    func reset() {")[1].components(separatedBy: "\n    }\n")[0]
+        XCTAssertTrue(reset.contains("pending += queue.filter"))
+    }
 }

@@ -1362,6 +1362,8 @@ final class SeparationJob: ObservableObject {
         meter = nil
         AppLog.write("Annullato dall'utente (fase: \(phase))")
         guard isBusy else { return }
+        // Nella pausa tra due canzoni della coda la prossima non parte più
+        startingNext = false
         // Annullando un'anteprima la canzone torna pronta
         if let p = preview { endPreview(); pending = [p.source] }
         queue = []
@@ -1381,7 +1383,8 @@ final class SeparationJob: ObservableObject {
         // così una canzone trascinata in quel momento va in coda invece di scavalcare questa
         startingNext = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self else { return }
+            // Annullato nella pausa: la canzone non parte
+            guard let self, self.startingNext else { return }
             self.startingNext = false
             self.start(next, quality: q)
         }
@@ -1389,6 +1392,11 @@ final class SeparationJob: ObservableObject {
 
     func reset() {
         guard !isBusy else { return }
+        // Canzoni trascinate durante un'anteprima: tornano pronte invece di restare in una coda nascosta
+        if preview != nil && !queue.isEmpty {
+            pending += queue.filter { !pending.contains($0) }
+            clearQueue()
+        }
         endPreview()
         finishedAt = nil
         celebrationFrozen = nil
@@ -1491,8 +1499,12 @@ final class SeparationJob: ObservableObject {
         guard token === cancelled else { return }
         _ = meter?.stop()
         meter = nil
-        // Un'anteprima non riuscita si chiude: la prossima canzone della coda è una separazione vera, da salvare in libreria
-        endPreview()
+        // Un'anteprima non riuscita si chiude e la canzone vera torna pronta (il pezzo tagliato non c'è più):
+        // la prossima canzone della coda è una separazione vera, da salvare in libreria
+        if let p = preview {
+            endPreview()
+            if !pending.contains(p.source) { pending.insert(p.source, at: 0) }
+        }
         startNextInQueue()
     }
 
