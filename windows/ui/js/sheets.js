@@ -19,6 +19,7 @@
     const o = $("#overlay");
     // Il controllo da cui si è aperta: alla chiusura il fuoco torna lì
     const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    const openerKey = opener && window.isolrFocusKey ? window.isolrFocusKey(opener) : null;
     o.innerHTML = `<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" tabindex="-1">${html}</div></div>`;
     const sheet = o.querySelector(".sheet"), title = sheet.querySelector("h2");
     if (title) { title.id = "sheet-title"; sheet.setAttribute("aria-labelledby", "sheet-title"); }
@@ -31,8 +32,10 @@
       o.innerHTML = ""; if (app) app.inert = false;
       document.removeEventListener("keydown", keys);
       if (onClose) onClose();
-      if (opener && opener.isConnected) {
-        opener.focus({ preventScroll: true });
+      // Il pulsante può essere stato ridisegnato intanto (testata, trasporto): allora si cerca il suo equivalente (dal tester t11)
+      if (opener && !opener.isConnected && openerKey && window.isolrRefocus) window.isolrRefocus(openerKey);
+      else if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+      if (opener && document.activeElement && document.activeElement !== document.body) {
         // Il fuoco torna sul pulsante che l'ha aperta, ma lo Spazio deve far suonare la canzone come sempre
         // (prima riapriva la finestra). Vale finché non si usa Tab o il mouse.
         window.isolrSpacePlays = true;
@@ -76,7 +79,7 @@
         ${toggle("makeInstrumental", true, "Crea anche la base senza voce (karaoke)")}
         ${toggle("splitGuitarPiano", true, "Chitarra e pianoforte in tracce proprie (Massima e Studio)")}
         <label class="setting"><span>Sposta le registrazioni di <b id="ofs">${Prefs.get("recordOffsetMs", 0)}</b> ms<small>IsoLR toglie da solo il ritardo di microfono e altoparlanti. Se le registrazioni suonano un filo in anticipo, alza il numero; se in ritardo, abbassalo.</small></span>
-          <input type="range" min="-300" max="300" step="5" value="${Prefs.get("recordOffsetMs", 0)}" data-pref-range="recordOffsetMs"></label>`,
+          <input type="range" min="-300" max="300" step="5" value="${Prefs.get("recordOffsetMs", 0)}" data-pref-range="recordOffsetMs" aria-label="Sposta le registrazioni (millisecondi)"></label>`,
       motore: `${toggle("forceCpu", false, "Usa solo il processore", "Se la scheda grafica dà problemi. Più lento, stesso risultato.")}
         <div class="setting"><span>Il risultato è lo stesso su tutti i computer: cambia solo il tempo. Sui computer con poca memoria o senza una scheda grafica adatta IsoLR apre un modello alla volta da sola.</span></div>
         <div class="setting"><span>Modelli scaricati<small id="models">…</small></span></div>`,
@@ -99,14 +102,20 @@
         <p class="muted">Le canzoni non lasciano mai il computer. Le tracce separate di brani altrui sono per uso personale: studio, pratica, karaoke.</p>`,
     };
     let current = "generale";
-    open(`<h2>Impostazioni</h2><div class="tabs">${Object.keys(tabs).map((t) => `<button data-t="${t}" class="${t === current ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-      <div id="tab"></div><div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`, (sheet) => {
+    open(`<h2>Impostazioni</h2><div class="tabs" role="tablist" aria-label="Impostazioni">${Object.keys(tabs).map((t) => `<button data-t="${t}" class="${t === current ? "on" : ""}" role="tab" aria-selected="${t === current}" aria-controls="tab">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+      <div id="tab" role="tabpanel"></div><div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`, (sheet) => {
       const show = async (t) => {
         current = t;
-        sheet.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
+        sheet.querySelectorAll(".tabs button").forEach((b) => { b.classList.toggle("on", b.dataset.t === t); b.setAttribute("aria-selected", String(b.dataset.t === t)); });
         $("#tab", sheet).innerHTML = tabs[t];
         if (t === "motore") { const r = await Bridge.modelsReady(); $("#models", sheet).textContent = r.length ? r.join(", ") : "nessuno (si scaricano alla prima separazione)"; }
       };
+      // Le schede con le frecce, come si aspetta il lettore dello schermo da role="tab"
+      sheet.addEventListener("keydown", (e) => {
+        const b = e.target.closest('[role="tab"]'); if (!b || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+        const all = [...sheet.querySelectorAll('[role="tab"]')], n = all[(all.indexOf(b) + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length];
+        e.preventDefault(); n.focus(); show(n.dataset.t);
+      });
       sheet.addEventListener("click", async (e) => {
         const b = e.target.closest("[data-t]"); if (b) show(b.dataset.t);
         if (e.target.closest("[data-check]")) {
@@ -165,7 +174,7 @@
       </ol>
       <table class="plain"><tr><th>Tasti</th><th></th></tr>
         <tr><td>Spazio</td><td>Suona / pausa</td></tr><tr><td>Ctrl+[ · Ctrl+]</td><td>Inizio e fine del passaggio (A e B)</td></tr><tr><td>Ctrl+O</td><td>Scegli una canzone</td></tr><tr><td>Ctrl+Alt+G · Ctrl+Alt+X</td><td>Warp · Rimonta</td></tr><tr><td>Ctrl+Alt+N · Ctrl+Alt+S</td><td>Note (piano roll) · Slice to MIDI</td></tr><tr><td>Ctrl+Alt+L</td><td>Testo sincronizzato</td></tr><tr><td>Ctrl+Alt+↑ · Ctrl+Alt+↓</td><td>Transpose: la canzone un semitono sopra · sotto</td></tr><tr><td>Ctrl+Maiusc+P</td><td>Pulisci la voce</td></tr><tr><td>Ctrl+Alt+B</td><td>Segnala un problema</td></tr>
-        <tr><td>Warp</td><td>Trascina un segnaposto · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
+        <tr><td>Warp</td><td>Trascina un segnaposto (da tastiera: ← → ne scelgono uno, Ctrl+← → il precedente o il successivo, poi ← → lo spostano) · doppio clic ne aggiunge uno · Canc lo toglie · Ctrl+rotella o Ctrl+ / Ctrl− per lo zoom · Spazio ascolta con il metronomo</td></tr>
         <tr><td>Rimonta</td><td>Trascina i blocchi · S divide sulla battuta · Ctrl+D duplica · Canc toglie · Ctrl+Z annulla · Spazio ascolta</td></tr>
         <tr><td>Note</td><td>Trascina una nota per spostarla, il bordo per allungarla · doppio clic aggiunge · Canc toglie · Ctrl+Z annulla · Alt senza aggancio · ↑ ↓ di un semitono (Maiusc: un'ottava)</td></tr>
         <tr><td>Slice</td><td>Tasti 1–4, Q–R, A–F, Z–V suonano i pad · trascina un segnaposto · doppio clic divide · ← → fetta prima e dopo</td></tr></table>
@@ -190,6 +199,23 @@
   }
 
   /** Versione, Windows, processori, memoria, scheda grafica, impostazioni, ultimo errore e ultimi passi. */
+  // Quello che esce (Segnala su GitHub, rapporto sul Desktop) non contiene canzoni né nomi di file: i nomi
+  // conosciuti diventano «canzone», e così anche quello che negli errori sta tra «» (canzoni di prima, che non
+  // sono più in libreria). Restano i nomi dei motori («Processore»…) (dal tester t18)
+  const SAFE_QUOTED = /^(canzone|Processore|Scheda grafica|DirectML|WebGPU|CPU|GPU)/;
+  function hideSongs(text, job) {
+    const names = new Set(), add = (n) => { n = String(n || "").trim(); if (n.length >= 3) { names.add(n); names.add(n.replace(/\.[^.\s]{1,5}$/, "")); } };
+    if (job) {
+      add(job.title); add(job.pending && job.pending.name);
+      (job.queue || []).forEach((f) => add(f && f.name)); (job.skipped || []).forEach((x) => add(x && x.name));
+      if (job.current && job.current.meta) { add(job.current.meta.title); add(job.current.meta.source); }
+    }
+    ((window.IsoApp && IsoApp.ui && IsoApp.ui.library) || []).forEach((e) => { add(e.meta && e.meta.title); add(e.meta && e.meta.source); });
+    let t = String(text);
+    for (const n of [...names].filter((x) => x.length >= 3).sort((a, b) => b.length - a.length)) t = t.split(n).join("canzone");
+    return t.replace(/«([^»\n]{1,300})»/g, (m, x) => (SAFE_QUOTED.test(x) ? m : "«canzone»"));
+  }
+
   async function systemInfo(job) {
     const ua = navigator.userAgentData;
     let win = "Windows";
@@ -222,7 +248,7 @@
       `Tema: ${matchMedia("(prefers-color-scheme: dark)").matches ? "scuro" : "chiaro"} · contrasto elevato: ${matchMedia("(forced-colors: active)").matches ? "sì" : "no"} · riduci movimento: ${matchMedia("(prefers-reduced-motion: reduce)").matches ? "sì" : "no"}`,
       `Lingua della finestra: ${navigator.languages.join(", ")} · numeri: ${(1234.5).toLocaleString()}`,
       "", await systemInfo(job), "", await Bridge.systemFacts()];
-    return Bridge.redact(lines.join("\n"));
+    return hideSongs(await Bridge.redact(lines.join("\n")), job);
   }
 
   function problemOffer(problems, job) {
@@ -247,11 +273,11 @@
 
   async function report(job) {
     // Va su GitHub, dove è pubblica: niente nome utente nei percorsi
-    const system = await Bridge.redact(await systemInfo(job));
+    const system = hideSongs(await Bridge.redact(await systemInfo(job)), job);
     open(`<div style="display:flex;gap:12px;align-items:center"><span class="bug-badge">${Icon("bug")}</span>
         <div><h2>Segnala un problema</h2><div class="muted">Più dettagli dai, più in fretta si sistema</div></div></div>
       <label class="setting"><span>Tipo</span><select class="pop" id="r-kind">${KINDS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
-      <label class="field"><span>Cosa è successo</span><textarea id="r-sum" rows="3" placeholder="Es. la voce si sente nella batteria">${job.error ? esc("Si è fermata con: " + job.error) : ""}</textarea></label>
+      <label class="field"><span>Cosa è successo</span><textarea id="r-sum" rows="3" placeholder="Es. la voce si sente nella batteria">${job.error ? esc("Si è fermata con: " + hideSongs(job.error, job)) : ""}</textarea></label>
       <label class="field"><span>Come rifarlo</span><textarea id="r-steps" rows="3" placeholder="Es. Studio, canzone MP3 di 3 min, al minuto 1:20"></textarea></label>
       <label class="setting"><span>Includi le informazioni del computer<small>Nessuna canzone, nessun nome di file personale: solo versione, computer e impostazioni.</small></span><input type="checkbox" id="r-sys" checked></label>
       <pre class="sysinfo" id="r-info">${esc(system)}</pre>
@@ -364,24 +390,32 @@
       const s = player.semitones, my = Prefs.get("myTopNote", 0);
       const c = Transpose.capo(a.chords, s);
       const sug = range && my ? Transpose.suggest(range.high, my) : null;
-      sheet.querySelector("#tp").innerHTML = `
+      // Ridisegnando si perdeva il fuoco a ogni «+» o «−» (e all'apertura, quando arriva l'estensione della voce): si ricorda e si rimette
+      const box = sheet.querySelector("#tp"), had = box.contains(document.activeElement) ? document.activeElement : null;
+      const key = had && (had.id ? "#" + had.id : had.dataset.tp != null ? `[data-tp="${had.dataset.tp}"]` : had.hasAttribute("data-tp-set") ? "[data-tp-set]" : null);
+      box.innerHTML = `
         <div class="label">Tonalità</div>
         ${has ? `<div style="display:flex;gap:8px;align-items:baseline"><span style="font-size:15px;${s ? "color:var(--muted)" : "font-weight:600"}">${Transpose.keyName(a.keyRoot, a.minor, 0)}</span>
           ${s ? `<span class="muted">→</span><b style="font:700 18px var(--font-display);color:var(--brass)">${Transpose.keyName(a.keyRoot, a.minor, s)}</b>` : ""}</div>`
           : `<div class="muted">Tonalità non misurata</div>`}
-        <div class="form-line"><button class="btn icon" data-tp="-1" ${s <= Transpose.RANGE[0] ? "disabled" : ""}>−</button>
+        <div class="form-line"><button class="btn icon" data-tp="-1" aria-label="Un semitono sotto" ${s <= Transpose.RANGE[0] ? "disabled" : ""}>−</button>
           <b style="min-width:110px;text-align:center">${s ? Transpose.label(s) + (Math.abs(s) === 1 ? " semitono" : " semitoni") : "Originale"}</b>
-          <button class="btn icon" data-tp="1" ${s >= Transpose.RANGE[1] ? "disabled" : ""}>+</button><div class="grow"></div>
+          <button class="btn icon" data-tp="1" aria-label="Un semitono sopra" ${s >= Transpose.RANGE[1] ? "disabled" : ""}>+</button><div class="grow"></div>
           <button class="btn" data-tp="0" ${s ? "" : "disabled"}>Originale</button></div>
         <p class="muted" style="margin:0">Cambia solo il tono: la velocità resta quella. Anche i file scaricati e gli accordi seguono la tonalità scelta.</p>
         <hr style="border:0;border-top:1px solid var(--stroke);width:100%">
         <b>Per chi canta</b>
         ${range ? `<span class="muted">La voce della canzone va da ${Transpose.noteName(Math.round(range.low))} a ${Transpose.noteName(Math.round(range.high))}</span>
-          <div class="form-line"><select class="pop" id="mytop"><option value="0">La tua nota più alta comoda…</option>${Array.from({ length: 37 }, (_, i) => 84 - i).map((m) => `<option value="${m}" ${m === my ? "selected" : ""}>${Transpose.noteName(m)}</option>`).join("")}</select>
+          <div class="form-line"><select class="pop" id="mytop" aria-label="La tua nota più alta comoda"><option value="0">La tua nota più alta comoda…</option>${Array.from({ length: 37 }, (_, i) => 84 - i).map((m) => `<option value="${m}" ${m === my ? "selected" : ""}>${Transpose.noteName(m)}</option>`).join("")}</select>
           ${sug != null ? `<button class="btn prominent" data-tp-set="${sug}" ${sug === s ? "disabled" : ""}>${sug === 0 ? "È già giusta" : "Porta alla mia voce (" + Transpose.label(sug) + ")"}</button>` : ""}</div>
           <span class="faint" style="font-size:11px">Do4 è il Do centrale. Una voce maschile arriva in genere a Sol4–La4, una femminile a Do5–Mi5.</span>`
           : `<span class="muted">${range === null ? "Misuro la voce…" : "Serve la traccia della voce con abbastanza canto"}</span>`}
         ${c ? `<hr style="border:0;border-top:1px solid var(--stroke);width:100%"><b>Per la chitarra</b><span>Capotasto al ${c.capo}° tasto: suoni le forme di ${c.shapes.join(" · ")}</span>` : ""}`;
+      if (had) {
+        const n = key && box.querySelector(key);
+        // Se è diventato spento (al limite, o «Originale» appena premuto) il fuoco va sul primo controllo attivo
+        (n && !n.disabled ? n : box.querySelector("button:not([disabled]),select") || sheet).focus({ preventScroll: true });
+      }
     };
     open(`<h2>Transpose</h2><div id="tp" style="display:grid;gap:10px"></div><div class="actions"><button class="btn prominent" data-close>Fatto</button></div>`, async (sheet) => {
       sheet.style.width = "min(440px, 92vw)";

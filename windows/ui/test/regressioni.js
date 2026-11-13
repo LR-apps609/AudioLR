@@ -629,6 +629,130 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await page.close();
   }
 
+  {
+    // t12 (lettore dello schermo) e t11 (tastiera)
+    const page = await fresh(browser);
+    await openSong(page);
+    await page.evaluate(() => { const b = document.querySelector('[data-act="practice"]'); if (b && !IsoApp.ui.practice) b.click(); });
+    await page.waitForTimeout(300);
+    const a11y = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((ok) => setTimeout(ok, ms)), q = (s) => document.querySelector(s);
+      const name = (el) => el && (el.getAttribute("aria-label") || (el.labels && el.labels[0] && el.labels[0].textContent) || "");
+      const out = {};
+      out.names = ["format", "midi"].map((k) => name(q(`select[data-input="${k}"]`)));
+      out.boxes = [...document.querySelectorAll("input[data-sel]")].map(name);
+      q('[data-preset="karaoke"]').click(); await wait(100);
+      q('[data-act="metronome"]').click(); await wait(100);
+      q('#sections button[data-section="2"]').click(); await wait(200);
+      out.pressed = { karaoke: q('[data-preset="karaoke"]').getAttribute("aria-pressed"), metronome: q('[data-act="metronome"]').getAttribute("aria-pressed"),
+        section: q('#sections button[data-section="2"]').getAttribute("aria-pressed"), practice: q('[data-act="practice"]').getAttribute("aria-pressed") };
+      IsoApp.player.pause(); IsoApp.player.metronome = false; IsoApp.player.preset("all");
+      out.wave = q("canvas[data-wave]").getAttribute("aria-hidden");
+      out.rate = q('[data-input="rate"]').getAttribute("aria-valuetext");
+      // I messaggi: errore = alert, gli altri = status
+      IsoApp.toast("Download non riuscito: disco pieno"); IsoApp.toast("Tracce salvate");
+      out.toasts = [...document.querySelectorAll(".toast")].map((t) => t.getAttribute("role"));
+      // L'avanzamento nella regione live, non più spesso di ogni 10%
+      const J = IsoApp.job, saved = { phase: J.phase, step: J.step, progress: J.progress, stage: J.stage, title: J.title, quality: J.quality };
+      const said = [], live = q("#sr-status") || document.createElement("div"), obs = new MutationObserver(() => { if (live.textContent) said.push(live.textContent); });
+      obs.observe(live, { childList: true, characterData: true, subtree: true });
+      Object.assign(J, { phase: "working", step: "Separazione", stage: "separating", title: "Prova", quality: "studio" });
+      for (const pr of [0.46, 0.47, 0.48, 0.62]) { J.progress = pr; J.emit(); await wait(120); }
+      obs.disconnect(); Object.assign(J, saved); J.emit(); await wait(200);
+      out.live = { role: live.getAttribute("role"), said };
+      return out;
+    });
+    check(a11y.names.every(Boolean) && a11y.boxes.length >= 6 && a11y.boxes.every((n) => /^Scarica anche \S/.test(n)), `menu e caselle hanno un nome (${JSON.stringify([a11y.names, a11y.boxes])})`);
+    check(Object.values(a11y.pressed).every((v) => v === "true"), `Karaoke, Metronomo, la parte e Esercitati dicono se sono accesi (${JSON.stringify(a11y.pressed)})`);
+    check(a11y.wave === "true" && a11y.rate === "100%", `onde nascoste al lettore, velocità in parole (${a11y.wave}, ${a11y.rate})`);
+    check(a11y.toasts.join() === "alert,status", `i messaggi si leggono: gli errori come avviso (${a11y.toasts})`);
+    check(a11y.live.role === "status" && a11y.live.said.length === 2 && /40%/.test(a11y.live.said[0]) && /60%/.test(a11y.live.said[1]), `l'avanzamento si legge, ogni 10% (${JSON.stringify(a11y.live)})`);
+    // Impostazioni: schede con role="tab" e quella scelta
+    const tabs = await page.evaluate(async () => { Sheets.settings(); await new Promise((ok) => setTimeout(ok, 200)); const t = [...document.querySelectorAll('#overlay [role="tab"]')].map((b) => b.getAttribute("aria-selected")); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return t; });
+    check(tabs.length >= 3 && tabs.filter((x) => x === "true").length === 1, `le schede delle Impostazioni dicono quale è scelta (${tabs})`);
+    // Transpose: il fuoco entra, resta su «+» premendolo, e con Esc torna sul pulsante della tonalità
+    await page.focus('[data-act="transpose"]');
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(1600);
+    const tIn = await page.evaluate(() => !!document.activeElement.closest("#overlay"));
+    await page.focus('#overlay [data-tp="1"]');
+    await page.keyboard.press("Enter"); await page.waitForTimeout(200);
+    const tPlus = await page.evaluate(() => document.activeElement.dataset.tp);
+    await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+    const tOut = await page.evaluate(() => document.activeElement.dataset.act);
+    await page.evaluate(() => IsoApp.player.setSemitones(0));
+    check(tIn && tPlus === "1" && tOut === "transpose", `Transpose: il fuoco entra, resta su «+» e torna sul pulsante (${JSON.stringify([tIn, tPlus, tOut])})`);
+    // Ctrl+Alt+G dal pulsante ▶ (che si ridisegna) e Esc: il fuoco torna su ▶
+    await page.focus('[data-act="play"]');
+    await page.keyboard.press("Control+Alt+g"); await page.waitForTimeout(800);
+    await page.evaluate(() => { const t = document.querySelector("#transport"); if (t) IsoApp.transport(); });
+    await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+    const back = await page.evaluate(() => document.activeElement.dataset.act || document.activeElement.tagName);
+    check(back === "play", `chiusa la Warp il fuoco torna su ▶ anche se è stato ridisegnato (${back})`);
+    // Warp da tastiera: → sceglie un segnaposto, Canc lo toglie
+    await page.keyboard.press("Control+Alt+g"); await page.waitForTimeout(800);
+    const warp = await page.evaluate(async () => {
+      const sh = document.querySelector("#overlay .sheet"), before = sh.api.marks.length, cv = sh.querySelector("#w-canvas"); cv.focus();
+      for (const key of ["ArrowRight", "ArrowRight", "Delete"]) { cv.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); await new Promise((ok) => setTimeout(ok, 50)); }
+      return { before, after: sh.api.marks.length };
+    });
+    await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+    check(warp.after === warp.before - 1, `Warp: un segnaposto si sceglie e si toglie con la tastiera (${JSON.stringify(warp)})`);
+    // Spazio sulla canzone già aperta nella libreria: suona, non la ricarica
+    await page.focus('.lib-item[data-open="0"]');
+    const loads = await page.evaluate(() => { window.__loads = 0; const o = IsoApp.player.load.bind(IsoApp.player); IsoApp.player.load = (...x) => { window.__loads++; return o(...x); }; return 0; });
+    await page.keyboard.press("Space"); await page.waitForTimeout(400);
+    const sp = await page.evaluate(() => ({ playing: IsoApp.player.playing, loads: window.__loads }));
+    await page.evaluate(() => IsoApp.player.pause());
+    check(sp.playing && sp.loads === loads, `Spazio sulla canzone aperta nella libreria la fa suonare (${JSON.stringify(sp)})`);
+    // «Normale» con Invio: il fuoco va sulla velocità, non sul body
+    await page.evaluate(() => IsoApp.player.setRate(0.8)); await page.evaluate(() => IsoApp.transport());
+    await page.focus('[data-act="normal"]'); await page.keyboard.press("Enter"); await page.waitForTimeout(200);
+    const nf = await page.evaluate(() => document.activeElement.dataset.input || document.activeElement.tagName);
+    check(nf === "rate", `dopo «Normale» il fuoco va sulla velocità (${nf})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t12, t11): " + page.errors.join(" | "));
+    await page.close();
+  }
+
+  {
+    // t8: durante l'aggiornamento un messaggio senza percentuale («riprovo…») non rimette «Aggiornamento disponibile»
+    const page = await fresh(browser);
+    const upd = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((ok) => setTimeout(ok, ms)), calls = [];
+      IsoApp.ui.update = { version: "9.9.9", url: "https://example.invalid/IsoLR.exe", size: 1000 };
+      Bridge.installUpdate = (url, onProgress, size) => { calls.push(size); onProgress(0.3); onProgress(undefined); return new Promise(() => {}); };
+      IsoApp.render(); await wait(100);
+      document.querySelector('[data-act="update"]').click(); await wait(200);
+      const label = document.querySelector('[data-act="update"]').textContent;
+      document.querySelector('[data-act="update"]').click(); await wait(200);
+      return { label, calls };
+    });
+    check(/Aggiorno… 30%/.test(upd.label) && upd.calls.length === 1 && upd.calls[0] === 1000, `durante l'aggiornamento resta «Aggiorno…» e un secondo clic non riparte (${JSON.stringify(upd)})`);
+    await page.close();
+  }
+
+  {
+    // t18: niente nomi di canzoni in «Segnala» (issue pubblica) e nel rapporto dopo un blocco
+    const page = await fresh(browser);
+    const priv = await page.evaluate(async () => {
+      const J = IsoApp.job, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      const f = new File([new Uint8Array(100)], "Lettera a Giulia (demo privata).mp3");
+      f.arrayBuffer = () => Promise.reject(new DOMException("busy", "NotReadableError"));
+      J.add([f]); J.start("fast");
+      for (let i = 0; i < 100 && J.busy; i++) await wait(50);
+      Sheets.report(J); await wait(400);
+      const info = document.querySelector("#r-info").textContent, sum = document.querySelector("#r-sum").value;
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      const full = await Sheets.fullReport(["La finestra non risponde da 7 secondi (stava facendo: separa «Lettera a Giulia (demo privata)» in Massima: Separazione 46%)"], J);
+      return { error: J.error, leaks: [info, sum, full].map((t) => /Giulia/.test(t)), sum };
+    });
+    check(/Giulia/.test(priv.error || "") && priv.leaks.every((x) => !x), `Segnala e il rapporto non contengono il nome della canzone (${JSON.stringify(priv)})`);
+    // Il lavoratore del testo non va mai su Internet (i modelli sono sul computer)
+    const lw = fs.readFileSync(path.join(__dirname, "../js/lyrics-worker.js"), "utf8");
+    check(/allowRemoteModels = false/.test(lw), "il testo sincronizzato non scarica niente da Internet (allowRemoteModels = false)");
+    await page.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");

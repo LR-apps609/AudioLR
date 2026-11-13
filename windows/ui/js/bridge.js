@@ -147,10 +147,11 @@
 
     // ── Aggiornamenti ──
     async checkUpdate() { return DESKTOP ? invoke("check_update") : null; },
-    async installUpdate(url, onProgress) {
+    async installUpdate(url, onProgress, size = null) {
       let un = null;
-      if (onProgress && T.event) un = await T.event.listen("update-download", (e) => onProgress(e.payload.progress));
-      try { await invoke("install_update", { url }); } finally { if (un) un(); }
+      // Arrivano anche messaggi senza percentuale («riprovo…»): prima diventavano undefined e il pulsante ripartiva (dal tester t8)
+      if (onProgress && T.event) un = await T.event.listen("update-download", (e) => { if (typeof e.payload.progress === "number") onProgress(e.payload.progress); });
+      try { await invoke("install_update", { url, size }); } finally { if (un) un(); }
     },
   };
 

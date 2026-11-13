@@ -4,8 +4,11 @@
 // Risultato: le parole con il loro tempo (inizio e fine, in secondi).
 import { pipeline, env } from "../vendor/tjs/transformers.min.js";
 
-env.allowLocalModels = false;
-env.allowRemoteModels = true;
+// Mai da Internet: con un file del modello mancante si dava la colpa a huggingface.co e la richiesta usciva (dal
+// tester t18). Con i soli modelli «locali» Transformers.js chiede prima alla cache (la finestra, qui sotto) e se
+// il file non c'è dà l'errore normale («file was not found locally»), senza uscire dal computer.
+env.allowLocalModels = true;
+env.allowRemoteModels = false;
 env.useBrowserCache = false;
 env.backends.onnx.wasm.wasmPaths = new URL("../vendor/tjs/", import.meta.url).href;
 

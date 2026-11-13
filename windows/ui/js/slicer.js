@@ -39,7 +39,7 @@
       </div>
       <canvas class="wcanvas" id="s-canvas" tabindex="0" aria-label="Forma d'onda della traccia con le fette"></canvas>
       <input type="range" id="s-scroll" min="0" max="0" step="0.01" value="0" aria-label="Scorri la traccia">
-      <div class="pads-wrap"><button class="btn small icon" data-s="prev" title="Pad precedenti">‹</button><div class="pads" id="s-pads"></div><button class="btn small icon" data-s="next" title="Pad successivi">›</button></div>
+      <div class="pads-wrap"><button class="btn small icon" data-s="prev" title="Pad precedenti" aria-label="Pad precedenti">‹</button><div class="pads" id="s-pads"></div><button class="btn small icon" data-s="next" title="Pad successivi" aria-label="Pad successivi">›</button></div>
       <div class="ed-foot">
         <span id="s-info" class="muted"></span>
         <div class="grow"></div>

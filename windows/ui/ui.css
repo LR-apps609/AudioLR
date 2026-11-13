@@ -426,3 +426,5 @@ select.pop.mini { height: 22px; font-size: 11px; padding: 0 4px; max-width: 120p
 }
 /* Le schede delle qualità vanno a capo quando non ci stanno (prima la prima veniva tagliata a sinistra) */
 .cards { grid-template-columns: repeat(auto-fit, minmax(170px, 194px)); justify-content: center; max-width: 100%; }
+/* Solo per il lettore dello schermo */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

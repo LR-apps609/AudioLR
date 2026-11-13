@@ -102,7 +102,7 @@ async function check(page) {
   // Il rapporto senza «Segnala»: al riavvio dopo un problema la finestra lo propone e lo salva
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: 1.5 });
-    await page.addInitScript(() => { window.__problemi = ["La finestra non risponde da 7 secondi (stava facendo: separa «Prova» in Massima: Separazione 46%)"]; });
+    await page.addInitScript(() => { window.__problemi = ["La finestra non risponde da 7 secondi (stava facendo: separa una canzone in Massima: Separazione 46%)"]; });
     await page.goto(base);
     await page.waitForTimeout(2200);
     const row = { schermo: "rapporto (2560x1440-200)", effettivo: "", utile: "", finestra: "1280×640", problemi: [], foto: [] };

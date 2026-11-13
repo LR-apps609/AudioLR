@@ -268,6 +268,10 @@
     const skip = w.querySelector(".wskip"), skipHtml = skippedNote();
     if (skip.dataset.n !== String((job.skipped || []).length)) { skip.dataset.n = String((job.skipped || []).length); skip.innerHTML = skipHtml; }
     w.querySelector(".pct").textContent = pct;
+    // Al lettore dello schermo: ogni passo e la percentuale non più spesso di ogni 10%
+    const step = String(job.step || "").replace(/\s*\d+\s*%.*$/, ""), tens = job.stage === "saving" ? 100 : Math.floor((job.progress || 0) * 10) * 10;
+    const said = `${job.title}|${step}|${/%/.test(pct) ? tens : ""}`;
+    if (said !== ui.said) { ui.said = said; announce(`${step}${/%/.test(pct) ? ` · ${tens}%` : ""}`); }
     w.querySelector(".step").textContent = `${job.step} · ${Separation.QUALITY[job.quality || ui.quality].title}`;
     w.querySelector(".detail").textContent = workDetail();
     const q = w.querySelector(".qchip"); q.textContent = queue; q.hidden = !queue;
@@ -343,7 +347,7 @@
       </div>
       <div class="side">
         <div class="box"><h3>Scarica</h3>
-          <div class="form-line">Formato <select class="pop" data-input="format">${Object.entries(Encode.FORMATS).map(([k, f]) => `<option value="${k}" ${k === Prefs.get("downloadFormat", "wav24") ? "selected" : ""}>${f.title}</option>`).join("")}</select></div>
+          <div class="form-line">Formato <select class="pop" data-input="format" aria-label="Formato">${Object.entries(Encode.FORMATS).map(([k, f]) => `<option value="${k}" ${k === Prefs.get("downloadFormat", "wav24") ? "selected" : ""}>${f.title}</option>`).join("")}</select></div>
           ${player.semitones ? `<label class="form-line" style="font-size:12px"><input type="checkbox" data-act="dl-transposed" ${ui.downloadTransposed ? "checked" : ""}> ${esc(m.analysis && m.analysis.keyRoot != null ? "In " + Transpose.keyName(m.analysis.keyRoot, m.analysis.minor, player.semitones) : "Nella tonalità scelta")} (${Transpose.label(player.semitones)})</label>` : ""}
           <button class="btn" data-act="dl-all">${Icon("download")}Tutte le tracce</button>
           <button class="btn" data-act="dl-sel" ${sel.length && sel.length < shownStems(m).length ? "" : "disabled"}>Le ${sel.length} selezionate</button>
@@ -364,7 +368,7 @@
             <button class="btn" data-act="slice" title="Slice to MIDI: la batteria (o un'altra traccia) tagliata sui colpi, da suonare con i pad e portare in Ableton o Logic (Ctrl+Alt+S)">${Icon("grid")}Slice</button>
           </div>
           <button class="btn" data-act="lyrics" title="Il testo della canzone dalla voce, parola per parola a tempo: correggilo, esportalo, crea il video karaoke (Ctrl+Alt+L)">${Icon("mic")}Testo</button>
-          <select class="pop" data-input="midi" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "File: MIDI, spartito e tab"}</option>
+          <select class="pop" data-input="midi" aria-label="File: MIDI, spartito e tab" ${ui.midi ? "disabled" : ""}><option value="">${ui.midi ? "Note di " + esc(Separation.NAMES[ui.midi].toLowerCase()) + "…" : "File: MIDI, spartito e tab"}</option>
             ${melodic(m).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
           <button class="btn" data-act="details">Dettagli della separazione</button>
           <button class="btn" data-act="reveal">Apri la cartella delle tracce</button>
@@ -379,14 +383,14 @@
     const k = s.key, on = !ui.unselected.has(k), muted = player.effectiveGain(k) === 0 && !isBase;
     const share = s.share != null ? `${Math.round(s.share * 100)}% della canzone` : (isBase ? Encode.FORMATS[Prefs.get("outputFormat", "wav24")].title.split(" ")[0] : "");
     return `<div class="row ${muted ? "muted" : ""}" style="--c:var(--c-${k})">
-      <input type="checkbox" ${on ? "checked" : ""} data-sel="${k}" title="Tra le tracce da scaricare">
+      <input type="checkbox" ${on ? "checked" : ""} data-sel="${k}" title="Tra le tracce da scaricare" aria-label="Scarica anche ${esc(s.name)}">
       <span class="stem-ic" data-lvl="${k}">${Icon(ICON[k] || "note")}<i class="lvl"></i></span>
       <div class="name"><b title="${esc(s.name)}">${esc(s.name)}</b><span>${share}</span></div>
       ${isBase ? `<span></span><span></span>` : `<div class="ms">
         <button class="btn mute ${player.muted.has(k) ? "on" : ""}" data-mute="${k}" aria-pressed="${player.muted.has(k)}" title="Silenzia ${esc(s.name)}">${Icon(player.muted.has(k) ? "speakerOff" : "speaker")}</button>
         <button class="btn solo ${player.solo.has(k) ? "on" : ""}" data-solo="${k}" aria-pressed="${player.solo.has(k)}" title="Ascolta solo ${esc(s.name)}">${Icon("headphones")}</button></div>
-        <input type="range" min="0" max="2" step="0.01" value="${player.gains[k] ?? 1}" data-gain="${k}" title="Volume" aria-label="Volume ${esc(s.name)}">`}
-      <canvas data-wave="${k}" height="26"></canvas>
+        <input type="range" min="0" max="2" step="0.01" value="${player.gains[k] ?? 1}" data-gain="${k}" title="Volume" aria-label="Volume ${esc(s.name)}" aria-valuetext="${dbText(player.gains[k] ?? 1)}">`}
+      <canvas data-wave="${k}" height="26" aria-hidden="true"></canvas>
       <button class="btn small" data-dl="${k}" aria-label="Scarica ${esc(s.name)}">${Icon("download")}<span class="lbl">Scarica</span></button>
     </div>`;
   }
@@ -421,11 +425,11 @@
     t.innerHTML = `<div class="trow">
         <button class="play" data-act="play" title="${player.playing ? "Pausa (spazio)" : "Suona tutte le tracce insieme (spazio)"}">${IconFill(player.playing ? "pause" : "play")}</button>
         <span class="time" id="time">${fmt(player.position)} / ${fmt(player.duration)}</span>
-        <div class="seg">${[["all", "Tutto"], ["karaoke", "Karaoke"], ...(hasLead ? [["backing", "Karaoke con cori"]] : []), ["voice", "Solo voce"]].map(([k, l]) => `<button class="${p === k ? "on" : ""}" data-preset="${k}">${l}</button>`).join("")}</div>
+        <div class="seg">${[["all", "Tutto"], ["karaoke", "Karaoke"], ...(hasLead ? [["backing", "Karaoke con cori"]] : []), ["voice", "Solo voce"]].map(([k, l]) => `<button class="${p === k ? "on" : ""}" data-preset="${k}" aria-pressed="${p === k}">${l}</button>`).join("")}</div>
         <select class="pop" data-input="without" title="Togli uno strumento"><option value="">${w ? "Senza " + Separation.NAMES[w].toLowerCase() : "Senza…"}</option>${insts.map((k) => `<option value="${k}">Senza ${Separation.NAMES[k].toLowerCase()}</option>`).join("")}</select>
-        <button class="btn" data-act="transpose" title="Transpose: la canzone in un'altra tonalità, senza cambiare la velocità (Ctrl+Alt+↑ e ↓)">${Icon("up")}${esc(transposeTitle())}</button>
+        <button class="btn" data-act="transpose" title="Transpose: la canzone in un'altra tonalità, senza cambiare la velocità (Ctrl+Alt+↑ e ↓)" aria-label="Transpose, tonalità ${esc(transposeTitle())}">${Icon("up")}${esc(transposeTitle())}</button>
         <div class="tools">
-          <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button></div>
+          <button class="btn ${ui.practice ? "on" : ""}" data-act="practice" aria-pressed="${!!ui.practice}" title="Esercitati: velocità, tono, ripetizione, metronomo, accordi, registrazione">${Icon("note")}Esercitati</button></div>
       </div>
       ${ui.practice ? practice() : ""}`;
   }
@@ -437,7 +441,7 @@
     const sectionsHtml = parts.length && d > 0
       ? `<div class="sections" id="sections">${parts.map((x, i) => {
           const end = Math.min(d, x.end), on = Math.abs((player.loopA ?? -9) - x.start) < 0.05 && Math.abs((player.loopB ?? -9) - end) < 0.05;
-          return `<button class="${on ? "on" : ""}" data-section="${i}" style="left:${(100 * x.start) / d}%;width:calc(${(100 * (end - x.start)) / d}% - 1px);background:${on ? "" : `color-mix(in srgb, var(--brass) ${10 + 7 * (x.group % 4)}%, transparent)`}" title="Ripeti «${esc(x.label)}» (${fmt(x.start)}–${fmt(end)})">${esc(x.label)}</button>`;
+          return `<button class="${on ? "on" : ""}" data-section="${i}" aria-pressed="${on}" style="left:${(100 * x.start) / d}%;width:calc(${(100 * (end - x.start)) / d}% - 1px);background:${on ? "" : `color-mix(in srgb, var(--brass) ${10 + 7 * (x.group % 4)}%, transparent)`}" title="Ripeti «${esc(x.label)}» (${fmt(x.start)}–${fmt(end)})">${esc(x.label)}</button>`;
         }).join("")}<span class="head" id="head"></span></div>`
       : `<span class="hint" style="flex:1">${s ? "Parti della canzone non riconosciute: segna A e B a mano"
         // Senza analisi la canzone era troppo corta (meno di 4 s) o muta; con l'analisi ma senza parti è di prima della 0.31
@@ -448,16 +452,16 @@
     return `<div class="practice">
       <div class="lyr-strip" id="lyr-strip"></div>
       <div class="trow">${sectionsHtml}
-        <button class="btn small ${player.metronome ? "on" : ""}" data-act="metronome" ${s && s.beats ? "" : "disabled"} title="Un clic su ogni battito della canzone, più forte sul primo della battuta">${Icon("metronome")}Metronomo</button>
-        <button class="btn small ${player.countIn ? "on" : ""}" data-act="count" ${player.bpm || s ? "" : "disabled"} title="Prima di partire, una battuta di clic al tempo della canzone">${Icon("count")}Conteggio</button></div>
+        <button class="btn small ${player.metronome ? "on" : ""}" data-act="metronome" aria-pressed="${!!player.metronome}" ${s && s.beats ? "" : "disabled"} title="Un clic su ogni battito della canzone, più forte sul primo della battuta">${Icon("metronome")}Metronomo</button>
+        <button class="btn small ${player.countIn ? "on" : ""}" data-act="count" aria-pressed="${!!player.countIn}" ${player.bpm || s ? "" : "disabled"} title="Prima di partire, una battuta di clic al tempo della canzone">${Icon("count")}Conteggio</button></div>
       ${chords && chords.length ? `<div class="trow" id="chords"></div>` : ""}
       <div class="trow">
-        ${Icon("tortoise")}<input type="range" min="0.5" max="1.5" step="0.05" value="${player.rate}" data-input="rate" style="width:120px" aria-label="Velocità">${Icon("hare")}
+        ${Icon("tortoise")}<input type="range" min="0.5" max="1.5" step="0.05" value="${player.rate}" data-input="rate" style="width:120px" aria-label="Velocità" aria-valuetext="${Math.round(player.rate * 100)}%">${Icon("hare")}
         <span class="time" style="width:38px">${Math.round(player.rate * 100)}%</span>
         <span>Tono ${player.semitones > 0 ? "+" : ""}${player.semitones}</span>
-        <button class="btn small icon" data-act="pitch-down" title="Un semitono sotto">−</button><button class="btn small icon" data-act="pitch-up" title="Un semitono sopra">+</button>
-        <button class="btn small" data-act="mark-a" title="Inizio del passaggio da ripetere">${player.loopA != null ? "A " + fmt(player.loopA) : "A"}</button>
-        <button class="btn small" data-act="mark-b" title="Fine del passaggio: da qui si torna ad A">${player.loopB != null ? "B " + fmt(player.loopB) : "B"}</button>
+        <button class="btn small icon" data-act="pitch-down" title="Un semitono sotto" aria-label="Tono: un semitono sotto">−</button><button class="btn small icon" data-act="pitch-up" title="Un semitono sopra" aria-label="Tono: un semitono sopra">+</button>
+        <button class="btn small" data-act="mark-a" title="Inizio del passaggio da ripetere" aria-label="A, inizio del passaggio${player.loopA != null ? " " + fmt(player.loopA) : ""}">${player.loopA != null ? "A " + fmt(player.loopA) : "A"}</button>
+        <button class="btn small" data-act="mark-b" title="Fine del passaggio: da qui si torna ad A" aria-label="B, fine del passaggio${player.loopB != null ? " " + fmt(player.loopB) : ""}">${player.loopB != null ? "B " + fmt(player.loopB) : "B"}</button>
         ${player.loopA != null || player.loopB != null ? `<button class="btn small icon borderless" data-act="clear-loop" title="Togli la ripetizione">${Icon("x")}</button>` : ""}
         <button class="btn small ${player.ramp ? "on" : ""}" data-act="ramp" ${player.isLooping ? "" : "disabled"} title="Il passaggio A-B riparte ogni volta un po' più veloce: dal 70% al 100%, +5% a giro">${player.ramp ? "Rampa 70→100%" : "Rampa"}</button>
         <div class="grow"></div>
@@ -474,10 +478,10 @@
     if (t) {
       const name = (p) => p.split(/[\\/]/).pop().replace(/\.wav$/i, "");
       return `<button class="btn small rec" data-act="rec">${Icon("record")}Registrati</button>
-        <select class="pop" data-input="take">${ui.takes.map((p) => `<option value="${esc(p)}" ${p === t ? "selected" : ""}>${esc(name(p))}</option>`).join("")}</select>
+        <select class="pop" data-input="take" aria-label="Registrazione">${ui.takes.map((p) => `<option value="${esc(p)}" ${p === t ? "selected" : ""}>${esc(name(p))}</option>`).join("")}</select>
         <button class="btn small ${player.takeOn ? "on" : ""}" data-act="take-on" title="Senti la registrazione insieme alla base">${Icon(player.takeOn ? "speaker" : "speakerOff")}</button>
-        <input type="range" min="0" max="2" step="0.01" value="${player.takeVolume}" data-input="take-volume" style="width:80px" aria-label="Volume della registrazione">
-        <select class="pop" data-input="compare" ${ui.comparing ? "disabled" : ""}><option value="">${ui.comparing ? "Confronto…" : "Confronta"}</option>${MixPlayer.mixable(job.current.meta.stems).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
+        <input type="range" min="0" max="2" step="0.01" value="${player.takeVolume}" data-input="take-volume" style="width:80px" aria-label="Volume della registrazione" aria-valuetext="${dbText(player.takeVolume)}">
+        <select class="pop" data-input="compare" aria-label="Confronta la registrazione con una traccia" ${ui.comparing ? "disabled" : ""}><option value="">${ui.comparing ? "Confronto…" : "Confronta"}</option>${MixPlayer.mixable(job.current.meta.stems).map((s) => `<option value="${s.key}">${esc(s.name)}</option>`).join("")}</select>
         <button class="btn small" data-act="take-dl">Scarica</button>
         <button class="btn small icon borderless" data-act="take-del" title="Sposta la registrazione nel Cestino">${Icon("trash")}</button>`;
     }
@@ -517,7 +521,7 @@
       const html = `<span class="muted" style="font-size:11px;font-weight:600">Accordi</span><span class="chord-now">${chordName(chords[i])}</span>
         ${next.map((c, k) => `<span class="chord-next" style="${k ? "" : "color:var(--ink);opacity:.75"}">${chordName(c)}</span>`).join("")}
         ${next[0] ? `<span class="hint">tra ${Math.max(0, Math.ceil((next[0].start - t) / Math.max(0.25, player.rate)))} s</span>` : ""}
-        <div class="grow"></div><div class="seg"><button class="${ui.italian ? "" : "on"}" data-chordnames="en">C D E</button><button class="${ui.italian ? "on" : ""}" data-chordnames="it">Do Re Mi</button></div>`;
+        <div class="grow"></div><div class="seg"><button class="${ui.italian ? "" : "on"}" data-chordnames="en" aria-pressed="${!ui.italian}">C D E</button><button class="${ui.italian ? "on" : ""}" data-chordnames="it" aria-pressed="${!!ui.italian}">Do Re Mi</button></div>`;
       if (box.dataset.last !== html) { box.innerHTML = html; box.dataset.last = html; }
     }
     const meter = $("#meter"); if (meter && window.Recorder) meter.style.width = Math.round(Math.min(1, window.Recorder.level) * 100) + "%";
@@ -540,18 +544,31 @@
   // attributi data-*, aria-label, id) e, se il fuoco è finito sul body, lo si rimette sull'equivalente nuovo
   function focusKey(el) {
     if (!el || el === document.body || !el.attributes) return null;
-    const a = [...el.attributes].filter((x) => x.name.startsWith("data-") && x.name !== "data-last" && x.name !== "data-line" && x.name !== "data-at" || x.name === "aria-label" || x.name === "id")
-      .map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
+    const attrs = [...el.attributes], own = attrs.filter((x) => x.name.startsWith("data-") && x.name !== "data-last" && x.name !== "data-line" && x.name !== "data-at" || x.name === "id");
+    // L'aria-label solo se non c'è altro: quelli che cambiano con lo stato («A 0:12») non devono perdere il fuoco
+    const a = (own.length ? own : attrs.filter((x) => x.name === "aria-label")).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
     return a ? el.tagName.toLowerCase() + a : null;
   }
+  // Se il controllo che aveva il fuoco non c'è più dopo il ridisegno, il fuoco va sul suo naturale successore
+  // (prima finiva sul body): Separa → Annulla e viceversa, «Normale» → velocità, il × di un filtro → i filtri (dal tester t11)
+  const FOCUS_NEXT = [[/data-act="separate"/, '[data-act="cancel"]'], [/data-act="cancel"/, '[data-act="separate"]:not([disabled]),[data-act="choose"]'],
+    [/data-act="normal"/, '[data-input="rate"]'], [/data-chip=/, '[data-chip],[data-act="filters"]']];
+  function refocus(key) {
+    let n = document.querySelector(key);
+    if (!n) { const f = FOCUS_NEXT.find(([re]) => re.test(key)); n = f && document.querySelector(f[1]); }
+    // Spento durante il lavoro (per esempio «File: MIDI…»): il fuoco va sul controllo prima, invece che sul body
+    if (n && n.disabled) {
+      const all = [...document.querySelectorAll('button:not([disabled]),select:not([disabled]),input:not([disabled]),[tabindex="0"]')].filter((x) => x.offsetParent !== null && !x.closest("[inert]"));
+      n = all.filter((x) => x.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING).pop() || null;
+    }
+    if (n) n.focus({ preventScroll: true });
+  }
+  window.isolrFocusKey = focusKey; window.isolrRefocus = refocus;
   function keepFocus(fn) {
     return function (...args) {
       const key = focusKey(document.activeElement);
       const out = fn.apply(this, args);
-      if (key && (!document.activeElement || document.activeElement === document.body)) {
-        const n = document.querySelector(key);
-        if (n) n.focus({ preventScroll: true });
-      }
+      if (key && (!document.activeElement || document.activeElement === document.body)) refocus(key);
       return out;
     };
   }
@@ -560,8 +577,14 @@
   function render() { header(); library(); panel(); try { wake(); } catch { /* il giro dei fotogrammi non è ancora pronto */ } }
 
   // ── Azioni ──
+  // Il volume di un cursore in parole, per il lettore dello schermo («0 dB», «−6 dB», «muto»)
+  function dbText(v) { if (!(v > 0)) return "muto"; const d = Math.round(20 * Math.log10(v)); return `${d > 0 ? "+" : d < 0 ? "−" : ""}${Math.abs(d)} dB`; }
+  // Avanzamento, fine e messaggi letti dal lettore dello schermo (prima erano muti: dal tester t12)
+  function announce(msg) { const r = document.getElementById("sr-status"); if (!r || !msg) return; r.textContent = ""; setTimeout(() => { r.textContent = msg; }, 30); }
   function toast(msg) {
-    const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t);
+    const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+    t.setAttribute("role", /non riuscit|non si apre|non riesco|non trovo|errore|troppo grande/i.test(msg) ? "alert" : "status");
+    document.body.appendChild(t);
     setTimeout(() => t.remove(), 3500);
   }
   async function refreshLibrary() { ui.library = await Separation.library(); library(); window.dispatchEvent(new Event("isolr-libreria")); }
@@ -773,7 +796,7 @@
         ui.filter = { ...ui.filter, keyRoot: a.keyRoot, minor: !!a.minor, compatible: true, bpmMin: Math.round(a.bpm * 0.94), bpmMax: Math.round(a.bpm * 1.06), halfDouble: true };
         return library();
       }
-      case "update": if (ui.update && ui.updating == null) { ui.updating = 0; header(); try { await Bridge.installUpdate(ui.update.url, (p) => { ui.updating = p; header(); }); } catch (e) { ui.updating = null; toast("Aggiornamento non riuscito: " + (e.message || e)); header(); } } return;
+      case "update": if (ui.update && ui.updating == null) { ui.updating = 0; header(); try { await Bridge.installUpdate(ui.update.url, (p) => { if (typeof p === "number") { ui.updating = p; header(); } }, ui.update.size ?? null); } catch (e) { ui.updating = null; toast("Aggiornamento non riuscito: " + (e.message || e)); header(); } } return;
       case "rec": return window.Recorder.start(player, job.current, async (path) => { ui.takes = await Bridge.listFiles(job.current.folder + "/Registrazioni", "wav"); await player.loadTake(path); transport(); }, (msg) => toast(msg), () => transport());
       case "rec-stop": return window.Recorder.stop();
       case "take-on": player.takeOn = !player.takeOn; player.applyGains(); return transport();
@@ -784,13 +807,13 @@
 
   document.addEventListener("input", async (ev) => {
     const el = ev.target, d = el.dataset;
-    if (d.gain) { player.setGain(d.gain, +el.value); return; }
+    if (d.gain) { player.setGain(d.gain, +el.value); el.setAttribute("aria-valuetext", dbText(+el.value)); return; }
     if (d.sel) { el.checked ? ui.unselected.delete(d.sel) : ui.unselected.add(d.sel); const st = shownStems(job.current.meta); const sel = st.filter((s) => !ui.unselected.has(s.key)); const b = $('[data-act="dl-sel"]'); if (b) { b.textContent = `Le ${sel.length} selezionate`; b.disabled = !(sel.length && sel.length < st.length); } return; }
     switch (d.input) {
       case "search": ui.filter = { ...ui.filter, text: el.value }; { const pos = el.selectionStart; library(); const s = $('[data-input="search"]'); s.focus(); s.setSelectionRange(pos, pos); } return;
       case "format": Prefs.set("downloadFormat", el.value); return;
-      case "rate": player.setRate(+el.value); el.nextElementSibling.nextElementSibling.textContent = Math.round(player.rate * 100) + "%"; return;
-      case "take-volume": player.takeVolume = +el.value; player.applyGains(); return;
+      case "rate": player.setRate(+el.value); el.setAttribute("aria-valuetext", Math.round(player.rate * 100) + "%"); el.nextElementSibling.nextElementSibling.textContent = Math.round(player.rate * 100) + "%"; return;
+      case "take-volume": player.takeVolume = +el.value; player.applyGains(); el.setAttribute("aria-valuetext", dbText(+el.value)); return;
     }
   });
   // Le tendine che fanno subito qualcosa («Senza…», «Progetto per…», Note, File, Confronta): su Windows le frecce
@@ -855,7 +878,13 @@
     const spacePlays = window.isolrSpacePlays && tg.matches("button");
     if (e.code === "Space" && job.phase === "done" && (spacePlays || !tg.closest("button,a,[role=button],input,select,textarea,[contenteditable]"))) { e.preventDefault(); player.toggle(); transport(); return; }
     // Invio e Spazio su una canzone della libreria la aprono, come il clic
-    if ((e.key === "Enter" || e.code === "Space") && tg.matches(".lib-item[data-open]")) { e.preventDefault(); tg.click(); }
+    if ((e.key === "Enter" || e.code === "Space") && tg.matches(".lib-item[data-open]")) {
+      e.preventDefault();
+      // Spazio sulla canzone già aperta: suona o mette in pausa, invece di ricaricarla (dal tester t11)
+      const it = ui.libList[+tg.dataset.open];
+      if (e.code === "Space" && job.phase === "done" && job.current && it && it.folder === job.current.folder) { player.toggle(); transport(); return; }
+      tg.click();
+    }
     if (e.ctrlKey && e.key === "[") { player.markA(); transport(); syncAB(); }
     if (e.ctrlKey && e.key === "]") { player.markB(); panel(); }
     if (e.ctrlKey && e.altKey && e.key === "ArrowUp") { e.preventDefault(); transposeBy(1); }
@@ -902,7 +931,11 @@
   let lastPhase = null;
   job.addEventListener("change", async () => {
     if (job.phase !== lastPhase) {
+      const was = lastPhase;
       lastPhase = job.phase;
+      // La fine del lavoro, letta dal lettore dello schermo
+      if (was === "working" && job.phase === "done" && job.current) announce(job.preview ? "Anteprima pronta" : `Separazione finita: ${job.current.meta.title}`);
+      if (was === "working" && job.phase === "failed" && job.error) announce(`Non riuscito: ${job.error}`);
       if (job.phase === "done" && job.current && ui.opening) return;   // openEntry finisce e ridisegna
       if (job.phase === "done" && job.current) {
         await refreshLibrary();
@@ -959,7 +992,8 @@
     let doing = null;
     if (job.busy) {
       const q = (Separation.QUALITY[job.quality] || {}).title || job.quality || "";
-      doing = `separa «${job.title || "?"}» in ${q}: ${job.step || job.stage || ""} ${Math.round((job.progress || 0) * 100)}%`.trim();
+      // Senza il titolo: finisce nel rapporto dopo un blocco, che promette «niente canzoni» (dal tester t18)
+      doing = `separa una canzone in ${q}: ${job.step || job.stage || ""} ${Math.round((job.progress || 0) * 100)}%`.trim();
     }
     Bridge.heartbeat(doing, document.visibilityState === "hidden");
   }, 1000);

@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -470,7 +470,8 @@ enum Stop {
 /// Il file arriva in «.parziale»: se la connessione cade si riprova fino a 3 volte (attesa crescente) e si
 /// riprende da dove si era fermato (Range); il codice di controllo è sempre quello del file intero.
 /// `epoch`: con un «Annulla» (DOWNLOAD_EPOCH cambiato) si ferma subito; None = non si annulla (aggiornamenti).
-fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &str, name: &str, epoch: Option<u64>) -> Result<(), String> {
+/// `what`: cosa si scarica, per il messaggio finale («il modello», «l'aggiornamento»), con il consiglio `retry`.
+fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &str, name: &str, epoch: Option<u64>, what: &str, retry: &str) -> Result<(), String> {
     let tmp = dest.with_extension("parziale");
     let cancelled = || epoch.map(|e| DOWNLOAD_EPOCH.load(Ordering::SeqCst) != e).unwrap_or(false);
     let say = |status: String| {
@@ -503,7 +504,8 @@ fn download(app: &AppHandle, url: &str, dest: &Path, sha: Option<&str>, event: &
             Err(Stop::Failed(e)) => last = e,
         }
     }
-    Err(format!("non riesco a scaricare il modello: tre tentativi non sono andati a buon fine ({last}). Controlla la connessione e premi di nuovo Separa: lo scaricamento riprende da dove si è fermato"))
+    // Il messaggio dice cosa non è arrivato: prima anche per l'aggiornamento parlava del modello e di Separa (dal tester t8)
+    Err(format!("non riesco a scaricare {what}: tre tentativi non sono andati a buon fine ({last}). Controlla la connessione e {retry}: lo scaricamento riprende da dove si è fermato"))
 }
 
 /// Un tentativo: riprende da `tmp` se c'è già un pezzo. Torna il codice SHA-256 del file intero.
@@ -602,7 +604,7 @@ async fn prepare_model(app: AppHandle, name: String) -> Result<(), String> {
                 .next()
                 .unwrap_or_default()
                 .to_lowercase();
-            download(&app, &format!("{BASE}{name}.onnx"), &onnx, Some(&expected), "model-download", &name, Some(epoch))?;
+            download(&app, &format!("{BASE}{name}.onnx"), &onnx, Some(&expected), "model-download", &name, Some(epoch), "il modello", "premi di nuovo Separa")?;
         }
         let cfg = fetch_text(&format!("{BASE}{name}.json"))?;
         std::fs::write(&json, cfg).map_err(|e| e.to_string())
@@ -847,11 +849,12 @@ async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, Strin
             let Some(v) = r["tag_name"].as_str().and_then(|t| t.strip_prefix("win-v")) else { continue };
             let Some(url) = r["assets"].as_array().and_then(|a| {
                 a.iter().find(|x| x["name"].as_str().map(|n| n.ends_with(".exe")).unwrap_or(false))
-                    .and_then(|x| x["browser_download_url"].as_str().map(String::from))
+                    .and_then(|x| x["browser_download_url"].as_str().map(|u| (u.to_string(), x["size"].as_u64())))
             }) else { continue };
+            let (url, size) = url;
             let better = best.as_ref().map(|b| newer(v, b["version"].as_str().unwrap_or("0"))).unwrap_or(true);
             if newer(v, &current) && better {
-                best = Some(serde_json::json!({ "version": v, "url": url, "notes": r["body"].as_str().unwrap_or("") }));
+                best = Some(serde_json::json!({ "version": v, "url": url, "size": size, "notes": r["body"].as_str().unwrap_or("") }));
             }
         }
         Ok(best)
@@ -862,22 +865,58 @@ async fn check_update(app: AppHandle) -> Result<Option<serde_json::Value>, Strin
 
 /// Scarica l'installer nuovo, lo avvia e chiude IsoLR (l'installer sostituisce l'app e la riapre).
 #[tauri::command]
-async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
-    if !url.starts_with(&format!("https://github.com/{REPO}/releases/download/")) {
-        return Err("indirizzo dell'aggiornamento non valido".into());
+async fn install_update(app: AppHandle, url: String, size: Option<u64>) -> Result<(), String> {
+    let prefix = format!("https://github.com/{REPO}/releases/download/");
+    let Some(rest) = url.strip_prefix(&prefix) else { return Err("indirizzo dell'aggiornamento non valido".into()) };
+    // Un aggiornamento alla volta: un secondo clic non avvia un secondo scaricamento sullo stesso file (dal tester t8)
+    if UPDATING.swap(true, Ordering::SeqCst) {
+        return Err("l'aggiornamento si sta già scaricando".into());
     }
+    // La versione (il tag del rilascio) nel nome del file: la ripresa non attacca mai la coda di una versione
+    // all'inizio di un'altra; i pezzi delle altre versioni si tolgono (dal tester t8)
+    let tag: String = rest.split('/').next().unwrap_or("").chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '-' }).collect();
     let a = app.clone();
     let exe = tauri::async_runtime::spawn_blocking(move || -> Result<PathBuf, String> {
-        let dest = std::env::temp_dir().join("IsoLR-aggiornamento.exe");
-        download(&a, &url, &dest, None, "update-download", "update", None)?;
+        let tmp = std::env::temp_dir();
+        let dest = tmp.join(format!("IsoLR-aggiornamento-{tag}.exe"));
+        let keep = dest.with_extension("parziale");
+        if let Ok(list) = std::fs::read_dir(&tmp) {
+            for e in list.flatten() {
+                let n = e.file_name().to_string_lossy().into_owned();
+                if n.starts_with("IsoLR-aggiornamento") && (n.ends_with(".parziale") || n.ends_with(".exe")) && e.path() != keep {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+        download(&a, &url, &dest, None, "update-download", "update", None, "l'aggiornamento", "riprova")?;
+        // Prima di avviarlo: il file deve essere grande quanto dice il server, o l'installazione partirebbe rotta
+        if let Some(want) = size {
+            let got = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+            if got != want {
+                let _ = std::fs::remove_file(&dest);
+                return Err(format!("l'aggiornamento scaricato è incompleto ({got} byte invece di {want}): riprova"));
+            }
+        }
         Ok(dest)
     })
     .await
-    .map_err(|e| e.to_string())??;
-    std::process::Command::new(exe).arg("/UPDATE").spawn().map_err(|e| e.to_string())?;
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    let exe = match exe {
+        Ok(e) => e,
+        Err(e) => {
+            UPDATING.store(false, Ordering::SeqCst);
+            return Err(e);
+        }
+    };
+    if let Err(e) = std::process::Command::new(exe).arg("/UPDATE").spawn() {
+        UPDATING.store(false, Ordering::SeqCst);
+        return Err(e.to_string());
+    }
     app.exit(0);
     Ok(())
 }
+static UPDATING: AtomicBool = AtomicBool::new(false);
 
 /// Clic destro › «Separa con IsoLR» (Esplora file): le canzoni da aprire arrivano come argomenti. Se IsoLR è già
 /// aperta, la seconda copia le lascia in una cartella e si chiude; la finestra le prende da lì (take_opened).

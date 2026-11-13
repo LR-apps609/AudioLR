@@ -286,7 +286,16 @@
         else if (e.ctrlKey && e.key === "-") { e.preventDefault(); zoom(2); }
         else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           e.preventDefault();
-          const d = (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 0.001 : 0.01);
+          const back = e.key === "ArrowLeft";
+          // Da tastiera (prima solo col puntatore, dal tester t11): senza segnaposto scelto ← → scelgono quello prima o dopo
+          // la testina; Ctrl+← → passano al precedente o al successivo, come i blocchi in Rimonta. Poi Canc lo toglie.
+          if (sel < 0 || e.ctrlKey) {
+            const from = sel >= 0 ? marks[sel] : cursor;
+            const i = back ? marks.findLastIndex((t) => t < from - 1e-6) : marks.findIndex((t) => t > from + 1e-6);
+            if (i >= 0) { sel = i; info(); }
+            return;
+          }
+          const d = (back ? -1 : 1) * (e.shiftKey ? 0.001 : 0.01);
           if (sel >= 0) { const lo = sel > 0 ? marks[sel - 1] + 0.1 : 0, hi = sel < marks.length - 1 ? marks[sel + 1] - 0.1 : duration; marks[sel] = +Math.max(lo, Math.min(hi, marks[sel] + d)).toFixed(4); changed(); }
         }
       };
