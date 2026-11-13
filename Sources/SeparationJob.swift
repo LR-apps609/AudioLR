@@ -1570,8 +1570,21 @@ final class SeparationJob: ObservableObject {
             stems.append(Stem(key: key, name: info.name, symbol: info.symbol, url: url, peaks: Peaks.of(audio),
                               share: m.energy / total, peakDB: m.peakDB + gainDB, balance: m.balance, gainDB: gainDB))
         }
-        for (i, key) in sources.enumerated() { try add(key, out[i], measures[i]) }
-        if let b = base, let m = baseMeasure { try add("instrumental", b, m) }
+        do {
+            for (i, key) in sources.enumerated() { try add(key, out[i], measures[i]) }
+            if let b = base, let m = baseMeasure { try add("instrumental", b, m) }
+        } catch {
+            // Non riuscito (disco pieno…): la cartella a metà si toglie. Prima restava sul disco, fuori dalla libreria,
+            // e «Riprova» creava «Titolo 2» (come su Windows; dal tester t16)
+            try? fm.removeItem(at: dir)
+            if error is AudioIO.DiskFullError {
+                // Tutte le tracce, stereo, a 3 byte per campione (WAV 24 bit, il formato più grande)
+                let count = Int64(sources.count + (base == nil ? 0 : 1))
+                let samples = Int64(out.first?.first?.count ?? 0)
+                throw SeparationError(AudioIO.diskFullMessage(needed: count * samples * 2 * 3))
+            }
+            throw error
+        }
         stems.sort { Stem.info($0.key).order < Stem.info($1.key).order }
         return (dir, stems)
     }

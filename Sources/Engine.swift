@@ -120,9 +120,13 @@ enum Quality: String, CaseIterable, Identifiable {
         }
     }
 
-    var detail: String {
+    var detail: String { detail(appleChip: SeparationJob.hasNeuralEngine) }
+
+    /// La riga sotto la qualità (Impostazioni › Tracce e suggerimento della scheda). Il tempo di Rapida è lo stesso
+    /// della scheda (`cardTime`, «circa 30 secondi»): prima diceva «circa 20 s», anche sui Mac Intel (dal tester t16).
+    func detail(appleChip: Bool) -> String {
         switch self {
-        case .fast: return "Un modello per tutto · circa 20 s a canzone"
+        case .fast: return appleChip ? "Un modello per tutto · circa 30 s a canzone" : "Un modello per tutto · qualche minuto a canzone su un Mac Intel"
         case .best: return "Sei tracce con BS-RoFormer SW, chitarra e piano compresi · pulita e veloce"
         case .studio: return "Ogni traccia da una squadra di modelli: la voce da due, gli strumenti da due passaggi · la più pulita, la più lenta"
         }
@@ -171,12 +175,13 @@ enum Quality: String, CaseIterable, Identifiable {
         return "circa \(Int((seconds / 60).rounded())) minuti su questo Mac"
     }
 
-    /// Da scaricare la prima volta.
+    /// Da scaricare la prima volta: i file .mlpackage.zip della release «modelli-1» (HTDemucs 79 MB; StrumentiSW2
+    /// 328 MB; Studio StrumentiSW2 + VoceRevive 298 MB = 626 MB). Studio diceva «circa 1 GB» (dal tester t16).
     var downloadSize: String {
         switch self {
         case .fast: return "circa 80 MB"
         case .best: return "circa 330 MB"
-        case .studio: return "circa 1 GB"
+        case .studio: return "circa 630 MB"
         }
     }
 }
@@ -193,21 +198,51 @@ enum EngineChoice {
         /// Quanto Neural Engine e grafica coincidono, in dB.
         let agreement: Double
 
-        var text: String {
+        var text: String { text(neuralEngine: SeparationJob.hasNeuralEngine) }
+
+        /// Il motivo a parole. Su un Mac Intel non si nomina il Neural Engine, che non c'è: dopo un risultato non
+        /// plausibile si diceva «il Neural Engine qui ha dato un risultato sbagliato» anche lì (dal tester t16).
+        func text(neuralEngine: Bool) -> String {
             if units == .all {
-                return SeparationJob.hasNeuralEngine
+                return neuralEngine
                     ? String(format: "Neural Engine e grafica (verificato: %.0f dB)", agreement)
                     : "Grafica e processore"
             }
             if agreement == EngineChoice.fasterCPU { return "Processore (su questo Mac è più veloce della grafica)" }
             if agreement == EngineChoice.fasterGPU { return "Grafica (su questo Mac è più veloce del processore)" }
-            if units == .cpuOnly { return "Solo processore (Neural Engine e grafica qui non riescono a calcolare)" }
+            if units == .cpuOnly {
+                return neuralEngine ? "Solo processore (Neural Engine e grafica qui non riescono a calcolare)"
+                                    : "Solo processore (la grafica qui non riesce a calcolare)"
+            }
             if agreement > 0 { return String(format: "Grafica (il Neural Engine qui è impreciso: %.0f dB)", agreement) }
             if agreement == EngineChoice.chosenGPU { return "Grafica (scelta nelle Impostazioni)" }
             if agreement == EngineChoice.slowANE { return "Grafica (il Neural Engine era troppo lento ad aprire il modello)" }
             if agreement == EngineChoice.lowMemoryGPU { return "Grafica (la più rapida su un Mac con 8 GB)" }
-            return "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
+            return neuralEngine ? "Grafica (il Neural Engine qui ha dato un risultato sbagliato)"
+                                : "Grafica (il primo calcolo qui ha dato un risultato sbagliato)"
         }
+    }
+
+    /// Come sceglie il motore, a parole (Impostazioni › Motore e Domande frequenti). Sui Mac Intel non c'è il
+    /// Neural Engine: lì si gareggia in velocità tra processore e grafica (`SeparationJob.race`) (dal tester t16).
+    static func howItChooses(neuralEngine: Bool) -> String {
+        neuralEngine
+            ? "Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso."
+            : "Al primo uso di ogni modello IsoLR prova processore e grafica su un pezzo della canzone, e usa il più veloce."
+    }
+
+    /// Il modello non si apre su `units` ma sul processore sì (di solito memoria quasi piena). «Solo grafica» si
+    /// consiglia solo dove serve: sui Mac Intel il selettore è disattivato e chi ha già la grafica l'ha già scelta.
+    static func openFailedMessage(units: MLComputeUnits, neuralEngine: Bool) -> String {
+        let place: String
+        switch units {
+        case .cpuAndGPU: place = "sulla grafica"
+        case .cpuAndNeuralEngine: place = "sul Neural Engine"
+        case .all: place = neuralEngine ? "su Neural Engine e grafica" : "su grafica e processore"
+        default: place = "su questo Mac"
+        }
+        let advice = neuralEngine && units != .cpuAndGPU ? ", oppure scegli «Solo grafica» in Impostazioni › Motore" : ""
+        return "il modello non si apre \(place) (memoria quasi piena?): chiudi le altre app e riprova" + advice
     }
 
     static func key(_ model: String) -> String { "engine.\(model)" }

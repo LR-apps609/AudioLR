@@ -1256,9 +1256,12 @@ struct ContentView: View {
     }
 
     /// «il file è vuoto» → «Il file è vuoto.»
+    /// I testi di macOS (`localizedDescription`) finiscono già con il punto: non se ne aggiunge un altro (dal tester t16).
     static func sentence(_ s: String) -> String {
-        guard let first = s.first else { return s }
-        return String(first).uppercased() + String(s.dropFirst()) + "."
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = t.first else { return t }
+        let body = String(first).uppercased() + String(t.dropFirst())
+        return body.hasSuffix(".") || body.hasSuffix("!") || body.hasSuffix("?") || body.hasSuffix("…") ? body : body + "."
     }
 
     static func timeLeft(_ s: Double) -> String {

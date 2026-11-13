@@ -125,4 +125,85 @@ final class TesterRegressionTests: XCTestCase {
         let failure = job.components(separatedBy: "private func afterFailure(")[1].components(separatedBy: "private func loaded(")[0]
         XCTAssertTrue(failure.contains("endPreview()"))
     }
+
+    func testIntelEngineTextsDoNotNameTheNeuralEngine() {
+        // Giro 2, t16: su un Mac Intel nessun testo del motore parla del Neural Engine, e non si consiglia
+        // «Solo grafica» (selettore disattivato lì; inutile a chi l'ha già scelto)
+        let intel: [EngineChoice.Decision] = [
+            .init(units: .cpuAndGPU, agreement: 0), .init(units: .cpuOnly, agreement: 0), .init(units: .all, agreement: EngineChoice.intelDemucs),
+            EngineChoice.decideSpeed(cpu: 48, gpu: nil), EngineChoice.decideSpeed(cpu: 48, gpu: 20)]
+        for d in intel { XCTAssertFalse(d.text(neuralEngine: false).contains("Neural Engine"), d.text(neuralEngine: false)) }
+        XCTAssertEqual(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0).text(neuralEngine: false),
+                       "Grafica (il primo calcolo qui ha dato un risultato sbagliato)")
+        XCTAssertEqual(EngineChoice.Decision(units: .cpuAndGPU, agreement: 0).text(neuralEngine: true),
+                       "Grafica (il Neural Engine qui ha dato un risultato sbagliato)")
+        XCTAssertTrue(EngineChoice.Decision(units: .cpuOnly, agreement: 0).text(neuralEngine: true).contains("Neural Engine"))
+        XCTAssertFalse(EngineChoice.howItChooses(neuralEngine: false).contains("Neural Engine"))
+        XCTAssertTrue(EngineChoice.howItChooses(neuralEngine: false).contains("il più veloce"))
+        XCTAssertTrue(EngineChoice.howItChooses(neuralEngine: true).contains("il più preciso"))
+        for u: MLComputeUnits in [.all, .cpuAndGPU] {
+            let m = EngineChoice.openFailedMessage(units: u, neuralEngine: false)
+            XCTAssertFalse(m.contains("Solo grafica") || m.contains("Neural Engine") || m.contains("tutto"), m)
+        }
+        XCTAssertFalse(EngineChoice.openFailedMessage(units: .cpuAndGPU, neuralEngine: true).contains("Solo grafica"))
+        XCTAssertTrue(EngineChoice.openFailedMessage(units: .all, neuralEngine: true).contains("Solo grafica"))
+        let help = try? source("Help.swift"), settings = try? source("SettingsView.swift"), store = try? source("ModelStore.swift")
+        XCTAssertEqual(help?.contains("EngineChoice.howItChooses(neuralEngine: SeparationJob.hasNeuralEngine)"), true)
+        XCTAssertEqual(settings?.contains("EngineChoice.howItChooses(neuralEngine: SeparationJob.hasNeuralEngine)"), true)
+        XCTAssertEqual(store?.contains("EngineChoice.openFailedMessage(units: units, neuralEngine: SeparationJob.hasNeuralEngine)"), true)
+    }
+
+    @MainActor
+    func testModelsAreNotDeletedWhileWorking() throws {
+        // Giro 2, t16: «Elimina i modelli scaricati…» restava attivo se la separazione partiva con le Impostazioni aperte
+        let settings = try source("SettingsView.swift"), prefs = try source("Preferences.swift")
+        XCTAssertTrue(settings.contains("@ObservedObject private var job = SeparationJob.shared"))
+        XCTAssertTrue(settings.contains(".disabled(job.isWorking)"))
+        XCTAssertFalse(settings.contains(".disabled(SeparationJob.shared.isWorking)"))
+        XCTAssertTrue(prefs.contains("if SeparationJob.shared.isWorking { return false }"))
+    }
+
+    func testDiskFullIsSaidAndTheHalfFolderIsRemoved() throws {
+        // Giro 2, t16: disco pieno al salvataggio: messaggio sullo spazio e niente cartella a metà
+        XCTAssertTrue(AudioIO.isDiskFull(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC)), free: nil, needed: 1))
+        XCTAssertTrue(AudioIO.isDiskFull(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError), free: nil, needed: 1))
+        XCTAssertTrue(AudioIO.isDiskFull(NSError(domain: NSOSStatusErrorDomain, code: -50), free: 1000, needed: 5000))
+        XCTAssertFalse(AudioIO.isDiskFull(NSError(domain: NSOSStatusErrorDomain, code: -50), free: 10_000_000, needed: 5000))
+        XCTAssertTrue(AudioIO.diskFullMessage(needed: 300_000_000).contains("spazio sul disco"))
+        XCTAssertTrue(AudioIO.diskFullMessage(needed: 300_000_000).contains("«Riprova»"))
+        let job = try source("SeparationJob.swift")
+        XCTAssertTrue(job.contains("try? fm.removeItem(at: dir)"))
+        XCTAssertTrue(job.contains("if error is AudioIO.DiskFullError {"))
+        // Una scrittura non riuscita (cartella che non esiste) non lascia niente e dice il nome del file
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("non-esiste-\(UUID().uuidString)/Prova – Voce.wav")
+        XCTAssertThrowsError(try AudioIO.write([[0, 0], [0, 0]], to: missing, format: .wav24)) { e in
+            XCTAssertTrue(((e as? LocalizedError)?.errorDescription ?? "").contains("Prova – Voce.wav"))
+        }
+    }
+
+    @MainActor
+    func testErrorSentenceHasOneFullStop() {
+        // Giro 2, t16: i testi di macOS finiscono già con il punto: niente «..»
+        XCTAssertEqual(ContentView.sentence("il file è vuoto"), "Il file è vuoto.")
+        XCTAssertEqual(ContentView.sentence("Non hai l'autorizzazione per salvare il file."), "Non hai l'autorizzazione per salvare il file.")
+        XCTAssertEqual(ContentView.sentence("Impossibile completare l'operazione. (errore -50.)"), "Impossibile completare l'operazione. (errore -50.)")
+        XCTAssertEqual(ContentView.sentence("ok "), "Ok.")
+    }
+
+    func testQualityTextsAgree() throws {
+        // Giro 2, t16: «Qualità Massima qualità» nel menu, Rapida 20 s contro 30 s, dimensioni dei modelli diverse
+        let main = try source("Main.swift"), help = try source("Help.swift"), library = try source("Library.swift")
+        XCTAssertFalse(main.contains("Toggle(\"Qualità \\(Quality.best.title)\""))
+        XCTAssertTrue(main.contains("Toggle(\"Qualità Massima\""))
+        XCTAssertTrue(library.contains("\"Massima / Rapida / Studio\""))
+        XCTAssertTrue(Quality.fast.detail(appleChip: true).contains("circa 30 s"))
+        XCTAssertTrue(Quality.fast.cardTime.contains("circa 30 secondi"))
+        XCTAssertFalse(Quality.fast.detail(appleChip: false).contains(" s a canzone"))
+        // Le dimensioni vere dei file della release «modelli-1» (HTDemucs 79 MB, StrumentiSW2 328 MB, VoceRevive 298 MB)
+        XCTAssertEqual(Quality.fast.downloadSize, "circa 80 MB")
+        XCTAssertEqual(Quality.best.downloadSize, "circa 330 MB")
+        XCTAssertEqual(Quality.studio.downloadSize, "circa 630 MB")
+        XCTAssertTrue(help.contains("circa 330 MB per Massima, 630 MB per Studio, 80 MB per Rapida"))
+        XCTAssertFalse(help.contains("310 MB"))
+    }
 }

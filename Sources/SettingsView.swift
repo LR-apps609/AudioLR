@@ -94,6 +94,8 @@ struct EngineSettings: View {
     @State private var size = ModelFiles.sizeText()
     @State private var decisions: [(String, EngineChoice.Decision?)] = EngineSettings.load()
     @State private var confirmDelete = false
+    /// Osservato: con le Impostazioni già aperte, una separazione che parte disattiva «Elimina i modelli» (dal tester t16)
+    @ObservedObject private var job = SeparationJob.shared
     @AppStorage(Prefs.engineModeKey) private var engineMode = "auto"
     @AppStorage(Prefs.dualKey) private var dual = true
 
@@ -122,7 +124,7 @@ struct EngineSettings: View {
             } header: {
                 Text("Motore")
             } footer: {
-                Text("Al primo uso di ogni modello IsoLR confronta Neural Engine e grafica su un pezzo della canzone, e usa il più preciso.")
+                Text(EngineChoice.howItChooses(neuralEngine: SeparationJob.hasNeuralEngine))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -144,16 +146,18 @@ struct EngineSettings: View {
             Section {
                 LabeledContent("Modelli scaricati", value: size)
                 Button("Elimina i modelli scaricati…") { confirmDelete = true }
-                    .disabled(SeparationJob.shared.isWorking)
+                    .disabled(job.isWorking)
             } footer: {
-                Text("Si riscaricano da soli alla prossima separazione.").font(.caption).foregroundStyle(.secondary)
+                Text(job.isWorking ? "IsoLR sta lavorando: potrai eliminarli quando ha finito."
+                                   : "Si riscaricano da soli alla prossima separazione.").font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .frame(height: 400)
         .confirmationDialog("Eliminare i modelli di IA scaricati?", isPresented: $confirmDelete) {
             Button("Elimina", role: .destructive) {
-                ModelFiles.remove()
+                // Se nel frattempo è partita una separazione, non si toglie niente (il pulsante ora è disattivato)
+                guard ModelFiles.remove() else { return }
                 size = ModelFiles.sizeText()
                 decisions = Self.load()
             }

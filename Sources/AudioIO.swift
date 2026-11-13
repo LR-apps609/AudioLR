@@ -120,7 +120,41 @@ enum AudioIO {
                                        commonFormat: .pcmFormatFloat32, interleaved: false)
             try file.write(from: buf)
         } catch {
+            // Disco pieno: lo si dice (prima solo «non riesco a scrivere…»), e il file a metà si toglie (dal tester t16)
+            let needed = Int64(max(n, 1)) * Int64(max(channels.count, 1)) * 4
+            if isDiskFull(error, free: freeSpace(at: url.deletingLastPathComponent()), needed: needed) {
+                try? FileManager.default.removeItem(at: url)
+                throw DiskFullError(file: url.lastPathComponent)
+            }
             throw SeparationError("non riesco a scrivere \(url.lastPathComponent)")
         }
+    }
+
+    /// Lo spazio sul disco è finito mentre si scriveva un file.
+    struct DiskFullError: LocalizedError {
+        let file: String
+        var errorDescription: String? { "lo spazio sul disco è finito mentre salvavo \(file): libera spazio e riprova" }
+    }
+
+    /// Un errore di scrittura è il disco pieno: lo dice l'errore stesso (ENOSPC, «spazio esaurito»), oppure
+    /// lo spazio libero rimasto (`free`) non basta per il file (`needed`).
+    static func isDiskFull(_ error: Error, free: Int64?, needed: Int64) -> Bool {
+        let ns = error as NSError
+        if (ns.domain == NSPOSIXErrorDomain || ns.domain == NSOSStatusErrorDomain) && ns.code == Int(ENOSPC) { return true }
+        if ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError { return true }
+        if let under = ns.userInfo[NSUnderlyingErrorKey] as? Error, isDiskFull(under, free: nil, needed: 0) { return true }
+        if let f = free, f < needed { return true }
+        return false
+    }
+
+    /// Lo spazio libero sul disco di una cartella, in byte (nil se non si sa).
+    static func freeSpace(at dir: URL) -> Int64? {
+        (try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage
+    }
+
+    /// Il messaggio quando il disco si riempie salvando le tracce: quanto spazio serve, e che la separazione va rifatta.
+    static func diskFullMessage(needed: Int64) -> String {
+        let size = ByteCountFormatter.string(fromByteCount: max(needed, 1), countStyle: .file)
+        return "lo spazio sul disco è finito mentre salvavo le tracce: libera almeno \(size) e premi «Riprova»"
     }
 }

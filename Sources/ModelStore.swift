@@ -122,7 +122,7 @@ final class ModelStore: @unchecked Sendable {
                     let cpu = MLModelConfiguration()
                     cpu.computeUnits = .cpuOnly
                     if units != .cpuOnly, (try? MLModel(contentsOf: url, configuration: cpu)) != nil {
-                        cont.resume(throwing: SeparationError("il modello non si apre su \(Self.unitsName(units)) (memoria quasi piena?): chiudi le altre app e riprova, oppure scegli «Solo grafica» in Impostazioni › Motore"))
+                        cont.resume(throwing: SeparationError(EngineChoice.openFailedMessage(units: units, neuralEngine: SeparationJob.hasNeuralEngine)))
                     } else {
                         // Modello rovinato (scaricamento interrotto, macOS diverso…): la prossima volta si riscarica
                         try? FileManager.default.removeItem(at: url)

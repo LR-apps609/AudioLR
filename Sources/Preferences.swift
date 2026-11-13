@@ -163,9 +163,14 @@ enum ModelFiles {
         ByteCountFormatter.string(fromByteCount: size(), countStyle: .file)
     }
 
-    static func remove() {
+    /// Toglie i modelli dal disco, ma non mentre IsoLR lavora: cancellava modelli aperti e lo scaricamento in corso
+    /// (il «.parziale») a metà di una separazione (dal tester t16). Restituisce se li ha tolti.
+    @MainActor @discardableResult
+    static func remove() -> Bool {
+        if SeparationJob.shared.isWorking { return false }
         try? FileManager.default.removeItem(at: ModelStore.folder)
         ModelStore.shared.forget()
         EngineChoice.reset()
+        return true
     }
 }

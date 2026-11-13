@@ -78,7 +78,7 @@ struct AudioLRCommands: Commands {
                 .keyboardShortcut("i")
                 .disabled(job.phase != .done)
             Divider()
-            Toggle("Qualità \(Quality.best.title)", isOn: Binding(get: { quality == Quality.best.rawValue },
+            Toggle("Qualità Massima", isOn: Binding(get: { quality == Quality.best.rawValue },
                                                                set: { if $0 { quality = Quality.best.rawValue } }))
                 .keyboardShortcut("1", modifiers: [.command, .option])
             Toggle("Qualità \(Quality.fast.title)", isOn: Binding(get: { quality == Quality.fast.rawValue },

@@ -1,5 +1,10 @@
 Novità della 0.41.0 (in preparazione):
 • Anteprima 20 s e coda: «Separa» non parte più mentre si prepara l'anteprima (prima la canzone intera non entrava in libreria e la coda restava ferma); le canzoni trascinate durante l'anteprima tornano pronte con «Indietro» invece di restare in una coda invisibile; un'anteprima non riuscita non fa più perdere la separazione della canzone dopo; nella pausa tra una canzone della coda e la prossima, una canzone trascinata va in coda invece di scavalcarle
+• Mac Intel: i testi del motore non nominano più il Neural Engine (che lì non c'è): «Grafica (il primo calcolo qui ha dato un risultato sbagliato)», e Impostazioni › Motore e Domande frequenti dicono che IsoLR prova processore e grafica e usa il più veloce. Se un modello non si apre, «Solo grafica» si consiglia solo dove si può scegliere e non è già scelta
+• «Elimina i modelli scaricati…» si disattiva anche se la separazione parte con le Impostazioni già aperte (prima restava attivo e cancellava i modelli mentre IsoLR lavorava)
+• Disco pieno mentre salva le tracce: IsoLR dice che lo spazio è finito e quanto liberarne, e toglie la cartella a metà (prima restava sul disco, fuori dalla libreria)
+• I messaggi d'errore di macOS non finiscono più con due punti («..»)
+• Testi: nel menu Vista «Qualità Massima» invece di «Qualità Massima qualità»; Rapida dice ovunque «circa 30 s» (e sui Mac Intel «qualche minuto»); le dimensioni dei modelli sono quelle vere ovunque (Rapida 80 MB, Massima 330 MB, Studio 630 MB, non più «1 GB»); tra le scorciatoie «Massima / Rapida / Studio»
 • Testo sincronizzato: chiudendo la finestra (anche con Esc) mentre trascrive, Whisper si ferma (prima restava acceso in sottofondo e se ne poteva avviare un secondo); dopo «Annulla» resta scritto «Trascrizione annullata»
 • Mac Intel: «Annulla» durante la prova del motore la ferma subito, invece di far aspettare minuti la separazione dopo; «Fermo il lavoro di prima…» compare mentre si aspetta, e sui Mac Intel niente frase sul Neural Engine che non hanno
 • Piano roll: dopo «Ripristina» con «Annulla» tornano le correzioni di prima (prima si perdevano)
