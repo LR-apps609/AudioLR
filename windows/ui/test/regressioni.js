@@ -399,6 +399,27 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await page.close();
   }
 
+  // Giro 2 dei tester (13/11)
+  {
+    const page = await fresh(browser);
+    // t17: «Controlla adesso» senza rete dice perché, invece di non fare niente
+    const upd = await page.evaluate(async () => {
+      const toasts = []; IsoApp.toast = ((orig) => (m) => { toasts.push(m); return orig(m); })(IsoApp.toast);
+      Bridge.checkUpdate = async () => { throw new Error("error sending request"); };
+      Sheets.settings();
+      await new Promise((r) => setTimeout(r, 200));
+      const tab = [...document.querySelectorAll(".tabs button")].find((b) => b.dataset.t === "aggiornamenti");
+      if (tab) tab.click();
+      await new Promise((r) => setTimeout(r, 200));
+      const b = document.querySelector("[data-check]"); if (b) b.click();
+      await new Promise((r) => setTimeout(r, 200));
+      return { found: !!b, toasts };
+    });
+    check(upd.found && upd.toasts.some((t) => /internet/.test(t)), `«Controlla adesso» senza rete avvisa (${JSON.stringify(upd)})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (giro 2): " + page.errors.join(" | "));
+    await page.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");

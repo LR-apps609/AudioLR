@@ -109,7 +109,12 @@
       };
       sheet.addEventListener("click", async (e) => {
         const b = e.target.closest("[data-t]"); if (b) show(b.dataset.t);
-        if (e.target.closest("[data-check]")) { const u = await Bridge.checkUpdate(); IsoApp.ui.update = u; IsoApp.render(); IsoApp.toast(u ? `C'è la versione ${u.version}` : "Hai già l'ultima versione"); }
+        if (e.target.closest("[data-check]")) {
+          // Senza rete il programma risponde con un errore: si dice, come sul Mac, invece di non fare niente
+          let u;
+          try { u = await Bridge.checkUpdate(); } catch { IsoApp.toast("Non riesco a controllare gli aggiornamenti: controlla di essere connesso a internet e riprova."); return; }
+          IsoApp.ui.update = u; IsoApp.render(); IsoApp.toast(u ? `C'è la versione ${u.version}` : "Hai già l'ultima versione");
+        }
       });
       sheet.addEventListener("change", (e) => {
         const el = e.target;
