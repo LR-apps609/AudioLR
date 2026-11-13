@@ -343,7 +343,7 @@ enum UpdateCheck {
     /// Dal tasto «Aggiornamento disponibile»: scarica e installa (IsoLR si riapre da sola).
     @MainActor
     static func installNow(_ rel: Release) async {
-        guard !Updater.shared.busy else { return }
+        guard !Updater.shared.busy, !UpdateNotice.shared.downloading else { return }
         if SeparationJob.shared.isWorking {
             info("Prima finisce la separazione", "IsoLR si aggiorna appena la canzone in corso è pronta: premi di nuovo il tasto dopo.")
             return
@@ -369,6 +369,11 @@ enum UpdateCheck {
     @MainActor
     static func check(userInitiated: Bool) async {
         guard !Updater.shared.busy else { return }
+        // Mentre si scarica già un aggiornamento non se ne propone un altro (dal tester t8 di Windows, giro 2)
+        if UpdateNotice.shared.downloading {
+            if userInitiated { info("Sto già scaricando l'aggiornamento", "IsoLR si riapre da sola appena è pronto.") }
+            return
+        }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
         let rel: Release?
         do { rel = try await latest() } catch {
@@ -396,7 +401,13 @@ enum UpdateCheck {
         a.addButton(withTitle: "Salta questa versione")
         NSApp.activate()
         switch a.runModal() {
-        case .alertFirstButtonReturn: await download(rel)
+        case .alertFirstButtonReturn:
+            // Come dal tasto: mentre scarica, il tasto «Aggiornamento disponibile» è disattivato e dice «Scarico…».
+            // Prima restava attivo e un clic avviava un secondo scaricamento, che cancellava il primo a metà
+            guard !UpdateNotice.shared.downloading else { return }
+            UpdateNotice.shared.downloading = true
+            await download(rel)
+            UpdateNotice.shared.downloading = false
         case .alertThirdButtonReturn:
             UserDefaults.standard.set(rel.version, forKey: skipKey)
             UpdateNotice.shared.available = nil

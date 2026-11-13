@@ -229,4 +229,17 @@ final class TesterRegressionTests: XCTestCase {
         XCTAssertEqual(DawExport.partsClock(59.96), "1:00.0")
         XCTAssertEqual(DawExport.partsClock(125.26), "2:05.3")
     }
+
+    func testOneUpdateDownloadAtATime() throws {
+        // Giro 2, parità con Windows (t8): scaricando l'aggiornamento dall'avviso, il tasto «Aggiornamento disponibile»
+        // restava attivo e un secondo clic avviava un secondo scaricamento, che cancellava la cartella del primo
+        let up = try source("Updater.swift")
+        XCTAssertTrue(up.contains("guard !Updater.shared.busy, !UpdateNotice.shared.downloading else { return }"))
+        let check = up.components(separatedBy: "static func check(userInitiated: Bool) async {")[1].components(separatedBy: "private static func download(")[0]
+        XCTAssertTrue(check.contains("if UpdateNotice.shared.downloading {"))
+        XCTAssertTrue(check.contains("UpdateNotice.shared.downloading = true\n            await download(rel)\n            UpdateNotice.shared.downloading = false"))
+        // Il file dell'aggiornamento ha la versione nel nome e si scarica da capo (niente ripresa che unisca due versioni)
+        XCTAssertTrue(up.contains("appendingPathComponent(\"AudioLR \\(rel.version).audiolr\")"))
+        XCTAssertFalse(up.contains("Range"))
+    }
 }
