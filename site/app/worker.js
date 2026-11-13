@@ -95,16 +95,17 @@ async function fetchModel(onProgress, again = false) {
     const cached = cache ? await cache.match(url) : undefined;
     let chunks;
     if (cached) {
-      // Dalla cache: tutto in una volta (niente barra a scatti per un file già sul computer)
+      // Dalla cache: tutto in una volta e senza avviso (non si scarica niente: prima compariva per un attimo
+      // «Scarico il modello (solo la prima volta)… 166 di 166 MB» anche con il modello già sul computer)
       chunks = [new Uint8Array(await cached.arrayBuffer())];
-      done += chunks[0].length; report(done / total);
+      done += chunks[0].length;
     } else {
       chunks = await download(url, (n, attempt) => { done += n; retry = attempt > 1 ? attempt : 0; report(done / total); });
       fresh.push([url, chunks]);
     }
     parts.push(...chunks);
   }
-  onProgress(Math.min(1, done / total), { done, total, retry: 0 });
+  if (fresh.length) onProgress(Math.min(1, done / total), { done, total, retry: 0 });
   const buf = new Uint8Array(done);
   let o = 0;
   for (const c of parts) { buf.set(c, o); o += c.length; }

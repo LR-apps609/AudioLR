@@ -64,9 +64,13 @@ section { padding-block: 44px; scroll-margin-top: 64px; }   /* l'etichetta non r
 /* La prova nel browser: lo stesso riquadro dell'app */
 #prova .card { padding: 22px; }
 .drop { border: 1.5px dashed var(--line); border-radius: 16px; padding: 34px 20px; display: grid; justify-items: center; gap: 14px; text-align: center; transition: border-color .15s, background .15s; }
+/* Le barre si stringono quando il riquadro è più stretto di 275 px (telefoni sotto i 400 px):
+   prima allargavano la colonna della griglia e tutto il riquadro usciva dal bordo e dalla pagina */
+.drop { container-type: inline-size; }
 .drop.over { border-color: var(--brass); background: color-mix(in srgb, var(--brass) 7%, transparent); }
 .bars { display: flex; align-items: center; gap: 5px; height: 70px; }
-.bars i { width: 5px; border-radius: 3px; background: var(--c); height: var(--h); animation: pulse 1.6s ease-in-out infinite; animation-delay: var(--d); }
+.bars { gap: min(5px, 100cqi / 55); }
+.bars i { width: min(5px, 100cqi / 55); border-radius: 3px; background: var(--c); height: var(--h); animation: pulse 1.6s ease-in-out infinite; animation-delay: var(--d); }
 @keyframes pulse { 50% { transform: scaleY(.55); } }
 .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .progress { width: 100%; height: 8px; border-radius: 5px; background: var(--well); overflow: hidden; }
@@ -100,6 +104,11 @@ section { padding-block: 44px; scroll-margin-top: 64px; }   /* l'etichetta non r
   nav.top .links a[href="#confronto"], nav.top .links a[href="#privacy"] { display: none; }
   /* «Altri strumenti» va a capo invece di diventare «Altri strum…» */
   .stem b { white-space: normal; line-height: 1.15; }
+}
+@media (max-width: 372px) {
+  /* Sotto i 372 px il nome non sta accanto a M, S e WAV («V…», «B…»): va su una riga sua, i pulsanti sotto a destra */
+  .stem:not(:has(.ph)) b { grid-column: 2 / -1; }
+  .stem .ms.m { grid-column: 3; } .stem .ms.s { grid-column: 4; } .stem > .btn { grid-column: 5; }
 }
 /* Un nome di file lungo senza spazi va a capo invece di allargare la pagina */
 #song, #title { overflow-wrap: anywhere; }
@@ -141,5 +150,5 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: 
 .btn.big { font-size: 17px; padding: 14px 26px; justify-self: start; box-shadow: 0 6px 18px color-mix(in srgb, var(--brass) 35%, transparent); }
 .steps { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
 details.alt summary { cursor: pointer; font-size: 14px; color: var(--muted); }
-details.alt code { margin-top: 8px; }
+details.alt code { margin-top: 8px; contain: inline-size; }   /* la riga lunga scorre nel suo riquadro invece di allargare la scheda e la pagina */
 .grid2 .card .chip { justify-self: start; }

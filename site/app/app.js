@@ -112,6 +112,9 @@
     worker.postMessage({ type: "separate", left, right }, [left.buffer, right.buffer]);
   }
 
+  // «Scegli una canzone…» è una label per un input nascosto: con tabindex riceve il fuoco, e Invio o Spazio
+  // aprono la scelta del file come un clic (prima la tastiera la saltava e non si poteva scegliere niente)
+  $("pick").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
   $("file").addEventListener("change", (e) => { handle(e.target.files[0]); e.target.value = ""; });
   const drop = $("drop");
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
@@ -169,9 +172,10 @@
       const color = `var(${COLORS[t.key]})`;
       const mixable = t.key !== "instrumental";
       row.innerHTML = `<span class="badge" style="--c:${color}" aria-hidden="true"></span><b>${NAMES[t.key]}</b>` +
-        (mixable ? `<button class="ms m" aria-pressed="false" title="Muto">M</button><button class="ms s" aria-pressed="false" title="Solo">S</button>`
+        // Per il lettore di schermo ogni pulsante dice di quale traccia è (prima solo «M», «S», «WAV» su ogni riga)
+        (mixable ? `<button class="ms m" aria-pressed="false" title="Muto" aria-label="Silenzia ${NAMES[t.key]}">M</button><button class="ms s" aria-pressed="false" title="Solo" aria-label="Solo ${NAMES[t.key]}">S</button>`
                  : `<span class="ph"></span><span class="ph"></span>`) +
-        `<canvas aria-hidden="true"></canvas><button class="btn ghost small">WAV</button>`;
+        `<canvas aria-hidden="true"></canvas><button class="btn ghost small" aria-label="Scarica ${NAMES[t.key]} in WAV">WAV</button>`;
       const [m, s] = row.querySelectorAll(".ms");
       if (m) {
         m.onclick = () => { toggle(state.muted, t.key); m.setAttribute("aria-pressed", state.muted.has(t.key)); applyGains(); syncPreset(); };
@@ -212,7 +216,9 @@
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
       const color = colors[t.key];
-      const audible = t.key === "instrumental" || gainOf(t.key) > 0;
+      // La Base non viene suonata da sola: si sente quando si sente almeno uno dei suoi strumenti (non in «Solo voce»
+      // o con tutto muto, dove prima restava piena e colorata come se suonasse)
+      const audible = t.key === "instrumental" ? tracks.some((x) => x.key !== "vocals" && x.key !== "instrumental" && gainOf(x.key) > 0) : gainOf(t.key) > 0;
       const slots = Math.floor(w / 3), p = duration ? pos / duration : 0;
       for (let s = 0; s < slots; s++) {
         const v = t.peaks[Math.floor((s * t.peaks.length) / slots)];
