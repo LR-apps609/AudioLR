@@ -141,7 +141,10 @@ final class SeparationJob: ObservableObject {
     }
     @Published private(set) var preview: Preview?
     /// Si sta ritagliando la canzone per l'anteprima.
-    private var cuttingPreview = false
+    /// Mentre si taglia la canzone per l'anteprima, e nella pausa tra una canzone della coda e la prossima,
+    /// il lavoro conta come occupato: «Separa», le canzoni trascinate e «Nuova separazione» non si accavallano.
+    @Published private(set) var cuttingPreview = false
+    @Published private(set) var startingNext = false
     /// Quanto dura l'anteprima, in secondi.
     nonisolated static let previewSeconds = 20.0
 
@@ -254,6 +257,7 @@ final class SeparationJob: ObservableObject {
     private var meter: MemoryMeter?
 
     var isBusy: Bool {
+        if cuttingPreview || startingNext { return true }
         switch phase {
         case .downloading, .reading, .tuning, .separating, .saving: return true
         default: return false
@@ -287,7 +291,6 @@ final class SeparationJob: ObservableObject {
         let dir = Self.previewFolder
         let title = source.deletingPathExtension().lastPathComponent
         Task {
-            defer { cuttingPreview = false }
             do {
                 let (clip, from): (URL, Double) = try await Task.detached(priority: .userInitiated) {
                     let audio = try AudioIO.read(source)
@@ -302,10 +305,14 @@ final class SeparationJob: ObservableObject {
                     try AudioIO.write(audio.map { Array($0[a..<b]) }, to: url, format: .wav24)
                     return (url, r.start)
                 }.value
+                cuttingPreview = false
+                // Tolta con la ✕ mentre si tagliava: niente anteprima
+                guard pending.contains(source) else { try? FileManager.default.removeItem(at: dir); return }
                 preview = Preview(source: source, start: from, quality: quality)
-                pending = []
+                pending.removeAll { $0 == source }
                 start(clip, quality: quality)
             } catch {
+                cuttingPreview = false
                 phase = .failed("non riesco a leggere la canzone per l'anteprima: \(error.localizedDescription)")
             }
         }
@@ -324,7 +331,9 @@ final class SeparationJob: ObservableObject {
         guard let p = preview, !isBusy else { return }
         endPreview()
         reset()
-        pending = [p.source]
+        // Le canzoni trascinate durante l'anteprima tornano pronte insieme a questa (non restano ferme in una coda invisibile)
+        pending = [p.source] + queue.filter { $0 != p.source }
+        clearQueue()
     }
 
     private func endPreview() {
@@ -377,6 +386,12 @@ final class SeparationJob: ObservableObject {
     func prepare(_ urls: [URL], quality: Quality = .current) {
         let songs = Self.songs(in: urls)
         guard !songs.isEmpty else { return }
+        // Con un'anteprima da ascoltare le nuove canzoni aspettano: tornano pronte con «Indietro»,
+        // o partono dopo la canzone intera con «Separa tutta»
+        if preview != nil && !isBusy {
+            for s in songs where !queue.contains(s) { queue.append(s); queuedQuality[s] = quality }
+            return
+        }
         // Anche nella breve pausa tra una canzone della coda e la successiva si va in coda
         if isBusy || !queue.isEmpty { enqueue(songs, quality: quality); return }
         if phase != .idle { reset() }
@@ -385,6 +400,8 @@ final class SeparationJob: ObservableObject {
 
     /// «Separa»: parte la prima canzone pronta, le altre vanno in coda.
     func startPending(quality: Quality) {
+        // Mentre si taglia l'anteprima «Separa» non fa partire un secondo lavoro
+        guard !cuttingPreview else { return }
         let songs = pending
         pending = []
         enqueue(songs, quality: quality)
@@ -1360,8 +1377,14 @@ final class SeparationJob: ObservableObject {
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
         let q = queuedQuality.removeValue(forKey: next) ?? quality
-        // Un attimo per vedere il risultato della canzone appena finita
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.start(next, quality: q) }
+        // Un attimo per vedere il risultato della canzone appena finita: intanto il lavoro conta come occupato,
+        // così una canzone trascinata in quel momento va in coda invece di scavalcare questa
+        startingNext = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self else { return }
+            self.startingNext = false
+            self.start(next, quality: q)
+        }
     }
 
     func reset() {
@@ -1468,6 +1491,8 @@ final class SeparationJob: ObservableObject {
         guard token === cancelled else { return }
         _ = meter?.stop()
         meter = nil
+        // Un'anteprima non riuscita si chiude: la prossima canzone della coda è una separazione vera, da salvare in libreria
+        endPreview()
         startNextInQueue()
     }
 

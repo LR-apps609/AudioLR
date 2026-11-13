@@ -1,4 +1,5 @@
 Novità della 0.41.0 (in preparazione):
+• Anteprima 20 s e coda: «Separa» non parte più mentre si prepara l'anteprima (prima la canzone intera non entrava in libreria e la coda restava ferma); le canzoni trascinate durante l'anteprima tornano pronte con «Indietro» invece di restare in una coda invisibile; un'anteprima non riuscita non fa più perdere la separazione della canzone dopo; nella pausa tra una canzone della coda e la prossima, una canzone trascinata va in coda invece di scavalcarle
 • Testo sincronizzato: chiudendo la finestra (anche con Esc) mentre trascrive, Whisper si ferma (prima restava acceso in sottofondo e se ne poteva avviare un secondo); dopo «Annulla» resta scritto «Trascrizione annullata»
 • Mac Intel: «Annulla» durante la prova del motore la ferma subito, invece di far aspettare minuti la separazione dopo; «Fermo il lavoro di prima…» compare mentre si aspetta, e sui Mac Intel niente frase sul Neural Engine che non hanno
 • Piano roll: dopo «Ripristina» con «Annulla» tornano le correzioni di prima (prima si perdevano)

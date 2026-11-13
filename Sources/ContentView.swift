@@ -297,6 +297,7 @@ struct ContentView: View {
                             Label("Anteprima 20 s", systemImage: "eye").padding(.horizontal, 6)
                         }
                         .controlSize(.large)
+                        .disabled(job.cuttingPreview)
                         .help("Separa solo 20 secondi dal centro della canzone con la qualità scelta, per sentire com'è prima di separarla tutta")
                     }
                     Button { player.stop(); job.startPending(quality: quality) } label: {
@@ -306,6 +307,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .disabled(job.cuttingPreview)
                     // Invio avvia la separazione, ma non mentre si scrive nella ricerca della libreria
                     .keyboardShortcut(typing.typing ? nil : .defaultAction)
                     .help("Avvia la separazione con la qualità scelta (Invio)")

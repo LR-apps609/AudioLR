@@ -108,4 +108,21 @@ final class TesterRegressionTests: XCTestCase {
         XCTAssertFalse(job.contains("al massimo \\(Int(2 * cpu + 0.5)) secondi"))
         XCTAssertTrue(view.contains("provo il processore e la grafica di questo Mac"))
     }
+
+    func testPreviewAndQueueDoNotOverlap() throws {
+        // Giro 2, t16: «Separa» durante il taglio dell'anteprima, canzoni trascinate durante l'anteprima,
+        // pausa di 1,5 s tra le canzoni della coda
+        let job = try source("SeparationJob.swift"), view = try source("ContentView.swift")
+        XCTAssertTrue(job.contains("if cuttingPreview || startingNext { return true }"))
+        XCTAssertTrue(job.contains("@Published private(set) var cuttingPreview = false"))
+        XCTAssertTrue(job.contains("guard !cuttingPreview else { return }"))
+        XCTAssertTrue(job.contains("guard pending.contains(source) else"))
+        XCTAssertTrue(job.contains("pending = [p.source] + queue.filter { $0 != p.source }"))
+        XCTAssertTrue(job.contains("startingNext = true"))
+        XCTAssertFalse(job.contains("defer { cuttingPreview = false }"))
+        XCTAssertEqual(view.components(separatedBy: ".disabled(job.cuttingPreview)").count - 1, 2)
+        // Un'anteprima non riuscita si chiude prima di passare alla coda
+        let failure = job.components(separatedBy: "private func afterFailure(")[1].components(separatedBy: "private func loaded(")[0]
+        XCTAssertTrue(failure.contains("endPreview()"))
+    }
 }
