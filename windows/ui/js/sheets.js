@@ -52,7 +52,12 @@
       else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", keys);
-    o.querySelector(".sheet-bg").addEventListener("click", (e) => { if (e.target.classList.contains("sheet-bg")) close(); });
+    // Sullo sfondo si chiude solo con un clic vero cominciato lì: con un doppio clic sul pulsante, il secondo cadeva
+    // sullo sfondo appena comparso e la finestra si richiudeva subito (dal tester t20)
+    const bg = o.querySelector(".sheet-bg");
+    let downOnBg = false;
+    bg.addEventListener("pointerdown", (e) => { downOnBg = e.target === bg; });
+    bg.addEventListener("click", (e) => { if (e.target === bg && downOnBg && e.detail <= 1) close(); downOnBg = false; });
     o.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
     openClose = close;
     if (onReady) onReady(sheet, close);

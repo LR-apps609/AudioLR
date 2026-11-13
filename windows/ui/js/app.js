@@ -46,7 +46,7 @@
       <input class="lib-search" placeholder="Cerca" value="${esc(f.text)}" data-input="search">
       ${ui.library.length ? filterBar(list.length) : ""}
       ${list.length ? `<div class="lib-list">${list.map((e, i) => `
-        <div class="lib-item ${e.folder === cur ? "on" : ""}" data-open="${i}" role="button" tabindex="0" ${job.busy ? 'aria-disabled="true"' : ""} title="${job.busy ? "Si apre alla fine della separazione in corso" : esc(e.meta.title)}">
+        <div class="lib-item ${e.folder === cur ? "on" : ""}" data-open="${i}" role="button" tabindex="0" ${job.busy ? 'aria-disabled="true"' : ""} title="${job.busy ? "Durante la separazione non si apre un'altra canzone" : esc(e.meta.title)}">
           <span class="ic">${Icon("note")}</span><b>${esc(e.meta.title)}</b>
           <span>${Separation.QUALITY[e.meta.quality] ? Separation.QUALITY[e.meta.quality].title : ""} · ${fmt(e.meta.duration)}${e.meta.analysis && e.meta.analysis.bpm ? " · " + Math.round(e.meta.analysis.bpm) + " BPM" : ""}</span>
         </div>`).join("")}</div>`
@@ -648,6 +648,9 @@
     } catch (e) { toast("Download non riuscito: " + (e.message || e)); }
   }
   /// «Progetto per…»: Ableton Live (.als), REAPER (.rpp) o una cartella per tutti gli altri (core/daw.js).
+  // Un'esportazione alla volta: con un doppio clic su «Tutte le tracce» o «Progetto per…» ne partivano due (dal tester t20)
+  let exporting = false;
+  const oneAtATime = (fn) => async function (...args) { if (exporting) return; exporting = true; try { return await fn.apply(this, args); } finally { exporting = false; } };
   async function exportProject(kind) {
     const D = IsoLR.Daw, m = job.current.meta, a = m.analysis || {}, sh = shift();
     const dir = await Bridge.askFolder();
@@ -724,7 +727,8 @@
   async function openEntry(e, keepPreview = false) {
     // Durante una separazione una canzone della libreria non si apre: prima non succedeva niente in silenzio
     // (ma il lettore caricava lo stesso le sue tracce)
-    if (job.busy) { toast("La canzone si apre alla fine della separazione in corso"); return; }
+    // Non si promette più di aprirla alla fine (poi si apriva la canzone appena separata: dal tester t20)
+    if (job.busy) { toast("Durante la separazione non si apre un'altra canzone: aspetta la fine o premi Annulla"); return; }
     const p = job.preview;
     // job.open porta la fase a «done»: il controllo qui sotto non deve aprirla una seconda volta
     ui.opening = true;
@@ -945,6 +949,8 @@
       // La fine del lavoro, letta dal lettore dello schermo
       if (was === "working" && job.phase === "done" && job.current) announce(job.preview ? "Anteprima pronta" : `Separazione finita: ${job.current.meta.title}`);
       if (was === "working" && job.phase === "failed" && job.error) announce(`Non riuscito: ${job.error}`);
+      // Finito o annullato il lavoro, l'avviso «durante la separazione…» non vale più
+      if (was === "working") document.querySelectorAll(".toast").forEach((t) => { if (/^Durante la separazione/.test(t.textContent)) t.remove(); });
       if (job.phase === "done" && job.current && ui.opening) return;   // openEntry finisce e ridisegna
       if (job.phase === "done" && job.current) {
         await refreshLibrary();
@@ -1018,5 +1024,6 @@
   setTimeout(checkUpdate, 3000);
   setInterval(checkUpdate, 3 * 3600 * 1000);
 
+  downloadStems = oneAtATime(downloadStems); exportProject = oneAtATime(exportProject);
   window.IsoApp = { job, player, ui, render, toast, fmt, esc, refreshLibrary, openEntry, transport, exportProject, IT_NAMES, KEY_NAMES };
 })();

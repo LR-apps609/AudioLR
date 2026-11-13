@@ -863,6 +863,31 @@ const active = (page) => page.evaluate(() => { const a = document.activeElement;
     await still.close();
   }
 
+  {
+    // t20: doppio clic che apre e richiude le finestre, esportazioni doppie, promessa della libreria
+    const page = await fresh(browser);
+    await openSong(page);
+    await page.dblclick('[data-act="help"]');
+    await page.waitForTimeout(400);
+    const helpOpen = await page.evaluate(() => !!document.querySelector("#overlay .sheet"));
+    await page.keyboard.press("Escape");
+    // Un clic vero sullo sfondo chiude ancora
+    await page.click('[data-act="help"]'); await page.waitForTimeout(300);
+    await page.mouse.click(5, 5); await page.waitForTimeout(300);
+    const bgCloses = await page.evaluate(() => !document.querySelector("#overlay .sheet"));
+    check(helpOpen && bgCloses, `doppio clic su Aiuto: la finestra resta aperta; un clic sullo sfondo la chiude (${helpOpen}, ${bgCloses})`);
+    const twice = await page.evaluate(async () => {
+      let asked = 0; const af = Bridge.askFolder; Bridge.askFolder = async () => { asked++; await new Promise((ok) => setTimeout(ok, 300)); return null; };
+      IsoApp.exportProject("reaper"); IsoApp.exportProject("reaper");
+      await new Promise((ok) => setTimeout(ok, 600)); Bridge.askFolder = af; return asked;
+    });
+    check(twice === 1, `due avvii di «Progetto per…» insieme: ne parte uno solo (${twice})`);
+    const promise = await page.evaluate(() => { const J = IsoApp.job, ph = J.phase; J.phase = "working"; IsoApp.openEntry(IsoApp.ui.library[0]); const t = [...document.querySelectorAll(".toast")].map((x) => x.textContent).pop(); J.phase = ph; return t; });
+    check(!/si apre alla fine/.test(promise || "") && /non si apre/.test(promise || ""), `durante il lavoro la libreria non promette di aprire la canzone alla fine (${promise})`);
+    check(page.errors.length === 0, "nessun errore nella pagina (t20): " + page.errors.join(" | "));
+    await page.close();
+  }
+
   await browser.close();
   server.close();
   console.log(failed ? `::error::${failed} prove di regressione non passate` : "::notice::Tutte le prove di regressione passate");
