@@ -9,6 +9,7 @@ Novità della 0.41.0 (in preparazione):
 • Una canzone il cui nome comincia con un punto («...And Justice for All») non finisce più in una cartella nascosta dal Finder
 • Progetto per DAW: dopo «Pulisci la voce» (o dividendo batteria o voce) ci sono le stesse tracce del mixer, senza la voce d'origine che suonava doppia; in «Parti.txt» i decimi sono giusti (2,4 s era «0:02.3»)
 • Aggiornamenti: mentre IsoLR scarica la versione nuova dall'avviso, il tasto «Aggiornamento disponibile» è disattivato e «Controlla aggiornamenti» lo dice (prima un secondo clic avviava un secondo scaricamento, che faceva fallire il primo)
+• Privacy: «Segnala» (che va su GitHub, dove è pubblica) e il rapporto dopo un blocco non contengono più titoli né nomi di file: al loro posto c'è «canzone», come promesso. Restano passo, qualità ed errore
 • Testo sincronizzato: chiudendo la finestra (anche con Esc) mentre trascrive, Whisper si ferma (prima restava acceso in sottofondo e se ne poteva avviare un secondo); dopo «Annulla» resta scritto «Trascrizione annullata»
 • Mac Intel: «Annulla» durante la prova del motore la ferma subito, invece di far aspettare minuti la separazione dopo; «Fermo il lavoro di prima…» compare mentre si aspetta, e sui Mac Intel niente frase sul Neural Engine che non hanno
 • Piano roll: dopo «Ripristina» con «Annulla» tornano le correzioni di prima (prima si perdevano)

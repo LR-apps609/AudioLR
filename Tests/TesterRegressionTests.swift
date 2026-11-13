@@ -255,4 +255,44 @@ final class TesterRegressionTests: XCTestCase {
         let reset = job.components(separatedBy: "    func reset() {")[1].components(separatedBy: "\n    }\n")[0]
         XCTAssertTrue(reset.contains("pending += queue.filter"))
     }
+
+    func testBugReportHidesSongTitles() {
+        // Giro 2, t18: «Segnala» (issue pubblica su GitHub) e il rapporto promettono «nessuna canzone»
+        let song = "Lettera a Giulia (demo privata)"
+        let text = """
+        Ultimo errore: non riesco a scrivere Lettera a Giulia (demo privata) – Voce.wav
+        Registro: Separazione non riuscita: Impossibile aprire il file “Lettera a Giulia (demo privata).mp3”.
+        La finestra non risponde da 7 secondi (stava facendo: legge «Lettera a Giulia (demo privata).mp3»)
+        Qualità: Massima qualità · formato: WAV 24 bit
+        """
+        let hidden = Health.hideSongs(text, titles: [song])
+        XCTAssertFalse(hidden.contains("Giulia"), hidden)
+        XCTAssertTrue(hidden.contains("non riesco a scrivere canzone – Voce.wav"))
+        XCTAssertTrue(hidden.contains("Qualità: Massima qualità · formato: WAV 24 bit"), "il resto resta")
+        // Anche senza sapere il titolo: i nomi di file tra «…» e tra “…” degli errori di macOS
+        let unknown = Health.hideSongs(text, titles: [])
+        XCTAssertTrue(unknown.contains("«canzone»") && unknown.contains("“canzone”"))
+        XCTAssertFalse(unknown.contains("demo privata).mp3"))
+        // Parole intere: un titolo corto non rovina le altre parole
+        XCTAssertEqual(Health.hideSongs("Fortemente Forte", titles: ["Forte"]), "Fortemente canzone")
+        // Il titolo e il testo della issue, anche se l'utente ci ha scritto il titolo
+        var r = BugReport()
+        r.summary = "Si è fermata con " + song
+        let url = r.issueURL(system: "Registro: legge «\(song).mp3»", titles: [song]).absoluteString.removingPercentEncoding ?? ""
+        XCTAssertFalse(url.contains("Giulia"), url)
+    }
+
+    @MainActor
+    func testHealthReportHasNoSongTitles() throws {
+        // Giro 2, t18: il rapporto dopo un blocco conteneva il titolo (dalla sorveglianza e dal registro)
+        AppLog.write("Separazione non riuscita: non riesco a leggere «Lettera a Giulia (demo privata).mp3»")
+        let r = Health.report(problems: ["La finestra non risponde da 7 secondi (stava facendo: legge «Lettera a Giulia (demo privata).flac»)"])
+        XCTAssertFalse(r.contains("Giulia"))
+        XCTAssertTrue(r.contains("Registro"))
+        let job = try source("SeparationJob.swift"), help = try source("Help.swift")
+        XCTAssertFalse(job.contains("Health.progressed(\"separa «\\(title)»"))
+        XCTAssertTrue(job.contains("Health.progressed(\"separa la canzone in"))
+        XCTAssertTrue(help.contains("Health.hideSongs(Health.redact("))
+        XCTAssertTrue(help.contains("report.issueURL(system: system, titles: Health.knownTitles)"))
+    }
 }

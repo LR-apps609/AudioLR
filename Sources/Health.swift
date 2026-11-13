@@ -131,6 +131,33 @@ enum Health {
         return t
     }
 
+    /// Toglie titoli e nomi di file da un testo che esce dal Mac (rapporto, «Segnala» su GitHub): ogni titolo noto,
+    /// ogni «…» con un nome di file o un percorso, e i nomi tra “…” degli errori di macOS diventano «canzone».
+    /// Resta tutto il resto (passo, qualità, errore). Dal tester t18 del giro 2: «Nessuna canzone» non era vero.
+    static func hideSongs(_ text: String, titles: [String]) -> String {
+        var t = text
+        // Solo parole intere: un titolo come «Forte» non tocca «Fortemente»
+        let known = Set(titles.map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count >= 3 })
+        for title in known.sorted(by: { $0.count > $1.count }) {
+            let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: title) + #"(?![\p{L}\p{N}])"#
+            t = t.replacingOccurrences(of: pattern, with: "canzone", options: [.regularExpression, .caseInsensitive])
+        }
+        let file = #"\.(wav|mp3|m4a|m4p|aac|flac|aiff?|aifc|alac|caf|ogg|oga|opus|wma|mp4|mov|m4v|mkv|webm|mid|midi|lrc|srt|txt)"#
+        // «Titolo.mp3», «…/cartella/Titolo» → «canzone»
+        t = t.replacingOccurrences(of: "«[^«»\n]*(" + file + "|/)[^«»\n]*»", with: "«canzone»",
+                                   options: [.regularExpression, .caseInsensitive])
+        // Gli errori di macOS mettono il nome del file tra virgolette alte: «Impossibile aprire “Titolo.mp3”»
+        t = t.replacingOccurrences(of: "“[^“”\n]*”", with: "“canzone”", options: .regularExpression)
+        return t
+    }
+
+    /// I titoli che IsoLR conosce: la canzone aperta, quelle in attesa e in coda, e la libreria.
+    @MainActor static var knownTitles: [String] {
+        let job = SeparationJob.shared
+        return [job.title] + (job.pending + job.queue).map { $0.deletingPathExtension().lastPathComponent }
+            + History.all().map(\.title) + History.all().map { $0.folderURL.lastPathComponent }
+    }
+
     // MARK: Il rapporto
 
     /// Il rapporto completo: tutto quello che serve per rifare il problema, senza nome utente.
@@ -168,7 +195,8 @@ enum Health {
         lines.append("")
         lines.append("Registro (ultime 150 righe):")
         lines.append(AppLog.tail(150))
-        return redact(lines.joined(separator: "\n"))
+        // Niente nome utente e niente titoli: la domanda promette «niente canzoni»
+        return hideSongs(redact(lines.joined(separator: "\n")), titles: knownTitles)
     }
 
     /// Salva il rapporto sulla Scrivania (o, se non si può, nella cartella Download) e lo mostra nel Finder.

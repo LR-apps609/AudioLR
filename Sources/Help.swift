@@ -244,10 +244,11 @@ struct BugReport {
     }
 
     /// Pagina di GitHub con il rapporto già compilato (testo tagliato se troppo lungo per un indirizzo).
-    func issueURL(system: String) -> URL {
+    /// `titles`: i titoli da nascondere anche in quello che ha scritto l'utente (titolo e testo della issue pubblica).
+    func issueURL(system: String, titles: [String] = []) -> URL {
         var c = URLComponents(url: Self.repo.appendingPathComponent("issues/new"), resolvingAgainstBaseURL: false)!
-        c.queryItems = [URLQueryItem(name: "title", value: title),
-                        URLQueryItem(name: "body", value: String(body(system: system).prefix(6000))),
+        c.queryItems = [URLQueryItem(name: "title", value: Health.hideSongs(title, titles: titles)),
+                        URLQueryItem(name: "body", value: String(Health.hideSongs(body(system: system), titles: titles).prefix(6000))),
                         URLQueryItem(name: "labels", value: kind == .idea ? "enhancement" : "bug")]
         return c.url!
     }
@@ -278,8 +279,9 @@ struct BugReport {
         // Gli ultimi passi del registro: dicono dove si è fermata una separazione
         let log = AppLog.tail(20)
         if !log.isEmpty { lines.append("Registro (ultimi passi):\n" + log) }
-        // Va su GitHub, dove è pubblica: niente nome utente nei percorsi
-        return Health.redact(lines.joined(separator: "\n"))
+        // Va su GitHub, dove è pubblica: niente nome utente nei percorsi e niente titoli né nomi di file
+        // (lo promette la riga sotto il riquadro; dal tester t18 del giro 2)
+        return Health.hideSongs(Health.redact(lines.joined(separator: "\n")), titles: Health.knownTitles)
     }
 
     private static func sysctl(_ name: String) -> String {
@@ -343,7 +345,7 @@ struct BugReportView: View {
                 Spacer()
                 Button("Annulla") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Invia su GitHub…") {
-                    NSWorkspace.shared.open(report.issueURL(system: system))
+                    NSWorkspace.shared.open(report.issueURL(system: system, titles: Health.knownTitles))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)

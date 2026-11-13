@@ -93,11 +93,12 @@ final class SeparationJob: ObservableObject {
         // La sorveglianza (Health) sa se un lavoro avanza: fermo per 15 minuti finisce nel rapporto
         didSet {
             switch phase {
-            case .downloading(let p): Health.progressed("scarica i modelli (\(Int(p * 100))%) per «\(title)», qualità \(quality.title)")
-            case .reading: Health.progressed("legge «\(title)»")
-            case .tuning: Health.progressed("prova del motore per «\(title)»")
-            case .separating(let p): Health.progressed("separa «\(title)» in \(quality.title) (\(Int(p * 100))%)")
-            case .saving: Health.progressed("salva le tracce di «\(title)»")
+            // Senza il titolo: finisce nel rapporto, che promette «niente canzoni» (dal tester t18 del giro 2)
+            case .downloading(let p): Health.progressed("scarica i modelli (\(Int(p * 100))%) per la canzone, qualità \(quality.title)")
+            case .reading: Health.progressed("legge la canzone")
+            case .tuning: Health.progressed("prova del motore per la canzone")
+            case .separating(let p): Health.progressed("separa la canzone in \(quality.title) (\(Int(p * 100))%)")
+            case .saving: Health.progressed("salva le tracce della canzone")
             case .failed(let m): Health.idle(); AppLog.write("Separazione non riuscita: \(m)")
             case .idle, .done: Health.idle()
             }
