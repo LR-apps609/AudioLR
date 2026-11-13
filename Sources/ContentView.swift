@@ -1261,7 +1261,9 @@ struct ContentView: View {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = t.first else { return t }
         let body = String(first).uppercased() + String(t.dropFirst())
-        return body.hasSuffix(".") || body.hasSuffix("!") || body.hasSuffix("?") || body.hasSuffix("…") ? body : body + "."
+        // Il punto può stare prima di una parentesi o di una virgoletta di chiusura: «(errore -50.)»
+        let core = body.trimmingCharacters(in: CharacterSet(charactersIn: ")]»”\"'"))
+        return core.hasSuffix(".") || core.hasSuffix("!") || core.hasSuffix("?") || core.hasSuffix("…") ? body : body + "."
     }
 
     static func timeLeft(_ s: Double) -> String {
